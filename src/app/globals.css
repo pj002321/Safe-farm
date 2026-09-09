@@ -1,0 +1,106 @@
+@import "tailwindcss";
+
+/* ---------------------------------------------
+ * [Feature]: Safe Farm AI 디자인 시스템 토큰
+ *
+ * [Description]
+ * - 이 파일이 디자인 시스템 전부다. 생성 파일도, codegen 스텝도 없다.
+ * - 3층 구조:
+ *   1) 원시 팔레트  --leaf-*, --soil-*, --neutral-*  : 값의 출처
+ *   2) 시맨틱 변수  --fg, --bg, --accent            : 라이트/다크로 바뀌는 층
+ *   3) @theme inline                                : 위를 유틸리티 클래스로 노출
+ * - 컴포넌트는 **2층에서 나온 유틸리티만** 쓴다 (text-fg, bg-surface, text-accent).
+ *   원시 팔레트를 직접 쓰면 다크모드가 깨진다.
+ *
+ * [Usage]
+ * <div className="bg-surface text-fg border border-border rounded-md p-4">
+ * --------------------------------------------- */
+
+/* 다크모드는 data-theme 속성으로 제어한다. OS 설정은 아래 media 쿼리가 받는다. */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+/* ── 1층: 원시 팔레트 ───────────────────────────────────────── */
+:root {
+  --leaf-50: #f0f9f1;
+  --leaf-200: #b8e0bf;
+  --leaf-500: #2f9e44;
+  --leaf-600: #268a39;
+  --leaf-800: #14532d;
+
+  --soil-200: #e5dbc9;
+  --soil-500: #a1804a;
+
+  --neutral-0: #ffffff;
+  --neutral-50: #f8f9fa;
+  --neutral-200: #e9ecef;
+  --neutral-500: #868e96;
+  --neutral-800: #343a40;
+  --neutral-900: #1a1d20;
+  --neutral-950: #0d0f11;
+
+  /* ── 2층: 시맨틱 (라이트) ── */
+  --bg: var(--neutral-50);
+  --surface: var(--neutral-0);
+  --border-c: var(--neutral-200);
+  --fg: var(--neutral-900);
+  --fg-muted: var(--neutral-500);
+  --accent: var(--leaf-600);
+  --accent-subtle: var(--leaf-50);
+  --earth: var(--soil-500);
+
+  /* 추천 등급 — 도메인 색상 */
+  --grade-good: #2f9e44;
+  --grade-caution: #f08c00;
+  --grade-unsuitable: #e03131;
+}
+
+/* ── 2층: 시맨틱 (다크) — 값만 갈아끼운다 ───────────────────── */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: var(--neutral-950);
+    --surface: var(--neutral-900);
+    --border-c: var(--neutral-800);
+    --fg: var(--neutral-50);
+    --accent: var(--leaf-500);
+    --accent-subtle: var(--leaf-800);
+    --earth: var(--soil-200);
+  }
+}
+
+:root[data-theme="dark"] {
+  --bg: var(--neutral-950);
+  --surface: var(--neutral-900);
+  --border-c: var(--neutral-800);
+  --fg: var(--neutral-50);
+  --accent: var(--leaf-500);
+  --accent-subtle: var(--leaf-800);
+  --earth: var(--soil-200);
+}
+
+/* ── 3층: 유틸리티로 노출 ───────────────────────────────────
+ * `inline`이 핵심이다. 값을 인라인하지 않고 var() 참조를 유지해야
+ * 런타임에 테마를 바꿀 수 있다. `@theme`(inline 없이)로 쓰면 빌드 시점
+ * 값이 박혀서 다크모드가 안 먹는다. */
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-border: var(--border-c);
+  --color-fg: var(--fg);
+  --color-fg-muted: var(--fg-muted);
+  --color-accent: var(--accent);
+  --color-accent-subtle: var(--accent-subtle);
+  --color-earth: var(--earth);
+
+  --color-good: var(--grade-good);
+  --color-caution: var(--grade-caution);
+  --color-unsuitable: var(--grade-unsuitable);
+
+  --font-sans:
+    var(--font-pretendard), -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
+}
+
+body {
+  background-color: var(--color-bg);
+  color: var(--color-fg);
+}
