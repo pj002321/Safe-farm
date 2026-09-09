@@ -1,38 +1,32 @@
-import { cookies } from "next/headers";
-import { redirect } from "next/navigation";
+import Link from "next/link";
+import { requireAdminOrRedirect } from "@/shared/auth/session";
 
 /**
  * ---------------------------------------------
- * [Feature]: 관리자 셸 레이아웃 + 접근 게이트
+ * [Feature]: 관리자 셸 + 실제 접근 차단
  *
  * [Description]
- * - `(admin)` route group. URL은 `/admin/...` 그대로다.
- *
- * [⚠️ 이 게이트는 보안 경계가 아니다 — UX다]
- * Next 공식 문서: "A page-level authentication check does not extend to the
- * Server Actions defined within it. Always re-verify inside the action."
- * 그리고 "Render-time gating is not a security boundary."
- *
- * 즉 이 레이아웃은 **관리자가 아닌 사람에게 화면을 안 보여줄 뿐**이고,
- * Server Action은 export되는 순간 직접 POST로 호출 가능한 공개 엔드포인트가 된다.
- * 실제 권한 검사는 **모든 관리자 Server Action 첫 줄**에서 다시 해야 한다.
- *
- * [현재 구현 수준]
- * route group은 URL 세그먼트를 만들지 않으므로 이 레이아웃의 경로 타입은 "/" 다.
- *
- * 세션 쿠키 존재 여부만 본다. InsForge 연결 후 역할(role) 조회를 추가해야
- * 진짜 "관리자만"이 된다. 지금은 로그인한 사람이면 통과한다.
+ * - 여기가 화면 차단의 실제 지점이다. 관리자가 아니면 `/` 로 돌려보낸다.
+ * - ⚠️ 그래도 **보안 경계는 아니다.** 이 레이아웃은 Server Action에 영향을 주지
+ *   않는다. 관리자 액션은 각자 `requireAdmin()` 을 첫 줄에서 불러야 한다.
+ *   Next 공식: "Render-time gating is not a security boundary."
  * ---------------------------------------------
  */
 export default async function AdminLayout({ children }: LayoutProps<"/">) {
-  const hasSession = (await cookies()).has("insforge_access_token");
-  if (!hasSession) redirect("/sign-in");
+  const viewer = await requireAdminOrRedirect();
 
   return (
     <div className="min-h-dvh">
-      <header className="border-b border-border bg-surface">
+      <header className="border-border border-b bg-surface">
         <nav className="mx-auto flex max-w-5xl items-center gap-4 p-4">
-          <span className="font-bold text-earth">Safe Farm AI · 관리자</span>
+          <Link href="/admin" className="font-bold text-earth">
+            Safe Farm AI · 관리자
+          </Link>
+          <span className="flex-1" />
+          <Link href="/" className="text-fg-muted text-sm underline">
+            사용자 화면으로
+          </Link>
+          <span className="text-fg-muted text-sm">{viewer.email}</span>
         </nav>
       </header>
       {children}
