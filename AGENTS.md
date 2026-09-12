@@ -1,6 +1,6 @@
 # Safe Farm AI
 
-농작물 상태와 날씨를 읽어 재배 적합도를 추천하는 서비스.
+기후,위성 데이터 기반으로 하는 농작물 위험 감지 및 개선 LLM 추천 서비스
 Next.js 16(App Router) + Supabase(Postgres/auth/storage/realtime).
 
 ## 브랜치 전략

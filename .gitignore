@@ -39,3 +39,7 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
+
+
+# agent meta
+.claude/.headroom_wrap_marker.json
