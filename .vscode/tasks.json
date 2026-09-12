@@ -1,14 +1,66 @@
 {
+  // ai-service(Python) 작업. 실행: Ctrl+Shift+P → "Tasks: Run Task"
+  //
+  // 지우면 안 되는 것 세 가지
+  //
+  // 1. "type": "shell" — "process" 로 바꾸지 말 것.
+  //    process 는 command 를 터미널의 shell executable 로 넘기는데, Windows 에서
+  //    options.cwd 와 command 의 **드라이브 문자가 다르면**(cwd 는 E:, Python 은 C:)
+  //    절대 경로를 상대 경로로 보고 이어붙인다. 실제로 이렇게 깨졌다:
+  //      E:\Rep\Safe-farm\ai-service\C:\Users\...\python.exe does not exist
+  //    shell 이면 경로가 셸의 인자가 되므로 이 문제가 없다.
+  //
+  // 2. args 의 "quoting" — shell 로 바꾸면서 필요해졌다. 3-OS 모두에서 필요하다.
+  //    ".[dev]" 의 대괄호는 어느 셸에서든 글롭이다:
+  //      PowerShell — 경로 와일드카드로 해석
+  //      bash       — 문자 클래스. cwd 에 d·e·v 라는 파일이 있으면 엉뚱하게 치환
+  //      zsh(mac 기본) — 매치 실패 시 아예 "no matches found" 로 죽는다
+  //    command 쪽 경로에도 공백이 들어갈 수 있다(C:\Program Files\..., /Applications/...).
+  //    strong = 셸별 강한 따옴표(작은따옴표). VS Code 가 PowerShell 이면 & 를 알아서 붙이고,
+  //    bash/zsh 면 붙이지 않는다 — 셸 판별은 VS Code 가 한다.
+  //
+  // 3. `${command:python.interpreterPath}` — VS Code 에서 **선택한 인터프리터**를 쓴다.
+  //    PATH 의 `python` 에 의존하면 이 PC 처럼 3.9 가 잡히는 환경에서 시스템 Python 에
+  //    설치되는 사고가 난다. 단, 인터프리터를 먼저 골라야 한다:
+  //    `Ctrl+Shift+P` → `Python: Select Interpreter` → 3.10 이상.
+  //    고르지 않으면 변수가 빈 값이 되어 작업이 **아무 메시지 없이** 취소된다.
   "version": "2.0.0",
   "tasks": [
     {
-      "label": "🪂 ai-service: install deps",
+      "label": "ai-service: 의존성 설치",
+      "detail": "pyproject.toml 의 dependencies + dev 를 설치한다",
       "type": "shell",
-      "command": "${command:python.interpreterPath}",
-      "args": ["-m", "pip", "install", "-r", "requirements.txt"],
-      "options": {
-        "cwd": "${workspaceFolder}/ai-service"
-      },
+      "command": { "value": "${command:python.interpreterPath}", "quoting": "strong" },
+      "args": [
+        "-m",
+        "pip",
+        "install",
+        "-e",
+        { "value": ".[dev]", "quoting": "strong" }
+      ],
+      "options": { "cwd": "${workspaceFolder}/ai-service" },
+      // 기본 빌드 작업 — Ctrl+Shift+B 로 바로 실행된다
+      "group": { "kind": "build", "isDefault": true },
+      "problemMatcher": []
+    },
+    {
+      "label": "ai-service: 테스트",
+      "type": "shell",
+      "command": { "value": "${command:python.interpreterPath}", "quoting": "strong" },
+      "args": ["-m", "pytest"],
+      "options": { "cwd": "${workspaceFolder}/ai-service" },
+      "group": { "kind": "test", "isDefault": true },
+      "presentation": { "clear": true },
+      "problemMatcher": []
+    },
+    {
+      "label": "ai-service: 린트",
+      "detail": "ruff check + format 검사 (고치지는 않는다)",
+      "type": "shell",
+      "command": { "value": "${command:python.interpreterPath}", "quoting": "strong" },
+      "args": ["-m", "ruff", "check", "."],
+      "options": { "cwd": "${workspaceFolder}/ai-service" },
+      "presentation": { "clear": true },
       "problemMatcher": []
     }
   ]

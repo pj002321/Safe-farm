@@ -1,0 +1,64 @@
+[project]
+name = "safe-farm-ai-service"
+version = "0.1.0"
+description = "Safe Farm AI — 작물 추천·질의응답 AI 서버"
+# 하한 3.10 의 근거 (2026-09 확인)
+#   의존성: langgraph · langchain-core · fastapi · openai · uvicorn · pytest 가 모두
+#           requires-python >=3.10 이고, 그보다 높은 것을 요구하는 패키지는 없다.
+#   코드:   3.10 문법까지만 쓴다 — dataclass(slots=True), `X | None` 유니온.
+#           3.11+ 전용(tomllib · Self · TaskGroup)과 3.12+ 전용(PEP695 `type`)은 쓰지 않는다.
+#
+# **이 줄이 3.9 를 막는 장치다.** 3.9 에서 `pip install` 하면 설치를 거부하고 0 이 아닌
+# 종료 코드로 끝난다. 지우면 3.9 에도 조용히 옛 버전이 깔려서 "내 PC 에서는 되는데" 가 시작된다.
+# 3.11+ 문법을 쓰게 되면 이 줄과 아래 [tool.ruff] target-version 을 **같이** 올린다.
+requires-python = ">=3.10"
+# 의존성 목록은 여기 한 곳뿐이다. requirements.txt 를 다시 만들지 말 것 —
+# 두 벌이 되는 순간 한쪽에만 추가되고, 둘 다 설치해야 도는 상태로 돌아간다.
+# 설치는 항상 `pip install -e ".[dev]"`. `-e` 를 빼면 app/·pipeline/ 이 sys.path 에
+# 안 올라가서 cwd 가 ai-service 일 때만 import 가 풀린다.
+dependencies = [
+    "langgraph>=1.2",
+    "langchain-core>=1.6",
+    "fastapi>=0.141",
+    "uvicorn[standard]>=0.52",
+    "pydantic>=2.13",
+    "sqlalchemy>=2.0",
+    # db.py 가 create_engine(DATABASE_URL) 을 드라이버 지정 없이 부른다
+    # → SQLAlchemy 가 postgresql:// 를 psycopg2 로 해석한다.
+    # Postgres checkpointer 를 붙일 때는 psycopg3 가 추가로 필요하다 (archi_base.md 4장).
+    "psycopg2-binary>=2.9",
+    "python-dotenv>=1.2",
+    "openai>=3.13",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=9.1",
+    "pytest-asyncio>=1.4",
+    "ruff>=0.16",
+]
+
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+# sandbox · tests · data 는 패키지로 설치하지 않는다
+include = ["app*", "pipeline*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+
+[tool.ruff]
+# 위 requires-python 과 반드시 같이 움직인다. py312 로 두면 ruff 가 3.11/3.12 전용 문법을
+# "괜찮다"고 통과시켜서, 3.10 사용자 PC 에서만 SyntaxError 가 난다.
+target-version = "py310"
+line-length = 100
+# sandbox 스크립트가 `from fakes import ...` 로 옆 파일을 부르므로 first-party 로 취급한다
+src = [".", "sandbox"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
