@@ -43,7 +43,7 @@ requires = ["setuptools>=75"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
-# sandbox · tests · data 는 패키지로 설치하지 않는다
+# tests · data 는 패키지로 설치하지 않는다
 include = ["app*", "pipeline*"]
 
 [tool.pytest.ini_options]
@@ -57,8 +57,7 @@ asyncio_default_fixture_loop_scope = "function"
 # "괜찮다"고 통과시켜서, 3.10 사용자 PC 에서만 SyntaxError 가 난다.
 target-version = "py310"
 line-length = 100
-# sandbox 스크립트가 `from fakes import ...` 로 옆 파일을 부르므로 first-party 로 취급한다
-src = [".", "sandbox"]
+src = ["."]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]

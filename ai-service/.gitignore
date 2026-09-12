@@ -3,5 +3,7 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 
-# sandbox 에서 밑줄로 시작하는 파일은 개인 실험용 — 커밋하지 않는다
-sandbox/*
+# sandbox 는 개인 연습장 — 통째로 커밋하지 않는다.
+# 루트가 아니라 여기 두는 이유: 경로가 ai-service 기준으로 해석돼서
+# 대소문자(Windows 는 무시, mac/Linux 는 구분) 때문에 OS 마다 다르게 걸릴 일이 없다.
+sandbox/
