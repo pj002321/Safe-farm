@@ -36,29 +36,28 @@
 
 ## Architecture
 
-| 위치 | 하는 일 |
-|---|---|
-| `app/core/` | 설정 · DB 연결 (공통 인프라) |
-| `app/models/` | SQLAlchemy 테이블 정의 (Document, Chunk) |
-| `app/repo/` | DB 쿼리. 가공하지 않고 값만 넘긴다 |
-| `app/domain/` | 프레임워크 무관 순수 로직 (작물 적합도 판정 등) |
-| `app/service/` | repo 와 domain 이 만나는 지점. 둘을 호출해 합친 결과를 `app/api/` 로 올린다 |
-| `app/knowledge/` | RAG 런타임 — chunk 분리 · 임베딩 호출 · 벡터 저장/검색 |
-| `app/graph/` | LangGraph 오케스트레이션 (state · node · edge) |
-| `app/api/` · `app/schemas/` | FastAPI 엔드포인트 + 요청/응답 스키마 |
-| `app/main.py` | FastAPI 앱 진입점 |
-| `pipeline/` | 오프라인 배치 CLI (load → chunk → embed 순) |
-| `tests/` | pytest. `domain/` 순수 함수와 `graph/` 의 `route_*`·노드 단위만 |
+```
+app/
+├── core/           # 설정, DB 연결 (공통 인프라)
+├── models/         # SQLAlchemy 테이블 정의 (Document, Chunk)
+├── repo/           # DB 쿼리. 가공하지 않고 값만 넘긴다
+├── domain/         # 프레임워크 무관 순수 로직 (작물 적합도 판정 등)
+├── service/        # repo 와 domain 이 만나는 지점. 합친 결과를 api 로 올린다
+├── knowledge/      # RAG 런타임 로직 (chunk 분리, 임베딩 호출, 벡터 저장/검색)
+├── graph/          # LangGraph 오케스트레이션 (state, node, edge)
+├── api/, schemas/  # FastAPI 엔드포인트 + 요청/응답 스키마
+└── main.py         # FastAPI 앱 진입점
+
+pipeline/           # 오프라인 배치 스크립트 (load → chunk → embed 순 CLI)
+tests/              # pytest
+```
 
 호출은 한 방향: `api → service → (repo, domain)`.
 `repo` 는 쿼리만, `domain` 은 가공만 한다. 둘을 합치는 코드는 `service` 에만 둔다.
 `graph/` 는 독립된 층이 아니라 service 가 쓰는 수단 중 하나다.
 
-- `graph/` 는 환경변수를 읽지 않는다. 기상 API·후보 조회·LLM 은 `GraphDeps` 로,
-  checkpointer 는 인자로 받는다 — `create_graph(deps, checkpointer=...)`.
-- 점수 로직은 프론트에도 한 벌 더 있다. 정본 미정.
-- checkpointer 에는 `serde=create_checkpoint_serde()` 를 같이 넘긴다. 안 넘기면 도메인 dataclass 가
-  복원 때 조용히 `dict` 가 된다. state 에 새 dataclass 를 넣으면 `CHECKPOINT_TYPES` 에도 추가.
+- `graph/` 는 환경변수를 읽지 않는다. DB 세션·LLM 같은 외부 의존은 state 나 인자로 받는다.
+- 점수 로직(`domain/suitability.py`)은 프론트에도 한 벌 더 있다. 정본 미정.
 
 ### 아직 빈 파일 (0줄)
 
