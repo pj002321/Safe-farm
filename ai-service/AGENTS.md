@@ -24,5 +24,14 @@
 사용자가 직접 git 에 접근하며, Agent는 Commit, Push는 하지않는다.
 
 ## Architecture
+app/
+├── core/          # 설정, DB 연결 (공통 인프라)
+├── models/        # SQLAlchemy 테이블 정의 (Document, Chunk)
+├── knowledge/      # RAG 런타임 로직 (chunk 분리, 임베딩 호출, 벡터 저장/검색)
+├── graph/          # LangGraph 오케스트레이션 (state, node, edge)
+├── domain/         # 프레임워크 무관 순수 로직 (작물 적합도 판정 등)
+├── api/, schemas/  # FastAPI 엔드포인트 + 요청/응답 스키마
+└── main.py         # FastAPI 앱 진입점
 
+pipeline/          # 오프라인 배치 스크립트 (load → chunk → embed 순 CLI)
 ## Logging
