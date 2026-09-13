@@ -1,0 +1,400 @@
+<meta charset="utf-8" />
+<title>Safe Farm AI — 썸네일</title>
+<link
+  rel="stylesheet"
+  href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css"
+/>
+<style>
+  /* globals.css 1층 원시 팔레트에서 그대로 가져온 값.
+     썸네일은 번들 밖 정적 산출물이라 var(--token) 이 닿지 않는다. */
+  :root {
+    --slate-950: #0b0a12;
+    --slate-900: #16161e;
+    --slate-400: #9998b3;
+    --slate-300: #cdcdde;
+    --slate-100: #f0f0f6;
+    --orbit-500: #6b55f5;
+    --orbit-300: #a79dff;
+    --orbit-200: #c8c2ff;
+    --ndvi-400: #a6e226;
+    --ndvi-300: #bff053;
+    --terra-400: #c9976a;
+    --terra-300: #ddbc97;
+    --flare-300: #ff7a90;
+    --ember-300: #fbaa4a;
+    --space-border: rgb(255 255 255 / 0.12);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: #000;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+  }
+
+  .card {
+    position: relative;
+    width: 1280px;
+    height: 640px;
+    overflow: hidden;
+    background: var(--slate-950);
+    color: var(--slate-100);
+    font-family: "Pretendard Variable", Pretendard, -apple-system, sans-serif;
+    /* 한글 줄바꿈 — 어절 경계에서만 끊는다 (globals.css 와 같은 규칙) */
+    word-break: keep-all;
+    overflow-wrap: break-word;
+    display: grid;
+    grid-template-columns: 1fr 560px;
+    padding: 56px 64px;
+    gap: 40px;
+  }
+
+  /* ── 배경 글로우 ─────────────────────────────────── */
+  .glow {
+    position: absolute;
+    border-radius: 9999px;
+    filter: blur(90px);
+    pointer-events: none;
+  }
+  .glow-a { top: -180px; left: -140px; width: 560px; height: 560px; background: var(--orbit-500); opacity: 0.28; }
+  .glow-b { bottom: -220px; right: 120px; width: 520px; height: 520px; background: var(--ndvi-400); opacity: 0.10; }
+  .glow-c { top: 120px; right: -120px; width: 380px; height: 380px; background: var(--flare-300); opacity: 0.07; }
+
+  /* 미세한 스캔라인 — 관측 장비 느낌. 너무 세면 촌스러워지니 3% */
+  .scan {
+    position: absolute; inset: 0; pointer-events: none;
+    background: repeating-linear-gradient(
+      to bottom, rgb(255 255 255 / 0.03) 0 1px, transparent 1px 4px
+    );
+  }
+
+  /* ── 왼쪽 ───────────────────────────────────────── */
+  .left {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+    min-width: 0;
+  }
+
+  .brand { display: flex; align-items: center; gap: 12px; }
+  .brand svg { width: 34px; height: 34px; flex-shrink: 0; }
+  .brand span { font-size: 25px; font-weight: 600; letter-spacing: -0.02em; }
+
+  h1 {
+    font-size: 68px;
+    line-height: 1.14;
+    font-weight: 600;
+    letter-spacing: -0.035em;
+    margin-top: 30px;
+  }
+  h1 .accent {
+    background: linear-gradient(100deg, var(--orbit-200) 0%, var(--ndvi-300) 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  .sub {
+    margin-top: 22px;
+    font-size: 21px;
+    line-height: 1.6;
+    color: var(--slate-400);
+    max-width: 26em;
+  }
+
+  /* 키워드 3종 — 이 프로젝트의 출발점 */
+  .keys { display: flex; gap: 9px; margin-top: 30px; flex-wrap: wrap; }
+  .key {
+    display: inline-flex; align-items: center; gap: 7px;
+    padding: 7px 15px;
+    border-radius: 9999px;
+    border: 1px solid var(--space-border);
+    font-size: 15px;
+    color: var(--slate-300);
+    background: rgb(255 255 255 / 0.03);
+  }
+  .dot { width: 7px; height: 7px; border-radius: 9999px; }
+
+  /* ── 리포트 5단계 ──────────────────────────────── */
+  .report { margin-top: 34px; padding-bottom: 30px; }
+  .report-label {
+    font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--slate-400);
+    font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+  }
+  .steps {
+    list-style: none;
+    display: flex; flex-wrap: wrap; gap: 8px 10px;
+    counter-reset: step;
+  }
+  .steps li {
+    counter-increment: step;
+    display: inline-flex; align-items: center; gap: 7px;
+    font-size: 14px; color: var(--slate-300);
+  }
+  .steps li::before {
+    content: counter(step);
+    display: inline-grid; place-items: center;
+    width: 19px; height: 19px; border-radius: 9999px;
+    font-family: ui-monospace, Menlo, monospace;
+    font-size: 11px;
+    color: var(--orbit-200);
+    background: rgb(107 85 245 / 0.22);
+    border: 1px solid rgb(167 157 255 / 0.32);
+  }
+  /* 마지막 단계(예보·경고)만 재해 색으로 — 이 서비스의 목적지다 */
+  .steps li:last-child::before {
+    color: var(--flare-300);
+    background: rgb(255 122 144 / 0.14);
+    border-color: rgb(255 122 144 / 0.34);
+  }
+
+  /* ── 계측 스트립 ────────────────────────────────── */
+  .telemetry {
+    margin-top: auto;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 22px;
+    padding-top: 22px;
+    border-top: 1px solid var(--space-border);
+  }
+  .t-label {
+    font-size: 11px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--slate-400);
+    font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+  }
+  .t-value {
+    margin-top: 6px;
+    font-size: 16px;
+    color: var(--slate-100);
+    font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* ── 오른쪽: 지구본 ─────────────────────────────── */
+  .right { position: relative; display: flex; align-items: center; justify-content: center; }
+  .globe-wrap { position: relative; width: 500px; height: 500px; }
+  .globe-wrap svg { width: 100%; height: 100%; display: block; }
+
+  /* 경보 칩 — 재해 키워드를 화면에서 실제로 보여주는 자리 */
+  .alert {
+    position: absolute;
+    left: -26px; bottom: 30px;
+    display: flex; flex-direction: column; gap: 7px;
+    padding: 13px 16px;
+    border-radius: 13px;
+    border: 1px solid var(--space-border);
+    background: rgb(11 10 18 / 0.82);
+    backdrop-filter: blur(8px);
+    min-width: 186px;
+  }
+  .alert-top { display: flex; align-items: center; gap: 7px; }
+  .alert-name { font-size: 14px; font-weight: 600; }
+  .alert-tag {
+    font-size: 12px; padding: 3px 9px; border-radius: 9999px;
+    color: var(--flare-300);
+    background: rgb(255 122 144 / 0.14);
+    border: 1px solid rgb(255 122 144 / 0.3);
+  }
+  .alert-meta {
+    font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+    font-size: 12px; color: var(--slate-400);
+    font-variant-numeric: tabular-nums;
+  }
+</style>
+
+<div class="card">
+  <div class="glow glow-a"></div>
+  <div class="glow glow-b"></div>
+  <div class="glow glow-c"></div>
+  <div class="scan"></div>
+
+  <div class="left">
+    <div>
+      <div class="brand">
+        <!-- Logo.tsx 와 같은 형태: 세운 잎 + 납작한 위성 궤도 -->
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round">
+          <title>Safe Farm AI 로고</title>
+          <ellipse cx="12" cy="13" rx="10" ry="4" transform="rotate(-20 12 13)" stroke="var(--orbit-300)" />
+          <path d="M12 4.5a9 9 0 0 1 0 14 9 9 0 0 1 0-14Z" stroke="var(--ndvi-300)" />
+          <path d="M12 4.5v14" stroke="var(--ndvi-300)" />
+          <circle cx="19.61" cy="13.24" r="1.25" fill="var(--orbit-300)" stroke="none" />
+        </svg>
+        <span>Safe Farm AI</span>
+      </div>
+
+      <h1>위성이 보는 땅,<br />AI가 읽는 <span class="accent">내일</span>.</h1>
+
+      <p class="sub">
+        위성이 매일 땅을 관측하고, 재해가 닥치기 전에 할 일을 알려드립니다.
+      </p>
+
+      <div class="keys">
+        <span class="key"><i class="dot" style="background: var(--orbit-300)"></i>인공위성</span>
+        <span class="key"><i class="dot" style="background: var(--terra-300)"></i>토지</span>
+        <span class="key"><i class="dot" style="background: var(--flare-300)"></i>자연재해</span>
+      </div>
+    </div>
+
+    <div class="report">
+      <ol class="steps">
+        <li>생육 상태</li>
+        <li>표준 대비</li>
+        <li>잘 자라는 점</li>
+        <li>처방</li>
+        <li>예보 · 경고</li>
+      </ol>
+    </div>
+
+    <div class="telemetry">
+      <div>
+        <div class="t-label">관측 위성</div>
+        <div class="t-value">천리안 2A</div>
+      </div>
+      <div>
+        <div class="t-label">해상도</div>
+        <div class="t-value">10 m</div>
+      </div>
+      <div>
+        <div class="t-label">갱신</div>
+        <div class="t-value">1일 2회</div>
+      </div>
+      <div>
+        <div class="t-label">커버리지</div>
+        <div class="t-value">17개 시도</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="right">
+    <div class="globe-wrap">
+      <svg viewBox="0 0 200 200">
+        <title>위성 궤도와 관측 지점이 표시된 지구본</title>
+        <defs>
+          <!-- 바다: 밤면이 새까맣게 죽지 않도록 중심을 살짝 띄운다 -->
+          <radialGradient id="ocean" cx="38%" cy="32%" r="78%">
+            <stop offset="0%" stop-color="#2a2a4a" />
+            <stop offset="62%" stop-color="#16162a" />
+            <stop offset="100%" stop-color="#0d0d18" />
+          </radialGradient>
+          <radialGradient id="atmo" cx="50%" cy="50%" r="50%">
+            <stop offset="84%" stop-color="rgb(167 157 255 / 0)" />
+            <stop offset="96%" stop-color="rgb(167 157 255 / 0.14)" />
+            <stop offset="100%" stop-color="rgb(167 157 255 / 0)" />
+          </radialGradient>
+          <clipPath id="sphere"><circle cx="100" cy="100" r="62" /></clipPath>
+          <!-- 스캔 밴드: 지금 훑고 있는 줄 -->
+          <linearGradient id="band" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="rgb(191 240 83 / 0)" />
+            <stop offset="50%" stop-color="rgb(191 240 83 / 0.30)" />
+            <stop offset="100%" stop-color="rgb(191 240 83 / 0)" />
+          </linearGradient>
+          <!-- 낮/밤. 오른쪽 아래로 갈수록 어두워져 구가 평면이 아니라 구로 읽힌다. -->
+          <radialGradient id="night" cx="34%" cy="28%" r="88%">
+            <stop offset="0%" stop-color="rgb(0 0 0 / 0)" />
+            <stop offset="52%" stop-color="rgb(0 0 0 / 0.14)" />
+            <stop offset="100%" stop-color="rgb(0 0 0 / 0.42)" />
+          </radialGradient>
+        </defs>
+
+        <!-- 대기광 -->
+        <circle cx="100" cy="100" r="69" fill="url(#atmo)" />
+        <!-- 구체 -->
+        <circle cx="100" cy="100" r="62" fill="url(#ocean)" />
+
+        <g clip-path="url(#sphere)">
+          <!-- 육지. 실제 대륙을 흉내내지 않는다 — 이 지구본은 지도가 아니라
+               관측 레이어다. 다만 "덩어리"로 읽혀야 하므로 띠가 아니라
+               닫힌 유기적 형태로 그린다. 색은 나지(terra)→밀생(ndvi) 로
+               NDVI false-color 의 문법을 따른다. -->
+          <g>
+            <!-- 큰 대륙 (좌상) -->
+            <path d="M58 72c9-8 22-9 32-4s19 3 26-2c6-4 12-2 13 4s-5 11-12 14c-9 4-14 11-24 12s-19-3-28-1-15-2-14-9c1-6 3-10 7-14Z"
+                  fill="var(--terra-400)" opacity="0.42" />
+            <path d="M66 76c8-6 18-6 26-2s16 2 21-1"
+                  fill="none" stroke="var(--ndvi-400)" stroke-width="7" stroke-linecap="round" opacity="0.34" />
+
+            <!-- 중앙 대륙 (식생 밀도 높음) -->
+            <path d="M52 112c11-7 23-6 33 0s21 5 30-1c7-5 14-3 15 4s-6 13-15 16c-11 4-19 10-31 10s-21-6-31-6-11-6-8-12c2-5 4-8 7-11Z"
+                  fill="var(--ndvi-400)" opacity="0.30" />
+            <path d="M62 118c9-5 19-4 27 1s17 3 23-1"
+                  fill="none" stroke="var(--ndvi-300)" stroke-width="5" stroke-linecap="round" opacity="0.26" />
+
+            <!-- 작은 섬 2개 -->
+            <path d="M126 92c6-3 12-1 13 4s-4 9-10 9-9-3-8-7 2-5 5-6Z"
+                  fill="var(--terra-300)" opacity="0.34" />
+            <path d="M70 146c8-4 17-2 19 3s-5 9-14 9-12-3-11-7 3-4 6-5Z"
+                  fill="var(--terra-400)" opacity="0.30" />
+          </g>
+
+          <!-- 스캔 밴드 — 지금 훑고 있는 줄 -->
+          <rect x="38" y="88" width="124" height="18" fill="url(#band)" />
+
+          <!-- 위경도 그래티큘 -->
+          <g fill="none" stroke="var(--orbit-200)" stroke-width="0.45" opacity="0.26">
+            <line x1="38" y1="80" x2="162" y2="80" />
+            <line x1="38" y1="100" x2="162" y2="100" />
+            <line x1="38" y1="120" x2="162" y2="120" />
+            <line x1="47" y1="62" x2="153" y2="62" />
+            <line x1="47" y1="138" x2="153" y2="138" />
+            <ellipse cx="100" cy="100" rx="20" ry="62" />
+            <ellipse cx="100" cy="100" rx="41" ry="62" />
+            <line x1="100" y1="38" x2="100" y2="162" />
+          </g>
+
+          <!-- 낮/밤 경계. 완전히 끄지 않는다 — 밤면이 죽으면 마커가 떠 보인다. -->
+          <circle cx="100" cy="100" r="62" fill="url(#night)" />
+        </g>
+
+        <!-- 구체 테두리 -->
+        <circle cx="100" cy="100" r="62" fill="none" stroke="var(--orbit-300)" stroke-width="0.8" opacity="0.5" />
+
+        <!-- 관측 지점 마커.
+             경보 마커(flare)는 위성 빔이 가리키는 지점에 둔다 —
+             "위성이 지금 저기를 보고 있고, 저기에 경보가 떴다"가 한 장면이 된다. -->
+        <g>
+          <circle cx="126" cy="96" r="10" fill="var(--flare-300)" opacity="0.14" />
+          <circle cx="126" cy="96" r="5.5" fill="var(--flare-300)" opacity="0.22" />
+          <circle cx="126" cy="96" r="3" fill="var(--flare-300)" />
+          <circle cx="86" cy="120" r="2.6" fill="var(--ndvi-300)" />
+          <circle cx="72" cy="92" r="2.4" fill="var(--ember-300)" />
+          <circle cx="108" cy="136" r="2.2" fill="var(--orbit-200)" opacity="0.75" />
+        </g>
+
+        <!-- 궤도 + 위성 -->
+        <g>
+          <ellipse cx="100" cy="100" rx="88" ry="33" transform="rotate(-22 100 100)"
+                   fill="none" stroke="var(--orbit-300)" stroke-width="0.9" opacity="0.55" />
+
+          <!-- 관측 빔: 위성에서 지표 관측 지점으로. 위성보다 먼저 그려 뒤에 깔리게 한다. -->
+          <path d="M160 55 L118 88 L134 104 Z" fill="var(--orbit-300)" opacity="0.12" />
+
+          <!-- 위성 본체 + 태양전지판.
+               좌표 (160, 55) 는 궤도 타원 위의 실제 점이다 —
+               rx=88·ry=33 을 -22° 회전한 타원에서 θ=-35° 지점.
+               눈대중으로 놓으면 궤도에서 떠 보인다. -->
+          <g transform="translate(160 55) rotate(-38)">
+            <rect x="-3.6" y="-3" width="7.2" height="6" rx="1.4" fill="var(--orbit-200)" />
+            <rect x="-11.5" y="-1.5" width="6.6" height="3" rx="0.7" fill="var(--orbit-300)" opacity="0.9" />
+            <rect x="4.9" y="-1.5" width="6.6" height="3" rx="0.7" fill="var(--orbit-300)" opacity="0.9" />
+            <circle cx="0" cy="0" r="7" fill="var(--orbit-300)" opacity="0.16" />
+          </g>
+        </g>
+      </svg>
+
+      <div class="alert">
+        <div class="alert-top">
+          <span class="alert-name">경북 상주</span>
+          <span class="alert-tag">가을가뭄</span>
+        </div>
+        <div class="alert-meta">7일 강수 0.1mm · 최고 28.8℃</div>
+        <div class="alert-meta">결구적온 15–16℃ 초과</div>
+      </div>
+    </div>
+  </div>
+</div>
