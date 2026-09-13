@@ -1,0 +1,695 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>세이프팜 — 나농민님의 배추밭</title>
+<link href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard-dynamic-subset.css" rel="stylesheet">
+<style>
+:root{
+  --ink:#1c1d1a; --ink2:#4a4c45; --ink3:#7c7e74;
+  --paper:#f2f1ec; --paper2:#e7e5dd; --line:#d5d2c7;
+  --bench:#1e211c; --bench2:#2a2e27; --bline:#3b4036;
+  --btxt:#c5c9bc; --bdim:#7e8577;
+  --water:#2e5c6e; --sprout:#5f8438; --soil:#8b5e3c; --alarm:#b8502a;
+  --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--ink);
+  font-family:Pretendard,-apple-system,"Apple SD Gothic Neo",sans-serif;
+  font-size:15px;line-height:1.62;letter-spacing:-.011em;-webkit-font-smoothing:antialiased}
+button,input,textarea{font-family:inherit}
+
+.topbar{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;padding:16px 26px;
+  border-bottom:1px solid var(--line);background:var(--paper);position:sticky;top:0;z-index:30}
+.topbar h1{margin:0;font-size:16px;font-weight:700}
+.topbar .who{font-size:13.5px;color:var(--ink3);margin-right:auto}
+.tally{font-family:var(--mono);font-size:11.5px;color:var(--ink2);
+  border:1px solid var(--line);border-radius:3px;padding:4px 9px;background:#fff}
+
+.split{display:grid;grid-template-columns:minmax(400px,1fr) minmax(500px,1.2fr);
+  min-height:calc(100vh - 57px)}
+.app{padding:26px 28px 70px;border-right:1px solid var(--line)}
+.app-in{max-width:400px;margin:0 auto}
+.card{background:#fff;border:1px solid var(--line);border-radius:13px;padding:20px 18px;margin-bottom:13px}
+
+/* 경보 */
+.alert{display:flex;gap:11px;background:#fdf3e6;border:1px solid #e8c99a;border-radius:11px;
+  padding:13px 15px;margin-bottom:13px}
+.alert .ic{font-size:19px;line-height:1.3}
+.alert b{display:block;font-size:14.5px;color:#6b3d13;margin-bottom:3px}
+.alert p{margin:0;font-size:13px;color:#845220;line-height:1.6}
+
+/* 밭 머리 */
+.plot{display:flex;align-items:flex-start;gap:11px;padding-bottom:13px;
+  border-bottom:1px solid var(--paper2);margin-bottom:14px}
+.pin{width:30px;height:30px;flex:none;border-radius:50%;background:var(--water);
+  display:grid;place-items:center;color:#fff;font-size:12.5px;margin-top:2px}
+.plot .nm{margin:0 0 2px;font-size:16.5px;font-weight:700}
+.plot .loc{font-size:11.5px;color:var(--ink3);font-family:var(--mono)}
+
+/* 탭 */
+.tabs{display:flex;gap:5px;margin-bottom:15px}
+.tab{flex:1;padding:9px 0;border:1px solid var(--line);background:#fff;border-radius:8px;
+  font-size:13.5px;color:var(--ink2);cursor:pointer}
+.tab[aria-selected="true"]{background:var(--ink);border-color:var(--ink);color:#fff;font-weight:600}
+.pane{display:none}.pane.on{display:block}
+
+/* 게이지 */
+.gnum{display:flex;align-items:baseline;gap:8px;margin-bottom:7px}
+.gnum b{font-family:var(--mono);font-size:26px;font-weight:600;letter-spacing:-.02em}
+.gnum span{font-size:12.5px;color:var(--ink3)}
+.gnum em{margin-left:auto;font-style:normal;font-size:11.5px;color:var(--ink3);font-family:var(--mono)}
+.track{height:7px;background:var(--paper2);border-radius:4px;overflow:hidden;position:relative}
+.track i{display:block;height:100%;background:var(--sprout);border-radius:4px;
+  transition:width .7s cubic-bezier(.2,.8,.3,1)}
+.track u{position:absolute;top:-3px;bottom:-3px;width:2px;background:var(--soil);text-decoration:none}
+.gfoot{display:flex;justify-content:space-between;font-size:11px;color:var(--ink3);
+  margin-top:6px;font-family:var(--mono)}
+
+.says{border-top:1px solid var(--paper2);margin-top:15px;padding-top:14px}
+.say{margin:0 0 11px;font-size:14px;line-height:1.72}
+.say:last-child{margin-bottom:0}
+.say.todo{padding-left:14px;border-left:2px solid var(--sprout)}
+.say.warn{padding-left:14px;border-left:2px solid var(--alarm);color:#8e3d1f}
+
+/* 단감 달력 */
+.fit{display:grid;grid-template-columns:auto 1fr auto;gap:6px 10px;font-size:13px;
+  margin-bottom:14px;align-items:center}
+.fit dt{color:var(--ink3);white-space:nowrap}
+.fit dd{margin:0;font-family:var(--mono);font-size:13px}
+.ok{color:var(--sprout);font-weight:700;font-size:12px}
+.marginal{color:var(--soil);font-weight:700;font-size:12px}
+
+/* 일지 */
+.jrnl label{display:block;font-size:12.5px;color:var(--ink3);margin-bottom:6px}
+.jrnl input[type=date]{width:100%;padding:8px 10px;border:1px solid var(--line);
+  border-radius:7px;font-family:var(--mono);font-size:13px;margin-bottom:14px}
+.chks{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px}
+.chk{position:relative}
+.chk input{position:absolute;opacity:0;width:0;height:0}
+.chk span{display:block;padding:7px 12px;border:1px solid var(--line);border-radius:20px;
+  font-size:13px;color:var(--ink2);cursor:pointer;background:#fff}
+.chk input:checked + span{background:var(--sprout);border-color:var(--sprout);color:#fff;font-weight:600}
+.chk input:focus-visible + span{outline:2px solid var(--water);outline-offset:2px}
+.jrnl textarea{width:100%;min-height:80px;padding:10px;border:1px solid var(--line);
+  border-radius:7px;font-size:14px;line-height:1.6;resize:vertical;margin-bottom:12px}
+.photo{border:1px dashed var(--line);border-radius:8px;padding:14px;text-align:center;
+  color:var(--ink3);font-size:12.5px;margin-bottom:14px}
+.save{width:100%;padding:12px;border:none;border-radius:8px;background:var(--water);
+  color:#fff;font-size:14.5px;font-weight:600;cursor:pointer}
+.save:hover{background:#264e5e}
+.saved{margin-top:12px;padding:11px 13px;background:#eef4ee;border:1px solid #cadccb;
+  border-radius:8px;font-size:13px;color:#2f5233;display:none}
+.saved.on{display:block}
+
+
+/* 오늘 패널 */
+.mini-map{height:132px;border-radius:9px;overflow:hidden;border:1px solid var(--line);margin-bottom:14px;position:relative}
+.mini-map .cap{position:absolute;left:9px;bottom:7px;font-family:var(--mono);font-size:10.5px;
+  color:var(--ink2);background:rgba(255,255,255,.82);padding:2px 7px;border-radius:4px}
+.sunbar{display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:11.5px;
+  color:var(--ink3);padding:9px 0;border-top:1px solid var(--paper2);border-bottom:1px solid var(--paper2)}
+.sunbar .gap{flex:1;height:3px;border-radius:2px;
+  background:linear-gradient(90deg,#e7e5dd,#f0e2b8 18%,#f0e2b8 82%,#e7e5dd)}
+.drone{margin-top:14px}
+.drone .hd{display:flex;align-items:baseline;gap:8px;margin-bottom:9px}
+.drone .hd b{font-size:14px}
+.drone .hd span{margin-left:auto;font-size:11.5px;color:var(--ink3);font-family:var(--mono)}
+.dday{display:grid;grid-template-columns:52px 1fr;gap:10px;align-items:center;margin-bottom:7px}
+.dday .lb{font-family:var(--mono);font-size:11.5px;color:var(--ink3)}
+.dbar{height:15px;border-radius:4px;background:var(--paper2);position:relative;overflow:hidden}
+.dbar i{position:absolute;top:0;bottom:0;background:var(--sprout);border-radius:3px}
+.dbar u{position:absolute;top:0;bottom:0;width:1px;background:#c9c6ba;text-decoration:none}
+.dticks{display:flex;justify-content:space-between;font-family:var(--mono);font-size:10px;
+  color:var(--ink3);margin:2px 0 0 62px}
+.dwhy{margin:10px 0 0;font-size:13px;color:var(--ink2);line-height:1.7;
+  padding-left:13px;border-left:2px solid var(--sprout)}
+.dwhy.no{border-left-color:var(--soil);color:#6d4a2a}
+
+
+.twoday{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--line);
+  border:1px solid var(--line);border-radius:10px;overflow:hidden;margin-bottom:12px}
+.dcol{background:#fff;padding:14px 15px;text-align:center}
+.dcol.next{background:#fbfbf8}
+.dhd{display:flex;align-items:baseline;justify-content:center;gap:7px;margin-bottom:8px}
+.dhd b{font-size:14.5px}
+.dhd span{font-family:var(--mono);font-size:10.5px;color:var(--ink3)}
+.dwind{margin:6px 0 11px;font-size:12.5px;color:var(--ink3)}
+.dwind b{display:block;font-size:14px;color:var(--ink);font-weight:700}
+.dvals{margin:0;display:grid;grid-template-columns:auto 1fr;gap:4px 9px;text-align:left;
+  border-top:1px solid var(--paper2);padding-top:10px}
+.dvals dt{font-size:11.5px;color:var(--ink3);white-space:nowrap}
+.dvals dd{margin:0;font-family:var(--mono);font-size:11.5px;color:var(--ink2);text-align:right}
+.dsum{margin:0 0 14px;font-size:13.5px;color:var(--ink2);line-height:1.7;
+  padding:11px 13px;background:var(--paper);border-radius:8px}
+
+/* 지난 일지 */
+.past{border-top:1px solid var(--paper2);margin-top:16px;padding-top:14px}
+.past h4{margin:0 0 10px;font-size:12.5px;color:var(--ink3);font-weight:600}
+.pitem{padding:9px 0;border-bottom:1px solid var(--paper2);font-size:13.5px}
+.pitem:last-child{border-bottom:none}
+.pitem .d{font-family:var(--mono);font-size:11.5px;color:var(--ink3);margin-right:7px}
+.ptag{display:inline-block;padding:1px 7px;border-radius:4px;background:var(--paper2);
+  font-size:11px;color:var(--ink2);margin-right:4px}
+
+/* 오른쪽 */
+.bench{background:var(--bench);color:var(--btxt);padding:26px 28px 80px}
+.bench-in{max-width:580px}
+.bench h2{margin:0 0 4px;font-size:14.5px;font-weight:600;color:#fff}
+.bench .lead{margin:0 0 20px;font-size:12.5px;color:var(--bdim);line-height:1.65}
+.trace{list-style:none;margin:0;padding:0}
+.step{border-left:2px solid var(--bline);padding:0 0 20px 17px;position:relative;
+  opacity:0;transform:translateY(6px);animation:in .35s ease forwards}
+@keyframes in{to{opacity:1;transform:none}}
+.step::before{content:"";position:absolute;left:-5px;top:6px;width:8px;height:8px;
+  border-radius:50%;background:var(--bench);border:2px solid var(--bline)}
+.step.real::before{border-color:var(--sprout);background:var(--sprout)}
+.step.calc::before{border-color:var(--water);background:var(--water)}
+.step.save::before{border-color:#d4a77a;background:#d4a77a}
+.step:last-child{border-left-color:transparent;padding-bottom:0}
+.sh{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:7px}
+.sh .t{font-size:13px;font-weight:600;color:#fff}
+.src{font-family:var(--mono);font-size:10px;padding:2px 6px;border-radius:3px;
+  border:1px solid var(--bline);color:var(--bdim)}
+.src.om{color:#8fb8c9;border-color:#3d5b68}
+.src.kma{color:#9db4d6;border-color:#3f4d68}
+.src.s2{color:#9dc46e;border-color:#435a31}
+.src.rda{color:#c9a5d6;border-color:#574063}
+.src.ai{color:#e0dcc4;border-color:#5d5a45}
+.src.db{color:#d4a77a;border-color:#6a5138}
+.tg{font-family:var(--mono);font-size:10px;color:var(--bdim);margin-left:auto}
+.io{font-family:var(--mono);font-size:11.5px;line-height:1.72;background:var(--bench2);
+  border:1px solid var(--bline);border-radius:5px;padding:9px 11px;overflow-x:auto;
+  white-space:pre;color:#b9bfae;margin:0}
+.io + .io{margin-top:6px}
+.io .k{color:var(--bdim)}.io .v{color:#e6e9dd}.io .g{color:#9dc46e}
+.io .b{color:#8fb8c9}.io .o{color:#d4a77a}.io .c{color:#6d7566;font-style:italic}
+.why{margin:8px 0 0;font-size:12px;color:var(--bdim);line-height:1.7}
+.empty{color:var(--bdim);font-size:12.5px;border:1px dashed var(--bline);
+  border-radius:6px;padding:20px;text-align:center}
+.ledger{margin-top:24px;border-top:1px solid var(--bline);padding-top:16px}
+.ledger h3{margin:0 0 10px;font-size:12px;color:var(--bdim);font-weight:600}
+.ledger dl{margin:0;display:grid;grid-template-columns:auto 1fr;gap:6px 12px;
+  font-size:12px;font-family:var(--mono)}
+.ledger dt{color:var(--bdim);white-space:nowrap}
+.ledger dd{margin:0;color:var(--btxt)}
+
+@media (max-width:960px){
+  .split{grid-template-columns:1fr}
+  .app{border-right:none;border-bottom:1px solid var(--line);padding:22px 18px 34px}
+  .bench{padding:22px 18px 50px}
+  .topbar{padding:13px 18px}
+}
+@media (prefers-reduced-motion:reduce){.step{animation:none;opacity:1;transform:none}
+  .track i{transition:none}}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <h1>세이프팜</h1>
+  <p class="who">나농민님 · 경북 상주 · 배추밭</p>
+  <span class="tally" id="tally">받아온 값 0 · 계산 0 · 저장 0</span>
+</div>
+
+<div class="split">
+
+<!-- ───────── 왼쪽: 앱 ───────── -->
+<div class="app"><div class="app-in">
+
+  <div class="alert">
+    <span class="ic">☀</span>
+    <div>
+      <b>이레 동안 비가 0.1mm뿐이었습니다</b>
+      <p>배추가 한창 자라는 때인데 땅이 마르고 있어요. 오늘내일 중에 물을 흠뻑 주세요.</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="plot">
+      <span class="pin">밭</span>
+      <div>
+        <p class="nm">배추밭</p>
+        <span class="loc">36.4084, 128.1574 · 상주 · 약 200평</span>
+      </div>
+    </div>
+
+    <div class="tabs" role="tablist">
+      <button class="tab" role="tab" aria-selected="true" data-p="p1">배추</button>
+      <button class="tab" role="tab" aria-selected="false" data-p="p2">단감 3그루</button>
+    </div>
+
+    <!-- 배추 -->
+    <div class="pane on" id="p1">
+      <div class="gnum">
+        <b>384</b><span>/ 797</span><em>씨뿌린 지 20일째</em>
+      </div>
+      <div class="track"><i style="width:48%"></i><u style="left:63%"></u></div>
+      <div class="gfoot"><span>씨뿌림 8/25</span><span>결구 시작까지 8일</span></div>
+
+      <div class="says">
+        <p class="say">배추가 잘 크고 있어요. 앞으로 여드레쯤 뒤면 속이 차기 시작합니다. 수확은 10월 중순쯤 될 것 같아요.</p>
+        <p class="say todo">오늘 물 주기 — 이레 강수가 0.1mm에 그쳤습니다. 스프링클러가 있으면 돌리시고, 없으면 고랑에 물을 대주세요.</p>
+        <p class="say todo">짚이나 비닐을 덮어두면 땅이 덜 마릅니다.</p>
+        <p class="say warn">속이 차는 때는 더위에 약합니다. 낮 기온이 아직 28도를 넘고 있으니 며칠 더 살펴봐 주세요.</p>
+      </div>
+    </div>
+
+    <!-- 단감 -->
+    <div class="pane" id="p2">
+      <dl class="fit">
+        <dt>연평균기온</dt><dd>13.1℃ <span class="k">/ 기준 13.0℃</span></dd><dd class="marginal">아슬아슬</dd>
+        <dt>일조시간</dt><dd>2,401h <span class="k">/ 기준 2,340h</span></dd><dd class="marginal">아슬아슬</dd>
+        <dt>휴면기 최저</dt><dd>-4℃ 이상 필요</dd><dd class="ok">겨울에 확인</dd>
+        <dt>10월 평균</dt><dd>15℃ 이상 필요</dd><dd class="ok">확인 예정</dd>
+      </dl>
+      <div class="says" style="border-top:none;margin-top:0;padding-top:0">
+        <p class="say">상주는 단감을 키울 수 있는 북쪽 끝에 가깝습니다. 두 조건 다 기준을 아주 조금 넘겨요. 그래서 <b>겨울 추위와 가을 기온</b>을 특히 눈여겨봐야 합니다.</p>
+        <p class="say">지금 심으신 부유는 만생종이라 <b>10월 하순부터 11월 중순</b>에 땁니다. 아직 한 달 반 남았어요.</p>
+        <p class="say warn">올여름에 35도 넘은 날이 여드레 있었습니다. 열매가 햇볕에 데지 않았는지 한 번 살펴봐 주세요.</p>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- 오늘 밭 -->
+  <div class="card">
+    <h3 style="margin:0 0 13px;font-size:15.5px;font-weight:700">오늘 배추밭</h3>
+
+    <div class="mini-map">
+      <svg viewBox="0 0 360 132" width="100%" height="100%" role="img" aria-label="배추밭 위치 약도. 낙동강 지류 옆 논밭 사이에 밭이 있습니다.">
+        <rect width="360" height="132" fill="#eef2e6"/>
+        <path d="M0 96 Q80 84 170 92 T360 86 L360 132 L0 132 Z" fill="#dfeaf4"/>
+        <path d="M-6 30 Q110 18 230 38 T366 30" stroke="#cfd9c2" stroke-width="13" fill="none"/>
+        <g fill="#c9dca6" opacity=".85">
+          <rect x="34" y="46" width="66" height="26" rx="2"/>
+          <rect x="108" y="44" width="58" height="26" rx="2"/>
+          <rect x="176" y="50" width="72" height="24" rx="2"/>
+          <rect x="258" y="46" width="64" height="26" rx="2"/>
+          <rect x="60" y="78" width="80" height="20" rx="2"/>
+          <rect x="150" y="80" width="92" height="20" rx="2"/>
+        </g>
+        <rect x="176" y="50" width="72" height="24" rx="2" fill="none" stroke="#2c5a6b" stroke-width="1.6"/>
+        <circle cx="212" cy="62" r="9" fill="#2c5a6b"/>
+        <circle cx="212" cy="62" r="3.2" fill="#eef2e6"/>
+        <text x="212" y="40" text-anchor="middle" font-size="11" fill="#25403f" font-weight="500">배추밭</text>
+        <text x="300" y="112" text-anchor="middle" font-size="10" fill="#4a6b82">낙동강</text>
+      </svg>
+      <span class="cap">36.4084, 128.1574 · 해발 74m</span>
+    </div>
+
+    <div class="twoday">
+      <div class="dcol">
+        <div class="dhd"><b>오늘</b><span>9월 13일</span></div>
+        <svg viewBox="0 0 74 74" width="74" height="74" role="img" aria-label="오늘 바람은 서북서에서 초속 1.3미터">
+          <circle cx="37" cy="37" r="29" fill="none" stroke="#e7e5dd" stroke-width="1.2"/>
+          <text x="37" y="10" text-anchor="middle" font-size="8.5" fill="#7c7e74" font-family="ui-monospace,monospace">북</text>
+          <text x="69" y="40" text-anchor="middle" font-size="8.5" fill="#7c7e74" font-family="ui-monospace,monospace">동</text>
+          <text x="37" y="71" text-anchor="middle" font-size="8.5" fill="#7c7e74" font-family="ui-monospace,monospace">남</text>
+          <text x="6" y="40" text-anchor="middle" font-size="8.5" fill="#7c7e74" font-family="ui-monospace,monospace">서</text>
+          <g transform="rotate(292.5 37 37)">
+            <line x1="37" y1="12" x2="37" y2="33" stroke="#2c5a6b" stroke-width="2.2" stroke-linecap="round"/>
+            <path d="M33 29 L37 36 L41 29 Z" fill="#2c5a6b"/>
+          </g>
+          <circle cx="37" cy="37" r="2.6" fill="#2c5a6b"/>
+        </svg>
+        <p class="dwind"><b>서북서풍 1.3</b>m/s</p>
+        <dl class="dvals">
+          <dt>기온</dt><dd>16.7 – 27.2℃</dd>
+          <dt>비</dt><dd>0.0mm</dd>
+          <dt>아침 습도</dt><dd>97%</dd>
+          <dt>해 뜸 · 짐</dt><dd>06:07 · 18:38</dd>
+        </dl>
+      </div>
+
+      <div class="dcol next">
+        <div class="dhd"><b>내일</b><span>9월 14일</span></div>
+        <svg viewBox="0 0 74 74" width="74" height="74" role="img" aria-label="내일 바람은 서남서에서 초속 2.1미터">
+          <circle cx="37" cy="37" r="29" fill="none" stroke="#e7e5dd" stroke-width="1.2"/>
+          <text x="37" y="10" text-anchor="middle" font-size="8.5" fill="#7c7e74" font-family="ui-monospace,monospace">북</text>
+          <text x="69" y="40" text-anchor="middle" font-size="8.5" fill="#7c7e74" font-family="ui-monospace,monospace">동</text>
+          <text x="37" y="71" text-anchor="middle" font-size="8.5" fill="#7c7e74" font-family="ui-monospace,monospace">남</text>
+          <text x="6" y="40" text-anchor="middle" font-size="8.5" fill="#7c7e74" font-family="ui-monospace,monospace">서</text>
+          <g transform="rotate(247.5 37 37)">
+            <line x1="37" y1="12" x2="37" y2="33" stroke="#5d8236" stroke-width="2.2" stroke-linecap="round"/>
+            <path d="M33 29 L37 36 L41 29 Z" fill="#5d8236"/>
+          </g>
+          <circle cx="37" cy="37" r="2.6" fill="#5d8236"/>
+        </svg>
+        <p class="dwind"><b>서남서풍 2.1</b>m/s</p>
+        <dl class="dvals">
+          <dt>기온</dt><dd>17.9 – 26.4℃</dd>
+          <dt>비</dt><dd>0.0mm</dd>
+          <dt>아침 습도</dt><dd>95%</dd>
+          <dt>해 뜸 · 짐</dt><dd>06:08 · 18:36</dd>
+        </dl>
+      </div>
+    </div>
+
+    <p class="dsum">내일도 비 소식이 없습니다. <b>이레째 마른 날이 이어집니다.</b> 바람은 오늘보다 조금 세지지만 아침에는 잔잔합니다.</p>
+
+    <div class="drone">
+      <div class="hd">
+        <b>드론으로 약 칠 만한 때</b>
+        <span>바람 3m/s 이하 · 습도 60% 이상</span>
+      </div>
+
+      <div class="dday">
+        <span class="lb">오늘</span>
+        <div class="dbar"><u style="left:25.5%"></u><u style="left:77.6%"></u><i style="left:29.2%;width:8.3%"></i></div>
+      </div>
+      <div class="dday">
+        <span class="lb">내일</span>
+        <div class="dbar"><u style="left:25.6%"></u><u style="left:77.5%"></u><i style="left:29.2%;width:8.3%"></i><i style="left:75%;width:4.2%"></i></div>
+      </div>
+      <div class="dday">
+        <span class="lb">모레</span>
+        <div class="dbar"><u style="left:25.6%"></u><u style="left:77.4%"></u><i style="left:29.2%;width:8.3%"></i><i style="left:70.8%;width:8.3%"></i></div>
+      </div>
+      <div class="dticks"><span>0시</span><span>6시</span><span>12시</span><span>18시</span><span>24시</span></div>
+
+      <p class="dwhy">오늘은 <b>아침 7시부터 8시까지</b>가 좋습니다. 이슬이 남아 있고 바람이 초속 1.5미터 아래예요. 낮 3시엔 서풍이 3.9미터까지 세져서 약이 날립니다.</p>
+      <p class="dwhy no">저녁은 어렵습니다. 습도가 60% 아래로 떨어져 이슬이 맺히지 않습니다.</p>
+    </div>
+  </div>
+
+  <!-- 작물일지 -->
+  <div class="card jrnl">
+    <h3 style="margin:0 0 14px;font-size:15.5px;font-weight:700">오늘 밭일지</h3>
+
+    <label for="jd">날짜</label>
+    <input type="date" id="jd" value="2026-09-13">
+
+    <label>오늘 하신 일 (누르면 표시됩니다)</label>
+    <div class="chks" id="chks">
+      <label class="chk"><input type="checkbox" value="관수"><span>물 줌</span></label>
+      <label class="chk"><input type="checkbox" value="시비"><span>거름 줌</span></label>
+      <label class="chk"><input type="checkbox" value="방제"><span>약 침</span></label>
+      <label class="chk"><input type="checkbox" value="제초"><span>김맴</span></label>
+      <label class="chk"><input type="checkbox" value="병해충"><span>벌레 봄</span></label>
+      <label class="chk"><input type="checkbox" value="잎이상"><span>잎이 이상함</span></label>
+      <label class="chk"><input type="checkbox" value="이상없음"><span>별일 없음</span></label>
+    </div>
+
+    <label for="jt">오늘 밭 이야기</label>
+    <textarea id="jt" placeholder="예) 아침에 물을 줬다. 겉잎이 조금 처져 보인다. 벌레 먹은 자국이 두어 군데 있었다."></textarea>
+
+    <div class="photo">사진 넣기 (2차 개발)</div>
+
+    <button class="save" id="save">일지 남기기</button>
+    <div class="saved" id="saved"></div>
+
+    <div class="past">
+      <h4>지난 일지</h4>
+      <div class="pitem"><span class="d">09-09</span><span class="ptag">제초</span>고랑에 풀이 많아 뽑아냈다. 흙이 꽤 말라 있었다.</div>
+      <div class="pitem"><span class="d">09-03</span><span class="ptag">시비</span>웃거름 1차. 비 온 다음이라 주기 좋았다.</div>
+      <div class="pitem"><span class="d">08-25</span><span class="ptag">파종</span>가을배추 씨를 뿌렸다.</div>
+    </div>
+  </div>
+
+</div></div>
+
+<!-- ───────── 오른쪽: 데이터 작업대 ───────── -->
+<div class="bench"><div class="bench-in">
+  <h2>데이터 추적</h2>
+  <p class="lead">왼쪽 문장 하나하나가 어디서 왔는지, 어떤 코드를 거쳤는지 그대로 적습니다. 초록 점은 받아온 값, 파란 점은 우리가 계산한 값, 주황 점은 저장하는 값입니다.</p>
+
+  <ul class="trace" id="trace"></ul>
+
+  <div class="ledger">
+    <h3>이 화면이 쓴 것</h3>
+    <dl>
+      <dt>기상청 API허브</dt><dd>상주(137) 일별 기온·강수 166일치 실측</dd>
+      <dt>Open-Meteo</dt><dd>밭 좌표 기준 3일 예보 · 풍향·풍속 · 일출입 · 해발 74m</dd>
+      <dt>농촌진흥청</dt><dd>배추·단감 농작업 일정 — 적온, 작형, 재해 대책</dd>
+      <dt>Sentinel-2</dt><dd>NDVI·NDWI·NDMI (2차 연동 예정)</dd>
+      <dt>Claude</dt><dd>계산 결과를 문장으로 옮기는 일만 담당</dd>
+    </dl>
+  </div>
+</div></div>
+
+</div>
+
+<script>
+/* ── 실측 데이터 (기상청 API허브 상주 137번, 2026-04-01~09-13) ── */
+const LAST14 = [
+  ["08-31",23.0,26.9,53.5],["09-01",22.7,32.2,0],["09-02",23.1,29.2,0],
+  ["09-03",22.2,28.9,0],["09-04",19.0,28.9,0],["09-05",16.2,28.6,0],
+  ["09-06",17.3,29.1,0.4],["09-07",15.1,28.7,0],["09-08",14.8,28.2,0],
+  ["09-09",14.8,25.5,0],["09-10",12.1,23.2,0],["09-11",14.0,27.1,0],
+  ["09-12",15.1,28.1,0],["09-13",15.0,28.8,0]
+];
+const HOT35 = ["07-26","08-01","08-02","08-03","08-04","08-06","08-07","08-08"];
+
+const trace = document.getElementById('trace');
+const tally = document.getElementById('tally');
+let cnt = {real:0, calc:0, save:0};
+
+function esc(s){return String(s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]))}
+
+function step(o, delay){
+  const li=document.createElement('li');
+  li.className='step '+o.kind;
+  li.style.animationDelay=(delay||0)+'ms';
+  li.innerHTML='<div class="sh"><span class="t">'+esc(o.title)+'</span>'
+    +(o.src?'<span class="src '+o.cls+'">'+esc(o.src)+'</span>':'')
+    +(o.tag?'<span class="tg">'+esc(o.tag)+'</span>':'')+'</div>'
+    +o.blocks.map(b=>'<pre class="io">'+b+'</pre>').join('')
+    +(o.why?'<p class="why">'+esc(o.why)+'</p>':'');
+  trace.appendChild(li);
+  cnt[o.kind]++;
+  tally.textContent='받아온 값 '+cnt.real+' · 계산 '+cnt.calc+' · 저장 '+cnt.save;
+}
+
+/* ── 초기 추적 ── */
+let t=0; const gap=120;
+
+step({kind:'real', title:'① 밭 위치 확인', src:'Open-Meteo', cls:'om', tag:'키 불필요',
+blocks:[
+'<span class="k">GET</span> api.open-meteo.com/v1/forecast\n'+
+'  <span class="k">latitude </span><span class="v">36.4084</span>   <span class="k">longitude</span> <span class="v">128.1574</span>',
+'<span class="k">→ elevation</span> <span class="g">약 50m</span>   <span class="k">timezone</span> <span class="v">Asia/Seoul</span>\n'+
+'<span class="k">→ 가장 가까운 관측소</span> <span class="g">상주 (STN 137)</span>'
+],
+why:'좌표만 넣으면 해발고도와 시간대가 따라옵니다. 관측소 번호는 이후 기상청 호출의 열쇠가 됩니다.'}, t); t+=gap;
+
+step({kind:'real', title:'② 지난 기온·강수 받아오기', src:'기상청 API허브', cls:'kma', tag:'실측 166일',
+blocks:[
+'<span class="c"># 지상관측 일통계</span>\n'+
+'<span class="k">GET</span> apihub.kma.go.kr/api/typ01/url/arcltr_sfc_day.php\n'+
+'  <span class="k">stn=</span><span class="v">137</span>  <span class="k">tm1=</span><span class="v">20260401</span>  <span class="k">tm2=</span><span class="v">20260913</span>  <span class="k">disp=</span><span class="v">2</span>',
+'<span class="k">TM         TA_MAX  TA_MIN  RN_DAY</span>\n'+
+'20260907    <span class="g">28.7</span>    <span class="b">15.1</span>     <span class="v">0.0</span>\n'+
+'20260908    <span class="g">28.2</span>    <span class="b">14.8</span>     <span class="v">0.0</span>\n'+
+'20260909    <span class="g">25.5</span>    <span class="b">14.8</span>     <span class="v">0.0</span>\n'+
+'20260910    <span class="g">23.2</span>    <span class="b">12.1</span>     <span class="v">0.0</span>\n'+
+'20260911    <span class="g">27.1</span>    <span class="b">14.0</span>     <span class="v">0.0</span>\n'+
+'20260912    <span class="g">28.1</span>    <span class="b">15.1</span>     <span class="v">0.0</span>\n'+
+'20260913    <span class="g">28.8</span>    <span class="b">15.0</span>     <span class="v">0.0</span>\n'+
+'<span class="c">                       7일 강수 합계 0.0mm</span>'
+],
+why:'예보가 아니라 실제로 관측된 값입니다. 씨 뿌린 날부터 오늘까지를 거슬러 계산할 수 있어 파종일이 과거인 사용자도 바로 쓸 수 있습니다.'}, t); t+=gap;
+
+step({kind:'real', title:'③ 배추 기준 가져오기', src:'농촌진흥청', cls:'rda', tag:'배추 농작업일정',
+blocks:[
+'생육온도\n'+
+'  발아적온   <span class="v">20~25℃</span>\n'+
+'  생육적온   <span class="v">15~20℃</span>\n'+
+'  <span class="g">결구적온   15~16℃</span>   <span class="c">← 속이 차는 때</span>\n'+
+'  언피해     <span class="o">-3~-4℃</span>',
+'작형별 출하시기 (가을재배)\n'+
+'  씨뿌림     8월 상순~하순\n'+
+'  아주심기   8월 하순~9월 상순\n'+
+'  <span class="g">수확기     10월 중순~12월 상순</span>',
+'기상재해 대책 — 가을가뭄\n'+
+'  <span class="v">ㅇ 이동식 스프링클러 설치 물주기</span>\n'+
+'  <span class="v">ㅇ 짚 덮기</span>\n'+
+'  <span class="v">ㅇ 모기르기 아주심기 재배, 살충제 살포</span>'
+],
+why:'왼쪽 조언 문장은 우리가 지어낸 게 아니라 이 문서에 적힌 대책을 옮긴 것입니다. 근거를 그대로 댈 수 있습니다.'}, t); t+=gap;
+
+step({kind:'calc', title:'④ 적산온도 쌓기', src:'우리 코드', cls:'ai', tag:'20일치',
+blocks:[
+'<span class="c"># 하루치 = 평균기온 - 기준온도, 음수는 0</span>\n'+
+'<span class="k">def</span> <span class="v">daily_gdd</span>(tmax, tmin, base):\n'+
+'    <span class="k">return</span> max(0, (tmax + tmin) / 2 - base)\n\n'+
+'<span class="k">def</span> <span class="v">accumulate</span>(rows, sow_date, base):\n'+
+'    acc = 0\n'+
+'    <span class="k">for</span> r <span class="k">in</span> rows:\n'+
+'        <span class="k">if</span> r[<span class="v">"date"</span>] &lt; sow_date: <span class="k">continue</span>\n'+
+'        acc += daily_gdd(r[<span class="v">"tmax"</span>], r[<span class="v">"tmin"</span>], base)\n'+
+'    <span class="k">return</span> acc',
+'<span class="k">base =</span> <span class="v">5.0</span>   <span class="k">sow =</span> <span class="v">2026-08-25</span>\n\n'+
+'09-11  (27.1+14.0)/2 - 5 = <span class="g">15.6</span>\n'+
+'09-12  (28.1+15.1)/2 - 5 = <span class="g">16.6</span>\n'+
+'09-13  (28.8+15.0)/2 - 5 = <span class="g">16.9</span>\n\n'+
+'<span class="k">누적</span>  <span class="g">384.2 GDD</span> / 797   <span class="k">진행</span> <span class="g">48.2%</span>\n'+
+'<span class="k">최근 7일 평균</span> 15.8 GDD/일\n'+
+'<span class="k">결구(505)까지</span> <span class="o">약 8일</span>'
+],
+why:'며칠 남았는지는 이 계산이 정합니다. 뒤에 나오는 Claude는 이 숫자를 받아 문장으로 바꾸기만 합니다.'}, t); t+=gap;
+
+step({kind:'calc', title:'⑤ 재해 판정', src:'우리 코드', cls:'ai', tag:'규칙 기반',
+blocks:[
+'<span class="c"># 농진청 대책표를 그대로 규칙으로 옮김</span>\n'+
+'RULES = [\n'+
+'  {<span class="v">"name"</span>: <span class="v">"가을가뭄"</span>, <span class="v">"when"</span>: <span class="k">lambda</span> w: w.rain7 &lt; <span class="o">5</span>,\n'+
+'   <span class="v">"todo"</span>: [<span class="v">"스프링클러 물주기"</span>, <span class="v">"짚 덮기"</span>]},\n'+
+'  {<span class="v">"name"</span>: <span class="v">"결구기 고온"</span>, <span class="v">"when"</span>: <span class="k">lambda</span> w: w.tmax &gt; <span class="o">25</span> <span class="k">and</span> stage == <span class="v">"결구"</span>},\n'+
+'  {<span class="v">"name"</span>: <span class="v">"한파"</span>, <span class="v">"when"</span>: <span class="k">lambda</span> w: w.tmin &lt;= <span class="o">-3</span>},\n'+
+']',
+'<span class="k">rain7 =</span> <span class="o">0.0 mm</span>  →  <span class="o">가을가뭄 발동</span>\n'+
+'<span class="k">tmax  =</span> 28.8℃   →  결구적온 15~16℃보다 높음\n'+
+'<span class="k">tmin  =</span> 15.0℃   →  한파 아님'
+],
+why:'임계값을 우리가 정하지 않았습니다. 농진청 문서의 "가을가뭄", "언피해 -3~-4℃"를 숫자로 옮긴 것입니다.'}, t); t+=gap;
+
+step({kind:'real', title:'⑥ 오늘 바람과 해 시각', src:'Open-Meteo', cls:'om', tag:'키 불필요 · 3일치',
+blocks:[
+'<span class="k">GET</span> api.open-meteo.com/v1/forecast\n'+
+'  <span class="k">latitude=</span><span class="v">36.4084</span>  <span class="k">longitude=</span><span class="v">128.1574</span>\n'+
+'  <span class="k">daily=</span><span class="v">sunrise,sunset,wind_speed_10m_max,...</span>\n'+
+'  <span class="k">hourly=</span><span class="v">wind_speed_10m,wind_direction_10m,</span>\n'+
+'         <span class="v">relative_humidity_2m,precipitation_probability</span>\n'+
+'  <span class="k">wind_speed_unit=</span><span class="o">ms</span>   <span class="c"># 기본은 km/h라 꼭 바꿔야 함</span>',
+'<span class="k">해 뜸</span> <span class="g">06:07</span>    <span class="k">해 짐</span> <span class="g">18:38</span>   <span class="k">해발</span> <span class="v">74m</span>\n\n'+
+'<span class="k">시각    풍향      풍속    기온   습도</span>\n'+
+'06:00  서북서  <span class="g">1.3</span>   17℃   <span class="b">97%</span>\n'+
+'09:00  북서    <span class="g">1.1</span>   20℃   <span class="b">89%</span>\n'+
+'15:00  서      <span class="o">3.9</span>   27℃   <span class="b">62%</span>\n'+
+'18:00  서북서  <span class="g">1.8</span>   24℃   <span class="b">73%</span>'
+],
+why:'관측소가 아니라 밭 좌표로 조회합니다. 나농민님 세 밭을 각각 불러보니 해 뜨는 시각은 06:07로 같았지만 기온이 갈렸습니다. 해발 74m 배추밭 16.7~27.2℃, 158m 과수원 16.1~26.6℃. 하루 0.6℃ 차이가 한 철이면 적산온도 60도로 벌어집니다.'}, t); t+=gap;
+
+step({kind:'calc', title:'⑦ 드론 방제 적기 판정', src:'우리 코드', cls:'ai', tag:'시간마다 검사',
+blocks:[
+'<span class="c"># 기준값. 농민 확인 필요한 잠정치입니다</span>\n'+
+'RULES = {\n'+
+'  <span class="v">"wind_max"</span>: <span class="o">3.0</span>,   <span class="c"># m/s. 세면 약이 날림</span>\n'+
+'  <span class="v">"gust_max"</span>: <span class="o">5.0</span>,   <span class="c"># 순간 돌풍</span>\n'+
+'  <span class="v">"humid_min"</span>: <span class="o">60</span>,   <span class="c"># 이슬이 남아 있어야 스밈</span>\n'+
+'  <span class="v">"temp_max"</span>: <span class="o">28.0</span>,  <span class="c"># 더우면 증발·약해</span>\n'+
+'  <span class="v">"rain_prob_max"</span>: <span class="o">30</span>,\n'+
+'  <span class="v">"after_sunrise_max"</span>: <span class="o">150</span>,  <span class="c"># 해 뜬 뒤 2시간 반까지</span>\n'+
+'}',
+'<span class="k">for</span> h <span class="k">in</span> hours:\n'+
+'    blocks = []\n'+
+'    <span class="k">if</span> h.wind &gt; RULES[<span class="v">"wind_max"</span>]:   blocks.append(<span class="v">"바람"</span>)\n'+
+'    <span class="k">if</span> h.humid &lt; RULES[<span class="v">"humid_min"</span>]:  blocks.append(<span class="v">"건조"</span>)\n'+
+'    <span class="k">if</span> <span class="k">not</span> (아침창 <span class="k">or</span> 저녁창):       blocks.append(<span class="v">"시간대"</span>)\n'+
+'    h.ok = <span class="k">len</span>(blocks) == 0',
+'<span class="k">06:00</span>  <span class="o">해 뜨기 전</span>\n'+
+'<span class="k">07:00</span>  바람 1.5  습도 82%   <span class="g">가능</span>\n'+
+'<span class="k">08:00</span>  바람 1.9  습도 70%   <span class="g">가능</span>\n'+
+'<span class="k">09:00</span>  <span class="o">해 뜬 지 2시간 반 넘음</span>\n'+
+'<span class="k">15:00</span>  <span class="o">바람 3.9 &gt; 3.0</span>\n'+
+'<span class="k">17~18</span>  <span class="o">습도 60% 아래</span>\n\n'+
+'<span class="k">→ 오늘 가능 구간</span>  <span class="g">07:00 ~ 08:00</span>'
+],
+why:'지인분이 말씀하신 "해 뜰 무렵 이슬 남아 있을 때"가 습도와 일출 시각으로 잡힙니다. 기준값은 아직 제가 정한 잠정치라 실제 방제하시는 분께 확인해야 합니다.'}, t); t+=gap;
+
+step({kind:'real', title:'⑧ 단감 적지 확인', src:'농촌진흥청', cls:'rda', tag:'단감 농작업일정',
+blocks:[
+'기상환경 (재배 가능 조건)\n'+
+'  연평균기온       <span class="v">13℃ 이상</span>\n'+
+'  휴면기 평균      <span class="v">-1℃ 이상</span>  (12~2월)\n'+
+'  휴면기 최저      <span class="v">-4℃ 이상</span>\n'+
+'  성숙기 평균      <span class="v">10월 15℃, 11월 9℃ 이상</span>\n'+
+'  일조시간         <span class="v">2,340시간 이상</span>',
+'상주 실제값 대조\n'+
+'  연평균기온  <span class="o">13.1</span> ≥ 13.0   <span class="o">여유 0.1℃</span>\n'+
+'  일조시간   <span class="o">2,401</span> ≥ 2,340  <span class="o">여유 61h</span>\n\n'+
+'<span class="c">→ 두 조건 모두 간신히 통과. 북방 한계선.</span>'
+],
+why:'상주가 곶감 명산지인 이유이자 위험한 이유입니다. 조건을 겨우 넘기기 때문에 기온이 조금만 낮아져도 재배가 흔들립니다. 좌표만 있으면 어느 지역이든 이 판정을 할 수 있습니다.'}, t); t+=gap;
+
+step({kind:'calc', title:'⑨ 여름 고온 되짚기', src:'우리 코드', cls:'ai', tag:'일소재해',
+blocks:[
+'<span class="k">hot = [</span>r <span class="k">for</span> r <span class="k">in</span> rows <span class="k">if</span> r.tmax &gt;= <span class="o">35</span><span class="k">]</span>\n\n'+
+'<span class="o">8일</span>  07-26, 08-01, 08-02, 08-03,\n'+
+'      08-04, 08-06, 08-07, 08-08'
+],
+why:'감·포도는 햇볕에 열매가 데는 일소재해가 있습니다. 지나간 일이라 경보는 못 하지만 "확인해 보시라"는 안내는 할 수 있습니다.'}, t); t+=gap;
+
+step({kind:'calc', title:'⑩ 문장으로 옮기기', src:'Claude', cls:'ai', tag:'판단 아님',
+blocks:[
+'<span class="c"># 코드가 정한 값만 넘깁니다</span>\n'+
+'payload = {\n'+
+'  <span class="v">"작물"</span>: <span class="v">"가을배추"</span>,\n'+
+'  <span class="v">"파종후"</span>: <span class="o">20</span>, <span class="v">"누적GDD"</span>: <span class="o">384</span>, <span class="v">"목표"</span>: <span class="o">797</span>,\n'+
+'  <span class="v">"다음단계"</span>: <span class="v">"결구"</span>, <span class="v">"남은일수"</span>: <span class="o">8</span>,\n'+
+'  <span class="v">"강수7일"</span>: <span class="o">0.0</span>, <span class="v">"최고기온"</span>: <span class="o">28.8</span>,\n'+
+'  <span class="v">"발동재해"</span>: [<span class="v">"가을가뭄"</span>],\n'+
+'  <span class="v">"대책"</span>: [<span class="v">"스프링클러 물주기"</span>, <span class="v">"짚 덮기"</span>]\n'+
+'}',
+'<span class="c"># 시스템 프롬프트 핵심</span>\n'+
+'- 58세 농민이 읽는 글. 쉬운 말로.\n'+
+'- <span class="o">입력에 없는 숫자를 지어내지 말 것</span>\n'+
+'- 병해충 진단 금지. 관찰 안내까지만.\n'+
+'- 형식: {"요약", "할일":[], "주의":[]}'
+],
+why:'며칠 남았는지, 물이 부족한지는 ④⑤에서 이미 정해졌습니다. Claude는 그 결과를 사람 말로 바꾸는 일만 합니다. 판단까지 맡기면 없는 숫자를 지어냅니다.'}, t);
+
+/* ── 탭 ── */
+document.querySelectorAll('.tab').forEach(b=>{
+  b.addEventListener('click',()=>{
+    document.querySelectorAll('.tab').forEach(x=>x.setAttribute('aria-selected','false'));
+    b.setAttribute('aria-selected','true');
+    document.querySelectorAll('.pane').forEach(p=>p.classList.remove('on'));
+    document.getElementById(b.dataset.p).classList.add('on');
+  });
+});
+
+/* ── 일지 저장 ── */
+document.getElementById('save').addEventListener('click',()=>{
+  const date=document.getElementById('jd').value;
+  const txt=document.getElementById('jt').value.trim();
+  const tags=[...document.querySelectorAll('#chks input:checked')].map(x=>x.value);
+
+  if(!txt && !tags.length){
+    const s=document.getElementById('saved');
+    s.className='saved on'; s.textContent='체크를 하시거나 내용을 적어 주세요.';
+    return;
+  }
+
+  const s=document.getElementById('saved');
+  s.className='saved on';
+  s.textContent='일지를 남겼습니다. 오른쪽에 어떻게 저장됐는지 나옵니다.';
+
+  step({kind:'save', title:'⑪ 일지 저장', src:'우리 DB', cls:'db', tag:'grow_logs',
+  blocks:[
+  '<span class="k">INSERT INTO</span> grow_logs\n'+
+  '  (cultivation_id, log_date, content, tags, created_at)\n'+
+  '<span class="k">VALUES</span>\n'+
+  '  (<span class="o">1</span>, <span class="v">\''+esc(date)+'\'</span>,\n'+
+  '   <span class="v">\''+esc(txt||'(내용 없음)')+'\'</span>,\n'+
+  '   <span class="v">\''+esc(JSON.stringify(tags))+'\'</span>, now())',
+  '<span class="c"># 같은 날 관측값을 함께 붙여 둡니다</span>\n'+
+  '<span class="k">INSERT INTO</span> log_snapshots\n'+
+  '  (log_id, tmax, tmin, rain7, gdd_total, stage)\n'+
+  '<span class="k">VALUES</span>\n'+
+  '  (last_id, <span class="o">28.8</span>, <span class="o">15.0</span>, <span class="o">0.0</span>, <span class="o">384.2</span>, <span class="v">\'생육기\'</span>)'
+  ],
+  why: tags.length
+    ? '체크하신 '+tags.join(', ')+' 이(가) 라벨로 남습니다. 사진과 함께 쌓이면 나중에 병해충 판별 모델의 학습 자료가 됩니다. 지금은 그냥 기록이지만, 기록이 쌓여야 학습이 가능해집니다.'
+    : '글만으로도 저장되지만, 체크 항목이 함께 있으면 나중에 분석할 때 훨씬 쓸모가 커집니다.'
+  }, 0);
+
+  step({kind:'save', title:'⑫ 내년에 다시 꺼내 쓰기', src:'우리 DB', cls:'db', tag:'2차 기능',
+  blocks:[
+  '<span class="c"># 작물을 마칠 때 수확량을 적으면</span>\n'+
+  '<span class="k">UPDATE</span> cultivations <span class="k">SET</span>\n'+
+  '  status=<span class="v">\'HARVESTED\'</span>, harvest_date=<span class="v">\'2026-10-20\'</span>,\n'+
+  '  harvest_amount=<span class="o">180</span>, harvest_unit=<span class="v">\'포기\'</span>\n'+
+  '<span class="k">WHERE</span> cultivation_id=<span class="o">1</span>',
+  '<span class="c"># 내년 9월, 같은 밭을 열면</span>\n'+
+  '<span class="v">"작년 이맘때 배추 180포기를 거두셨어요.</span>\n'+
+  '<span class="v"> 올해는 평년보다 따뜻해 닷새쯤 빠릅니다."</span>'
+  ],
+  why:'일지와 수확량이 쌓이면 그 자체가 다음 해의 기준이 됩니다. 남의 평균이 아니라 이 밭의 기록입니다.'
+  }, 140);
+});
+</script>
+</body>
+</html>
