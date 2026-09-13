@@ -29,6 +29,27 @@ const SITE_DESCRIPTION =
   "인공위성 관측과 기상 예보를 결합해 농작물 생육 상태와 자연재해 위험을 매일 알려드립니다.";
 
 /**
+ * 링크 미리보기 이미지(카카오톡·슬랙·X 등).
+ *
+ * `public/og.png` 는 `docs/thumbnail.html` 을 헤드리스 크롬으로 뽑은 결과다.
+ * 디자인을 고치려면 그 HTML 을 고쳐서 다시 뽑는다 — 이 PNG 를 직접 손대지 말 것.
+ *
+ * 경로를 상대("/og.png")로 두는 이유는 metadataBase 가 환경별 절대 주소를
+ * 붙여 주기 때문이다. 여기에 절대 주소를 박으면 로컬·프리뷰에서도 운영 이미지를
+ * 가리키게 된다.
+ *
+ * width/height 를 명시하는 건 장식이 아니다. 카카오톡·슬랙 크롤러는 이미지를
+ * 내려받기 전에 이 값으로 레이아웃을 잡는데, 없으면 미리보기가 작은 썸네일로
+ * 찌그러지거나 아예 안 뜬다.
+ */
+const OG_IMAGE = {
+  url: "/og.png",
+  width: 1280,
+  height: 640,
+  alt: SITE_TITLE,
+} as const;
+
+/**
  * 계측값·좌표·시각에 쓰는 고정폭 폰트. className 이 아니라 variable 로 받아서
  * globals.css 의 --font-mono 가 소비한다(= font-mono 유틸리티 한 곳으로 통일).
  */
@@ -61,11 +82,13 @@ export const metadata: Metadata = {
     siteName: "Safe Farm AI",
     title: SITE_TITLE,
     description: SITE_DESCRIPTION,
+    images: [OG_IMAGE],
   },
   twitter: {
     card: "summary_large_image",
     title: SITE_TITLE,
     description: SITE_DESCRIPTION,
+    images: [OG_IMAGE],
   },
   icons: { icon: "/icon.svg" },
 };

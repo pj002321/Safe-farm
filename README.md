@@ -1,8 +1,15 @@
 # Safe Farm AI
 
-농작물 상태와 날씨를 읽어 재배 적합도를 추천하는 서비스.
+![Safe Farm AI — 위성이 보는 땅, AI가 읽는 내일](./docs/thumbnail.png)
 
-**Next.js 16** (App Router) · **Supabase** (Postgres/Auth/Storage) · **LangGraph.js** · **Tailwind v4** · **Biome** · **Vitest**
+기후·위성 데이터로 농작물 위험을 감지하고 개선을 추천하는 LLM 서비스.
+**https://safe-farm-ai.web.app**
+
+**Next.js 16** (App Router) · **Firebase** (Auth/Firestore/Hosting) · **Cloud Run** · **LangGraph** (JS + Python) · **three.js** · **Tailwind v4** · **Biome** · **Vitest**
+
+> ⚠️ 아래 문서 대부분은 **Supabase 시절에 쓰인 것이라 현재 구조와 맞지 않습니다.**
+> (RLS · `app_metadata` · `NEXT_PUBLIC_SUPABASE_*` · `supabase/migrations` 등)
+> 최신 규칙은 [AGENTS.md](./AGENTS.md) 를 보세요. 이 README 는 갱신 예정입니다.
 
 ---
 
