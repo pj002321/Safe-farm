@@ -25,4 +25,8 @@ coverage
 *.log
 .DS_Store
 
+# Python AI 서비스. Next 컨테이너는 이걸 실행하지 않는다 — 별도 배포 대상이다.
+# 넣어봐야 이미지만 커지고, docs/ 의 시안 HTML 까지 따라 들어간다.
+ai-service/
+
 # NOTE: `.env` 는 일부러 남긴다 — 공개값(NEXT_PUBLIC_*)이고 빌드에 필요하다.
