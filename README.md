@@ -1,6 +1,6 @@
 # Safe Farm AI
 
-![Safe Farm AI — 위성이 보는 땅, AI가 읽는 내일](./docs/thumbnail.png)
+![Safe Farm — 위성이 보는 땅, AI가 읽는 내일](./docs/thumbnail.png)
 
 기후·위성 데이터로 농작물 위험을 감지하고 개선을 추천하는 LLM 서비스.
 **https://safe-farm-ai.web.app**
