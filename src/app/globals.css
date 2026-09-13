@@ -296,6 +296,11 @@
   --animate-drift: drift 9s ease-in-out infinite;
   --animate-sweep: sweep 3.6s linear infinite;
   --animate-marquee: marquee 38s linear infinite;
+  /* 일회성 등장. 위 네 개는 전부 무한 반복이라 "나타났다가 멈추는" 연출이 없었다.
+   * `both` 로 끝 상태를 물고 있어야 한다 — 안 그러면 애니메이션이 끝나는 순간
+   * opacity 가 초기값으로 돌아가 항목이 깜빡이며 사라진다.
+   * prefers-reduced-motion 은 아래 전역 블록이 0.01ms 로 눌러 즉시 완료시킨다. */
+  --animate-rise: rise 0.42s var(--ease-out-expo) both;
 }
 
 @keyframes pulse-ring {
@@ -326,6 +331,17 @@
   }
   to {
     transform: translateY(100%);
+  }
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
   }
 }
 

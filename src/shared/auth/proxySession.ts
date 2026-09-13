@@ -33,7 +33,14 @@ import { isInvalidSessionError, SESSION_COOKIE } from "./sessionCookie";
  *   2. `startsWith("/login")` 은 `"/loginhack"` 처럼 이름만 겹치는 남의 경로도
  *      통과시킨다. 하위 트리를 열 때는 경로 경계(`/`)까지 확인한다.
  */
-const PUBLIC_EXACT = new Set(["/"]);
+/**
+ * 정확히 일치할 때만 공개. 랜딩(`/`)과 리포트 데모(`/report`) 둘뿐이다.
+ *
+ * `/report` 는 가입 전 사용자에게 서비스가 무엇을 내놓는지 보여주는 화면이라
+ * 로그인 뒤로 숨기면 존재 이유가 사라진다. 고정 데모 데이터만 쓰고 사용자
+ * 데이터를 읽지 않으므로 공개해도 새는 것이 없다.
+ */
+const PUBLIC_EXACT = new Set(["/", "/report"]);
 
 /**
  * 이 경로 자신과 그 하위 트리가 공개. 경계는 `/` 로 끊어서 본다.
