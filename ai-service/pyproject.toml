@@ -29,6 +29,12 @@ dependencies = [
     "psycopg2-binary>=2.9",
     "python-dotenv>=1.2",
     "openai>=3.13",
+    # pgvector: Vector 컬럼 타입 + cosine_distance 연산자 (app/models/chunk.py)
+    "pgvector>=0.4",
+    # tiktoken: OpenAI 임베딩과 같은 기준으로 토큰을 센다. 다른 토크나이저로 세면
+    # 한도 계산이 어긋나 조각 뒤가 조용히 잘린다.
+    "tiktoken>=0.8",
+    "langchain-text-splitters>=0.3",
 ]
 
 [project.optional-dependencies]
@@ -58,6 +64,8 @@ asyncio_default_fixture_loop_scope = "function"
 target-version = "py310"
 line-length = 100
 src = ["."]
+# legacy/ 는 예전 프로젝트에서 가져온 코드다. 손대지 않으므로 검사도 하지 않는다
+extend-exclude = ["legacy"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
