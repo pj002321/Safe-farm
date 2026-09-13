@@ -1,0 +1,29 @@
+<!--
+  Safe Farm AI 파비콘 — Logo.tsx 와 같은 형태(세운 잎 + 납작한 위성 궤도)를 32x32 로 옮긴 것.
+
+  여기만 색을 하드코딩한다. 이 파일은 React·CSS 가 없는 정적 에셋이라
+  globals.css 의 토큰도 currentColor 도 닿지 않는다. 배경 없이 두면 어두운
+  브라우저 탭에서 마크가 사라지므로 둥근 사각 배경을 깔았다.
+  값은 globals.css 1층 원시 팔레트에서 그대로 가져왔다.
+  #0b0a12 = slate-950, #a79dff = orbit-300, #bff053 = ndvi-300.
+  globals.css 의 해당 값을 바꾸면 이 파일도 같이 고쳐야 한다.
+  (토큰 이름 앞의 하이픈 두 개는 일부러 뺐다. XML 주석은 연속 하이픈을 허용하지 않아
+   그대로 적으면 파일 전체가 파싱 에러로 죽는다.)
+
+  잎을 선이 아니라 면으로 칠한 이유는 16px 탭 아이콘에서 2px 외곽선이 뭉개지기 때문이다.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
+  <rect width="32" height="32" rx="7" fill="#0b0a12" />
+  <path d="M16 6a12 12 0 0 1 0 18.67A12 12 0 0 1 16 6Z" fill="#bff053" />
+  <ellipse
+    cx="16"
+    cy="17.33"
+    rx="13.33"
+    ry="5.33"
+    transform="rotate(-20 16 17.33)"
+    fill="none"
+    stroke="#a79dff"
+    stroke-width="2"
+  />
+  <circle cx="26.15" cy="17.64" r="2" fill="#a79dff" />
+</svg>
