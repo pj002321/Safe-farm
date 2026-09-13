@@ -1,11 +1,11 @@
 ```
-7행 : 기상청 API허브
-636행 : Open-Meteo
-1002행 : Copernicus Sentinel-2
+7행 : 기상청 API허브 // https://apihub.kma.go.kr/
+636행 : Open-Meteo // https://open-meteo.com/
+1002행 : Copernicus Sentinel-2 // https://browser.dataspace.copernicus.eu/?zoom=7&lat=37.95285&lng=126.73312&themeId=DEFAULT-THEME&visualizationUrl=U2FsdGVkX1%2F6nol0nWJ7UQub8E3W16Fm%2BtRWZB0AFaCo9QEY3Osw2pjwvvWHEtc3dVQ7Db5PK2fShpT39%2FmhiDg%2B8sLfbMPYYf2bTlcc0yvN1yj6rBsuxms%2FstED0meY&datasetId=S2_L2A_CDAS&demSource3D=%22MAPZEN%22&cloudCoverage=30&dateMode=SINGLE
 ```
 
 # DOMAIN_REF — 기상청 API허브
-
+https://apihub.kma.go.kr/
 > 세이프팜이 쓰는 기상 데이터 원천.
 > 다른 출처(Open-Meteo, Sentinel Hub)는 별도 문서.
 
