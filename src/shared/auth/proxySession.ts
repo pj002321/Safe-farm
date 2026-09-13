@@ -1,7 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { getAdminAuth } from "@/shared/firebase/admin";
 import { safeNextPath } from "./redirect";
-import { SESSION_COOKIE } from "./sessionCookie";
+import { isInvalidSessionError, SESSION_COOKIE } from "./sessionCookie";
 
 /**
  * ---------------------------------------------
@@ -78,11 +78,9 @@ async function readSessionRole(
     const decoded = await getAdminAuth().verifySessionCookie(cookie);
     return decoded.role === "admin" ? "admin" : "user";
   } catch (error) {
-    const code =
-      typeof error === "object" && error !== null && "code" in error
-        ? (error as { code: unknown }).code
-        : undefined;
-    if (typeof code === "string" && code.startsWith("auth/")) return null;
+    // 판정은 sessionCookie.ts 한 곳에만 둔다. 여기와 session.ts 가 서로 다르게
+    // 판단하면 proxy 는 통과시키고 화면은 튕겨서 리다이렉트 루프가 난다.
+    if (isInvalidSessionError(error)) return null;
     throw error;
   }
 }

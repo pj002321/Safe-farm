@@ -107,6 +107,10 @@
    * 명암비는 bg(#f8f8fb) 기준으로 전부 4.5:1 이상을 맞췄다.
    * 예외는 --fg-subtle(2.8:1) 하나뿐이고, 이건 placeholder·disabled 같은
    * 비필수 텍스트에만 쓴다. 본문에 쓰면 접근성 위반이다. */
+  /* 브라우저가 그리는 UI(스크롤바·폼 컨트롤·날짜 선택기)의 명암.
+   * 이게 없으면 기본값 다크에서 스크롤바만 하얗게 뜬다. */
+  color-scheme: light;
+
   --bg: var(--slate-50);
   --surface: var(--slate-0);
   --surface-2: var(--slate-100);
@@ -154,6 +158,7 @@
  * 아래 두 블록은 내용이 같아야 한다. 하나만 고치면 토글과 OS 설정이 어긋난다. */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
+    color-scheme: dark;
     --bg: var(--slate-950);
     --surface: var(--slate-900);
     --surface-2: var(--slate-800);
@@ -186,6 +191,7 @@
 }
 
 :root[data-theme="dark"] {
+  color-scheme: dark;
   --bg: var(--slate-950);
   --surface: var(--slate-900);
   --surface-2: var(--slate-800);

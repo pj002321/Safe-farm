@@ -1,7 +1,7 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { getAdminAuth } from "@/shared/firebase/admin";
-import { SESSION_COOKIE } from "./sessionCookie";
+import { isInvalidSessionError, SESSION_COOKIE } from "./sessionCookie";
 
 /**
  * ---------------------------------------------
@@ -41,23 +41,6 @@ export interface Viewer {
   email: string | null;
   role: Role;
   isAdmin: boolean;
-}
-
-/**
- * "이 실패는 그냥 로그인 안 한 것"인가?
- *
- * firebase-admin 은 토큰 문제를 `auth/...` 코드로 던진다(만료·폐기·서명 불일치·
- * 형식 오류). 그 외 — 서비스 계정 누락, 잘못된 PEM, 네트워크 단절 — 는 우리가
- * 고쳐야 할 결함이므로 삼키지 않고 위로 올린다.
- */
-function isInvalidSessionError(error: unknown): boolean {
-  return (
-    typeof error === "object" &&
-    error !== null &&
-    "code" in error &&
-    typeof (error as { code: unknown }).code === "string" &&
-    (error as { code: string }).code.startsWith("auth/")
-  );
 }
 
 /** 로그인하지 않았으면 null. 화면 분기용. */
