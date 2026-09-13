@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
+  DEFAULT_THEME,
   resolveTheme,
   THEME_INIT_SRC,
   THEME_STORAGE_KEY,
@@ -50,11 +51,22 @@ describe("public/theme-init.js 와의 계약", () => {
     expect(source).toContain(`"${THEME_STORAGE_KEY}"`);
   });
 
-  it("light/dark 만 속성으로 쓰고, 그 외에는 속성을 지운다", () => {
-    // "system" 이나 쓰레기 값일 때 속성을 남기면 globals.css 의
-    // prefers-color-scheme 블록이 죽어 OS 설정 변경이 반영되지 않는다.
-    expect(source).toContain("removeAttribute");
-    expect(source).toContain('setAttribute("data-theme"');
+  it("기본값이 DEFAULT_THEME 과 같다", () => {
+    // 스크립트는 `stored === "light" ? "light" : "dark"` 로 기본값을 정한다.
+    // 즉 명시적 "light" 만 라이트고 나머지는 전부 기본값이다.
+    // 이 테스트가 깨지면 theme.ts 와 스크립트의 기본값이 어긋난 것이다.
+    expect(DEFAULT_THEME).toBe("dark");
+    expect(source).toContain(`: "${DEFAULT_THEME}"`);
+    expect(source).toContain('stored === "light"');
+  });
+
+  it("속성을 항상 세팅하고 절대 지우지 않는다", () => {
+    // 속성을 지우면 globals.css 의 prefers-color-scheme 이 이겨서
+    // 라이트 OS 사용자가 기본 다크를 못 본다. 기본값 다크가 무력화되는 경로다.
+    // 포매터가 인자를 줄바꿈할 수 있으므로 정규식으로 본다 — 계약은
+    // "data-theme 을 세팅한다"이지 "한 줄로 쓴다"가 아니다.
+    expect(source).toMatch(/setAttribute\(\s*"data-theme"/);
+    expect(source).not.toContain("removeAttribute");
   });
 
   it("localStorage 접근을 try/catch 로 감싼다", () => {
