@@ -30,7 +30,9 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files — 의도적으로 추적한다 (이 레포는 퍼블릭이므로 실제 키를 넣지 말 것)
+# env files — .env는 의도적으로 추적한다 (이 레포는 퍼블릭이므로 실제 키를 넣지 말 것)
+# 실제 키는 .env.local에 — 이건 추적하지 않는다
+.env*.local
 
 # vercel
 .vercel

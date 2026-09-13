@@ -7,3 +7,5 @@ __pycache__/
 # 루트가 아니라 여기 두는 이유: 경로가 ai-service 기준으로 해석돼서
 # 대소문자(Windows 는 무시, mac/Linux 는 구분) 때문에 OS 마다 다르게 걸릴 일이 없다.
 sandbox/
+
+.env*.local
