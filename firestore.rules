@@ -1,0 +1,45 @@
+// ---------------------------------------------
+// [Feature]: Firestore 보안 규칙 — Postgres RLS 를 대체하는 유일한 방어선
+//
+// [Description]
+// - Firestore 에는 "서버에서만 부르는 쿼리" 같은 것이 없다. 클라이언트 SDK 가
+//   프로젝트 ID 와 API 키만 있으면 어떤 문서든 직접 요청할 수 있고, 그 요청을
+//   막는 곳은 여기뿐이다. RLS 와 같은 자리다.
+// - Admin SDK(서버)는 이 규칙을 **우회**한다. 그래서 프로필 생성처럼 위조되면
+//   안 되는 쓰기는 전부 서버로 밀어 두고, 여기서는 클라이언트에 닫는다.
+//
+// [배포]
+//   firebase deploy --only firestore:rules
+//   ⚠️ 배포하지 않으면 콘솔의 기본 규칙(개발 모드는 전체 공개)이 그대로 살아 있다.
+// ---------------------------------------------
+
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    match /profiles/{uid} {
+      // 남의 프로필은 못 본다. 이메일·이름·가입 경로가 전부 개인정보다.
+      allow read: if request.auth != null && request.auth.uid == uid;
+
+      // 생성·삭제는 Admin SDK 만. 클라이언트에 열어 주면 남의 uid 로 문서를
+      // 만들거나, 동의 기록이 남은 문서를 지워 증거를 없앨 수 있다.
+      allow create, delete: if false;
+
+      // 본인 문서라도 **고쳐도 되는 필드만** 바꿀 수 있다. 이 조건이 없으면
+      // 사용자가 자기 termsAgreedAt · signupProvider · createdAt 을 위조해
+      // "동의했다"는 기록을 스스로 만들어 낸다. (SQL 판에서 GRANT 로 막던 것.)
+      allow update: if request.auth != null
+        && request.auth.uid == uid
+        && request.resource.data.diff(resource.data).affectedKeys()
+             .hasOnly(['fullName', 'avatarUrl', 'marketingOptIn']);
+    }
+
+    // 기본 거부. **이 줄을 지우지 말 것** — 빠뜨리면 나중에 컬렉션을 추가할 때
+    // 규칙 없이 만들어져 그대로 공개된다. Postgres 에서 RLS 를 안 켜면
+    // 프로덕션에서 테이블이 통째로 새는 것과 똑같은 함정이다.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

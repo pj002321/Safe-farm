@@ -1,0 +1,45 @@
+# ─────────────────────────────────────────────────────────────
+# 빌드 컨텍스트에서 뺄 것.
+#
+# 가장 중요한 줄은 `secrets/` 다. 컨테이너 이미지는 레이어 단위로 저장되고
+# Artifact Registry 를 읽을 수 있는 사람은 누구나 그 레이어를 꺼내 볼 수 있다.
+# 서비스 계정 키가 한 번 들어가면 이후 레이어에서 지워도 앞 레이어에 남는다.
+#
+# Cloud Run 에서는 키 파일이 **필요 없다.** 런타임 서비스 계정의 ADC
+# (Application Default Credentials)를 admin.ts 가 자동으로 집어 쓴다.
+# ─────────────────────────────────────────────────────────────
+secrets/
+*serviceAccount*.json
+*-firebase-adminsdk-*.json
+.env.local
+.env.*.local
+
+# 이미지 안에서 다시 만들 것들
+node_modules
+.next
+out
+
+# 빌드와 무관
+.git
+.gitignore
+.github
+.claude
+.vscode
+.idea
+*.md
+coverage
+Dockerfile
+.dockerignore
+firebase-debug.log*
+firestore-debug.log*
+.firebase
+npm-debug.log*
+.DS_Store
+
+# Python AI 서비스. Next 컨테이너는 이걸 실행하지 않는다 — 별도 배포 대상이다.
+# 넣어봐야 이미지만 커지고, docs/ 의 시안 HTML 까지 따라 들어간다.
+ai-service/
+
+# NOTE: `.env` 는 **일부러 남긴다.** 공개값(NEXT_PUBLIC_*)뿐이고,
+# 빌드 때 클라이언트 번들에 인라인되어야 하며 런타임에도 읽힌다.
+# 비밀값은 이 파일에 없다 — .env 첫 줄 주석 참고.

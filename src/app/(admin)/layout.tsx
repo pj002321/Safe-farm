@@ -23,7 +23,7 @@ export default async function AdminLayout({ children }: LayoutProps<"/">) {
             Safe Farm AI · 관리자
           </Link>
           <span className="flex-1" />
-          <Link href="/" className="text-fg-muted text-sm underline">
+          <Link href="/dashboard" className="text-fg-muted text-sm underline">
             사용자 화면으로
           </Link>
           <span className="text-fg-muted text-sm">{viewer.email}</span>
