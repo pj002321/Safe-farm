@@ -80,3 +80,53 @@ export function sessionCookieOptions(
     maxAge: SESSION_MAX_AGE_SECONDS,
   };
 }
+
+/**
+ * 설정·인프라 결함을 뜻하는 `auth/*` 코드.
+ *
+ * firebase-admin 은 **토큰 문제도 설정 문제도 똑같이 `auth/` 접두사로 던진다.**
+ * (`node_modules/firebase-admin/lib/auth/error.js` 의 AuthErrorCode 확인)
+ * 그래서 "`auth/` 로 시작하면 로그인 안 한 것"이라는 판정은 위험하다 —
+ * 권한 오설정이 "비로그인"으로 둔갑한다.
+ *
+ * 특히 이 프로젝트는 `verifySessionCookie(cookie, true)` 로 checkRevoked 를
+ * 켜 두었는데, 이건 순수 로컬 검증이 아니라 매 요청 `getUser()` 를 호출한다.
+ * 배포 환경의 서비스 계정에 `firebaseauth.users.get` 권한이 없으면 403 이
+ * `auth/insufficient-permission` 으로 매핑되고(error.js:603 PERMISSION_DENIED →
+ * INSUFFICIENT_PERMISSION), 접두사만 보는 판정은 이걸 삼켜서 **전 사용자가
+ * 로그에 아무 흔적도 없이 `/login` 을 무한 반복하게 만든다.**
+ * 증상을 숨기는 예외처리라 AGENTS.md 가 금지하는 종류다.
+ */
+const SESSION_CONFIG_ERROR_CODES: ReadonlySet<string> = new Set([
+  "auth/configuration-not-found",
+  "auth/insufficient-permission",
+  "auth/internal-error",
+  "auth/invalid-credential",
+  "auth/project-not-found",
+  "auth/quota-exceeded",
+]);
+
+/**
+ * "이 실패는 그냥 로그인 안 한 것"인가?
+ *
+ * `true` 면 null 로 처리해 로그인 화면으로 보내고, `false` 면 **던져서** 500 을
+ * 낸다. 고장을 조용히 로그인 화면으로 바꾸지 않는 것이 요점이다.
+ *
+ * 삼키는 쪽: 만료·폐기·형식 오류·삭제된 사용자(`auth/session-cookie-expired`,
+ * `auth/id-token-revoked`, `auth/user-not-found` 등) — 전부 사용자가 다시
+ * 로그인하면 풀리는 문제다.
+ *
+ * 던지는 쪽: 위 SESSION_CONFIG_ERROR_CODES 와 `auth/` 가 아닌 모든 것
+ * (서비스 계정 누락, 잘못된 PEM, 네트워크 단절).
+ *
+ * `session.ts` 와 `proxySession.ts` 가 **같은 함수를 쓴다.** 판정이 두 벌로
+ * 갈라지면 화면과 proxy 가 서로 다른 판단을 해서 리다이렉트 루프가 난다.
+ */
+export function isInvalidSessionError(error: unknown): boolean {
+  if (typeof error !== "object" || error === null || !("code" in error)) {
+    return false;
+  }
+  const code = (error as { code: unknown }).code;
+  if (typeof code !== "string") return false;
+  return code.startsWith("auth/") && !SESSION_CONFIG_ERROR_CODES.has(code);
+}
