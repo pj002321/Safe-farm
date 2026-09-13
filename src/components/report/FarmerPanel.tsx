@@ -45,7 +45,7 @@ export function FarmerPanel({ open }: FarmerPanelProps) {
       {open.has("hazard") &&
         hazards.map((hazard) => (
           <Section key={hazard.id}>
-            <div className="flex gap-3 rounded-xl border border-grade-caution/30 bg-grade-caution/10 px-4 py-3.5">
+            <div className="flex gap-3 rounded-xl border border-caution/30 bg-caution/10 px-4 py-3.5">
               <span aria-hidden="true" className="text-lg leading-tight">
                 ☀
               </span>
@@ -92,7 +92,7 @@ export function FarmerPanel({ open }: FarmerPanelProps) {
             </div>
 
             {open.has("gauge") && (
-              <div className="mt-5 border-border-c border-t pt-5">
+              <div className="mt-5 border-border border-t pt-5">
                 <GrowthGauge
                   dayLabelKo={`씨뿌린 지 ${CABBAGE.daysSinceSowing}일째`}
                   footEndKo={
@@ -111,14 +111,14 @@ export function FarmerPanel({ open }: FarmerPanelProps) {
             )}
 
             {open.has("advice") && (
-              <div className="mt-5 flex flex-col gap-2.5 border-border-c border-t pt-5">
+              <div className="mt-5 flex flex-col gap-2.5 border-border border-t pt-5">
                 {advice.map((line, index) => (
                   <p
                     className={`text-[0.9rem] leading-relaxed ${
                       line.tone === "todo"
                         ? "border-telemetry border-l-2 pl-3 text-fg"
                         : line.tone === "warn"
-                          ? "border-grade-caution border-l-2 pl-3 text-fg-muted"
+                          ? "border-caution border-l-2 pl-3 text-fg-muted"
                           : "text-fg"
                     }`}
                     key={line.text}
@@ -155,7 +155,7 @@ export function FarmerPanel({ open }: FarmerPanelProps) {
             </dl>
 
             {open.has("drone") && (
-              <div className="mt-5 border-border-c border-t pt-5">
+              <div className="mt-5 border-border border-t pt-5">
                 <SprayWindows
                   hours={spray.hours}
                   sunriseKo={weather.sunriseKo}
