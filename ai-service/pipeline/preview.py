@@ -8,9 +8,14 @@ from datetime import date, timedelta
 from app.core.config import KMA_API_KEY
 from pipeline.kma_client import (
     fetch_daily_lst_min,
+    fetch_grid_xy,
+    fetch_normals,
+    fetch_solar_term_crop,
     fetch_warnings,
     fetch_weather_daily,
     normalize_alerts,
+    normalize_disaster_rule,
+    normalize_normals,
     normalize_weather_daily,
 )
 
@@ -51,6 +56,23 @@ def main():
     print(f"{len(alerts)}건")
     for a in alerts[:5]:
         print(a)
+
+    print()
+    print(f"=== 격자변환 : ({LAT}, {LON}) → 기상청 예보 격자 ===")
+    print(fetch_grid_xy(KMA_API_KEY, LAT, LON))
+
+    print()
+    print(f"=== normals : 상주(stn={STN}) 9월 1~3일 평년값(1991~2020) ===")
+    normals = normalize_normals(fetch_normals(KMA_API_KEY, STN, mm1=9, dd1=1, mm2=9, dd2=3))
+    for n in normals:
+        print(n)
+
+    print()
+    print(f"=== disaster_rules : 상주(stn={STN}) risk=01(저온) 절기=15, 2015~2024 평균 ===")
+    rule = normalize_disaster_rule(
+        fetch_solar_term_crop(KMA_API_KEY, STN, "01", "15", 2015, 2024), STN, "01", "15"
+    )
+    print(rule)
 
 
 if __name__ == "__main__":

@@ -4,6 +4,9 @@
 - 일통계(arcltr_sfc_day)      disp=2 → {"result":"ok","data":[...]}
 - 특보현황(wrn_now_data_new)  disp=1 → 맨 배열 [...] (disp=2 는 XML 로 깨짐 — 쓰지 말 것)
 - 천리안 LST(nph-arcltr_sat_txt) disp=2 → [{"TM_INT0":.., "TM_INT1":..}] · 호출당 최대 24개 구간
+- 평년값(arcltr_sfc_norm)     disp=2 → {"data":[...]} · 결측치는 -99.9 (weather_daily 의 -999 와 다름, 실측 확인)
+- 절기재해(arcltr_solar_term_crop) disp=2 → {"data":[...]} · risk=01 필드만 확인됨(DOMAIN_REF §3)
+- 격자변환(nph-dfs_xy_lonlat) → JSON 아님, 고정폭 텍스트(실측 확인)
 """
 import math
 from datetime import date, datetime, timedelta
@@ -16,8 +19,8 @@ CGI_URL = "https://apihub.kma.go.kr/api/typ01/cgi-bin/url"
 LST_MAX_ITEMS = 24  # "위성영상 최대 출력 개수 제한 : 24개" (실측 확인)
 
 
-def clean(v):
-    """결측치 -999 → None. DOMAIN_REF §5 결측 처리."""
+def clean(v, missing_below=-900):
+    """결측치(엔드포인트마다 sentinel 이 다름 — weather_daily -999, 평년값 -99.9) → None."""
     if v is None:
         return None
     try:
@@ -26,7 +29,7 @@ def clean(v):
         return None
     if math.isnan(v):  # 천리안 LST 는 결측을 문자열 "nan"으로도 준다(실측 확인)
         return None
-    return None if v <= -900 else v
+    return None if v <= missing_below else v
 
 
 def _get(url, params, timeout=30):
@@ -124,6 +127,90 @@ def normalize_weather_daily(rows):
             }
         )
     return out
+
+
+def fetch_normals(api_key, stn, tmst=2021, norm="D", mm1=1, dd1=1, mm2=12, dd2=31):
+    """지상관측 평년값(1991~2020, tmst=2021). DOMAIN_REF §2."""
+    resp = _get(
+        f"{TYP01_URL}/arcltr_sfc_norm.php",
+        {
+            "authKey": api_key, "stn": stn, "norm": norm, "tmst": tmst,
+            "MM1": mm1, "DD1": dd1, "MM2": mm2, "DD2": dd2, "disp": 2,
+        },
+    )
+    return resp["data"]
+
+
+def fetch_solar_term_crop(api_key, stn, risk, solar_term, yy1, yy2):
+    """절기별 작물재해 기준값. risk=01(저온) 만 필드가 확인됨(DOMAIN_REF §3)."""
+    resp = _get(
+        f"{TYP01_URL}/arcltr_solar_term_crop.php",
+        {
+            "authKey": api_key, "stn": stn, "risk": risk, "solar_term": solar_term,
+            "YY1": yy1, "YY2": yy2, "disp": 2,
+        },
+    )
+    return resp["data"]
+
+
+def parse_grid_xy(text):
+    """nph-dfs_xy_lonlat 의 고정폭 텍스트 응답에서 (nx, ny) 를 뽑는다(JSON 아님, 실측 확인)."""
+    for line in text.splitlines():
+        if line.startswith("#") or not line.strip():
+            continue
+        _lon, _lat, nx, ny = (p.strip() for p in line.split(","))
+        return int(nx), int(ny)
+    return None
+
+
+def fetch_grid_xy(api_key, lat, lon):
+    """위경도 → 기상청 예보 격자(nx, ny)."""
+    r = requests.get(
+        f"{CGI_URL}/nph-dfs_xy_lonlat",
+        params={"authKey": api_key, "lon": lon, "lat": lat, "help": 0},
+        timeout=30,
+    )
+    r.raise_for_status()
+    return parse_grid_xy(r.text)
+
+
+def normalize_normals(rows, source="kma"):
+    """arcltr_sfc_norm 의 data 배열 → normals 컬럼 (DATA_SCHEMA §3). 결측치는 -99.9(실측 확인)."""
+    out = []
+    for r in rows:
+        out.append(
+            {
+                "station": str(r["STN_ID"]),
+                "month": int(r["MM"]),
+                "day": int(r["DD"]),
+                "tmax_normal": clean(r.get("TA_MAX"), missing_below=-90),
+                "tmin_normal": clean(r.get("TA_MIN"), missing_below=-90),
+                "rain_normal": clean(r.get("RN"), missing_below=-90),
+                "source": source,
+            }
+        )
+    return out
+
+
+def normalize_disaster_rule(rows, station, risk, solar_term, crop_id=""):
+    """arcltr_solar_term_crop 의 연도별 data 배열 → disaster_rules 한 행(다년 평균).
+
+    DATA_SCHEMA.md 는 station 컬럼이 없지만 응답 자체가 관측소 단위라 없으면 값을
+    구분할 수 없어 추가했다. crop_id 도 문서상 nullable 이지만, Postgres UNIQUE
+    제약은 NULL 끼리도 서로 다르게 취급해 upsert 멱등성이 깨지므로 "작물 무관"은
+    빈 문자열로 표시한다(둘 다 의도적 이탈).
+    """
+    ta_mins = [v for v in (clean(r.get("TA_MIN")) for r in rows) if v is not None]
+    tg_mins = [v for v in (clean(r.get("TG_MIN")) for r in rows) if v is not None]
+    return {
+        "station": str(station),
+        "risk": risk,
+        "solar_term": solar_term,
+        "crop_id": crop_id,
+        "ta_min": sum(ta_mins) / len(ta_mins) if ta_mins else None,
+        "tg_min": sum(tg_mins) / len(tg_mins) if tg_mins else None,
+        "sample_years": len(rows),
+    }
 
 
 def normalize_alerts(records):

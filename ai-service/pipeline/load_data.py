@@ -2,12 +2,18 @@
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from app.models.alert import OfficialAlert
+from app.models.disaster_rule import DisasterRule
+from app.models.normal import Normal
 from app.models.weather import WeatherDaily
 from pipeline.kma_client import (
     fetch_daily_lst_min,
+    fetch_normals,
+    fetch_solar_term_crop,
     fetch_warnings,
     fetch_weather_daily,
     normalize_alerts,
+    normalize_disaster_rule,
+    normalize_normals,
     normalize_weather_daily,
 )
 
@@ -43,3 +49,43 @@ def load_alerts(db, api_key):
     db.add_all(OfficialAlert(**row) for row in rows)
     db.commit()
     return len(rows)
+
+
+def load_normals(db, api_key, stn):
+    """관측소 연중 평년값(365일치, 1991~2020)을 normals 에 upsert."""
+    rows = normalize_normals(fetch_normals(api_key, stn))
+
+    for row in rows:
+        stmt = pg_insert(Normal).values(**row)
+        stmt = stmt.on_conflict_do_update(
+            index_elements=["station", "month", "day", "source"],
+            set_={
+                "tmax_normal": stmt.excluded.tmax_normal,
+                "tmin_normal": stmt.excluded.tmin_normal,
+                "rain_normal": stmt.excluded.rain_normal,
+            },
+        )
+        db.execute(stmt)
+
+    db.commit()
+    return len(rows)
+
+
+def load_disaster_rule(db, api_key, stn, risk, solar_term, yy1, yy2, crop_id=""):
+    """절기재해 기준값(다년 평균) 한 행을 disaster_rules 에 upsert."""
+    row = normalize_disaster_rule(
+        fetch_solar_term_crop(api_key, stn, risk, solar_term, yy1, yy2), stn, risk, solar_term, crop_id
+    )
+
+    stmt = pg_insert(DisasterRule).values(**row)
+    stmt = stmt.on_conflict_do_update(
+        index_elements=["station", "risk", "solar_term", "crop_id"],
+        set_={
+            "ta_min": stmt.excluded.ta_min,
+            "tg_min": stmt.excluded.tg_min,
+            "sample_years": stmt.excluded.sample_years,
+        },
+    )
+    db.execute(stmt)
+    db.commit()
+    return 1
