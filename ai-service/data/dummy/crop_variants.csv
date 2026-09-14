@@ -1,0 +1,13 @@
+crop_name,maturity_type,gdd_target,days_to_harvest
+상추,EARLY,500,45
+상추,MID,620,55
+방울토마토,MID,1100,90
+방울토마토,LATE,1300,105
+고추,MID,1500,120
+감자,EARLY,900,80
+감자,MID,1050,95
+배추,MID,800,70
+배추,LATE,950,85
+무,EARLY,600,50
+오이,MID,850,70
+가지,MID,1200,100
