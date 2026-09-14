@@ -80,16 +80,30 @@ declare namespace kakao.maps {
   }
 
   namespace event {
-    /** 지금 필요한 건 지도 클릭 하나뿐이라 그 형태만 좁게 선언한다. */
+    /** 지도 클릭. `mouseEvent.latLng` 에 클릭 지점이 담긴다. */
     function addListener(
+      target: Map,
+      type: "click",
+      handler: (mouseEvent: MouseEvent) => void,
+    ): void;
+    /**
+     * 지도의 이동·확대가 **멎었을 때** 한 번 온다. 드래그하는 내내 오지 않으므로
+     * 중앙 핀 방식이 이걸 듣는다 — 손을 뗀 순간에만 좌표를 갱신하면 된다.
+     *
+     * **핸들러에 인자가 없다.** 좌표는 이벤트가 주지 않으므로 `map.getCenter()`
+     * 로 지도에게 직접 물어봐야 한다.
+     */
+    function addListener(target: Map, type: "idle", handler: () => void): void;
+
+    function removeListener(
       target: Map,
       type: "click",
       handler: (mouseEvent: MouseEvent) => void,
     ): void;
     function removeListener(
       target: Map,
-      type: "click",
-      handler: (mouseEvent: MouseEvent) => void,
+      type: "idle",
+      handler: () => void,
     ): void;
   }
 
@@ -119,10 +133,48 @@ declare namespace kakao.maps {
       address_name: string;
     }
 
+    /** 좌표 → 주소 결과. */
+    interface Coord2AddressResult {
+      /** 도로명 주소. **산간·농지·신규 조성지는 null 이다** — 밭이 딱 그런 곳이다. */
+      road_address: { address_name: string } | null;
+      /** 지번 주소. 이쪽은 항상 있으므로 최종 폴백으로 쓴다. */
+      address: { address_name: string };
+    }
+
+    /**
+     * 좌표 → 행정구역 결과. **보통 두 건이 온다.**
+     *
+     * `region_type` 이 `"B"` 면 법정동, `"H"` 면 행정동이다. 우리가 저장할
+     * `regionCode` 는 **법정동 코드**이므로 `"B"` 를 골라야 한다. 순서에 기대
+     * `result[0]` 을 쓰면 동네에 따라 행정동 코드가 섞여 들어온다.
+     */
+    interface Coord2RegionResult {
+      region_type: "B" | "H";
+      /** 시·도부터 읍면동까지 이어 붙인 이름. */
+      address_name: string;
+      region_1depth_name: string;
+      region_2depth_name: string;
+      region_3depth_name: string;
+      /** 법정동 코드 10자리. 위성·통계 조회의 키다. */
+      code: string;
+    }
+
     class Geocoder {
       addressSearch(
         query: string,
         callback: (result: AddressResult[], status: string) => void,
+      ): void;
+      /** ⚠️ 인자가 **(경도, 위도)** 순서다. 위경도 순서가 아니다. */
+      coord2Address(
+        lng: number,
+        lat: number,
+        callback: (result: Coord2AddressResult[], status: string) => void,
+      ): void;
+      /** ⚠️ 여기도 **(경도, 위도)** 순서다. */
+      coord2RegionCode(
+        lng: number,
+        lat: number,
+        callback: (result: Coord2RegionResult[], status: string) => void,
       ): void;
     }
   }
