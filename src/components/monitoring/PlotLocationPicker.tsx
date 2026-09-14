@@ -4,6 +4,10 @@ import { type FormEvent, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/shared/Button";
 import { Field } from "@/components/shared/Field";
 import type { LatLon } from "@/features/monitoring/domain/geo";
+import {
+  PLOT_LOCATION_MESSAGE,
+  validatePlotLocation,
+} from "@/features/monitoring/domain/plotLocation";
 import { searchAddress } from "@/shared/kakao/geocode";
 import {
   KakaoSdkScript,
@@ -157,6 +161,9 @@ export function PlotLocationPicker({
     }
   }
 
+  // 폼도 제출할 때 같은 함수로 검사한다. 여기 것은 즉시 알려주기 위한 것이다.
+  const issue = value ? validatePlotLocation(value) : null;
+
   return (
     <div className="flex flex-col gap-3">
       <form className="flex items-end gap-2" onSubmit={handleSearch}>
@@ -201,6 +208,12 @@ export function PlotLocationPicker({
           </div>
         )}
       </div>
+
+      {issue && (
+        <p className="text-sm text-unsuitable">
+          {PLOT_LOCATION_MESSAGE[issue]}
+        </p>
+      )}
     </div>
   );
 }
