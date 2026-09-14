@@ -2,9 +2,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { CropCards } from "@/components/plot/CropCards";
-import { LocationSummary } from "@/components/plot/LocationSummary";
 import { PlotInfoFields } from "@/components/plot/PlotInfoFields";
-import { PlotMapFrame } from "@/components/plot/PlotMapFrame";
+import { PlotLocationStep } from "@/components/plot/PlotLocationStep";
 import { SowingFields } from "@/components/plot/SowingFields";
 import { WizardNav } from "@/components/plot/WizardNav";
 import { SectionHeading } from "@/components/shared/SectionHeading";
@@ -14,7 +13,7 @@ import { SectionHeading } from "@/components/shared/SectionHeading";
  * [Feature]: 텃밭 등록 온보딩  →  /plots/new
  *
  * [Description]
- * - **퍼블(마크업) 단계다.** 지도 연결·좌표 변환·저장·임시 저장은 비어 있다.
+ * - **퍼블(마크업) 단계다.** 지도 연결·좌표 변환은 `PlotLocationStep` 이 한다. 저장·임시 저장은 비어 있다.
  * - **한 번에 한 단계만 보인다.** 처음에는 네 단계를 모두 펼쳐 뒀는데, 등록 한 번
  *   하려고 화면을 계속 스크롤해야 했다. 정의서도 마법사이므로 한 단계씩이 맞다.
  * - 단계 전환을 **JS 없이** 한다. 숨긴 라디오 넷을 두고
@@ -180,7 +179,7 @@ export default function PlotRegisterPage() {
         <div className="mt-7 min-h-[38rem] sm:min-h-[40rem] lg:min-h-[32rem]">
           {STEPS.map((step) => (
             <StepPanel key={step.id} step={step}>
-              {step.no === 1 && <LocationStep />}
+              {step.no === 1 && <PlotLocationStep />}
               {step.no === 2 && <PlotInfoFields />}
               {step.no === 3 && (
                 <fieldset>
@@ -200,18 +199,6 @@ export default function PlotRegisterPage() {
         <WizardNav />
       </form>
     </main>
-  );
-}
-
-/** 1단계 본문. 지도가 넓고 결과 칸이 옆에 붙는다. */
-function LocationStep() {
-  return (
-    <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
-      <PlotMapFrame />
-      <div className="self-start">
-        <LocationSummary />
-      </div>
-    </div>
   );
 }
 
