@@ -156,11 +156,24 @@ export function PlotLocationStep() {
 
     sdk.maps.event.addListener(map, "idle", handleIdle);
 
+    // 컨테이너 크기가 바뀌면 지도에게 알린다. 마법사가 CSS 로만 단계를 바꾸므로
+    // (page.tsx 의 group-has), 1단계가 숨겨진 동안 창이 줄면 지도는 옛 폭을 그대로
+    // 들고 있다가 돌아왔을 때 타일이 잘린다. 더 나쁜 건 화면의 중앙 핀과
+    // getCenter() 가 어긋나 **사용자가 본 곳과 다른 좌표가 저장되는** 것이다.
+    //
+    // ⚠️ display:none 이면 0 이 들어온다. 그 값으로 relayout 하면 지도를 0 크기로
+    // 만들어 버리므로, 보일 때만 부른다.
+    const observer = new ResizeObserver(([entry]) => {
+      if (entry.contentRect.width > 0) map.relayout();
+    });
+    observer.observe(container);
+
     // 지도를 만든 직후에는 idle 이 오지 않을 수 있다. 첫 값은 직접 채운다.
     void readCenter();
 
     return () => {
       sdk.maps.event.removeListener(map, "idle", handleIdle);
+      observer.disconnect();
       mapRef.current = null;
       lastCoordRef.current = null;
       // 늦게 도착할 응답이 사라진 화면을 되살리지 못하게 번호를 넘겨 둔다.
