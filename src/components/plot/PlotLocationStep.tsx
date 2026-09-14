@@ -207,6 +207,13 @@ export function PlotLocationStep() {
               {PLOT_LOCATION_MESSAGE[issue]}
             </p>
           )}
+          {/* SDK 를 못 받으면 지도와 주소 검색이 함께 죽는다 — 둘 다 window.kakao
+              를 쓴다. 좌표 문제와 성격이 달라 PLOT_LOCATION_MESSAGE 에는 넣지 않는다. */}
+          {status === "error" && (
+            <p className="mt-2 text-sm text-unsuitable" role="status">
+              지도를 불러오지 못했습니다. 새로고침해 주세요.
+            </p>
+          )}
         </div>
       </div>
     </>
