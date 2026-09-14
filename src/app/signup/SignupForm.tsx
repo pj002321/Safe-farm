@@ -14,8 +14,8 @@ import {
 import { Button } from "@/components/shared/Button";
 import { Field } from "@/components/shared/Field";
 import type { Consent } from "@/shared/auth/consent";
-import { signUpWithEmail } from "@/shared/auth/firebaseSignIn";
 import { DEFAULT_AFTER_LOGIN } from "@/shared/auth/redirect";
+import { signUpWithEmail } from "@/shared/auth/supabaseSignIn";
 
 /**
  * ---------------------------------------------
