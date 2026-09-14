@@ -117,7 +117,7 @@ export function Hero() {
               무료로 시작하기
             </ButtonLink>
             <div className="[&>a]:border-space-border [&>a]:text-space-fg [&>a:hover]:border-telemetry [&>a:hover]:text-telemetry">
-              <ButtonLink href="#report" size="lg" variant="outline">
+              <ButtonLink href="/report" size="lg" variant="outline">
                 오늘의 리포트 보기
               </ButtonLink>
             </div>
