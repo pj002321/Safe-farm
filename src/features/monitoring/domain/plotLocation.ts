@@ -54,7 +54,17 @@ const KOREA_BOXES: readonly BoundingBox[] = [
   { minLat: 37.0, maxLat: 37.8, minLon: 130.5, maxLon: 132.0 },
 ];
 
-export type PlotLocationIssue = "missing" | "not-finite" | "outside-korea";
+/**
+ * `no-address` 만 성격이 다르다. 나머지 셋은 좌표만 보면 알 수 있지만, 이것은
+ * 역지오코딩 결과를 받아야 알 수 있다 — 그래서 `validatePlotLocation` 은 이 값을
+ * 절대 돌려주지 않는다. 화면이 조회 결과를 보고 직접 정한다. 문구를 한 표에
+ * 모아 두려고 같은 타입에 넣었다.
+ */
+export type PlotLocationIssue =
+  | "missing"
+  | "not-finite"
+  | "outside-korea"
+  | "no-address";
 
 function isInBox(coord: LatLon, box: BoundingBox): boolean {
   return (
@@ -87,8 +97,10 @@ export function validatePlotLocation(
 
 /** 사용자에게 그대로 보여줄 문구. 화면은 이 표만 읽는다. */
 export const PLOT_LOCATION_MESSAGE: Record<PlotLocationIssue, string> = {
-  missing: "지도를 클릭해 밭 위치를 찍어 주세요.",
-  "not-finite": "좌표를 읽지 못했습니다. 지도를 다시 클릭해 주세요.",
+  missing: "지도를 움직여 밭을 한가운데 맞춰 주세요.",
+  "not-finite": "좌표를 읽지 못했습니다. 지도를 다시 움직여 주세요.",
   "outside-korea":
     "국내 좌표만 등록할 수 있습니다. 기상·위성 자료가 국내만 제공됩니다.",
+  "no-address":
+    "이 지점에는 주소가 없습니다. 바다나 하천일 수 있으니 밭이 있는 땅 위로 옮겨 주세요.",
 };

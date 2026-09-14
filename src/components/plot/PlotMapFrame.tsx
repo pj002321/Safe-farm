@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { MapPinIcon } from "@/components/icons";
 
 /**
@@ -40,37 +41,19 @@ import { MapPinIcon } from "@/components/icons";
  */
 export const PLOT_MAP_CONTAINER_ID = "plot-map-canvas";
 
-export function PlotMapFrame() {
+interface PlotMapFrameProps {
+  /**
+   * 지도 위 조작 줄(주소 검색·현재 위치). 지도를 움직여야 하므로 동작이 있는
+   * 클라이언트 컴포넌트가 들어온다. 이 파일이 서버 컴포넌트로 남기 위해
+   * 마크업을 직접 갖지 않고 자리만 내어 준다.
+   */
+  controls?: ReactNode;
+}
+
+export function PlotMapFrame({ controls }: PlotMapFrameProps) {
   return (
     <div className="flex flex-col gap-3">
-      {/* ── 주소 검색 · 현재 위치 ─────────────────────
-          아직 동작하지 않지만 `disabled` 를 걸지 않는다. 비활성 입력은 포커스를
-          받지 못해 퍼블 단계에서 탭 순서를 확인할 수 없다. */}
-      <div className="flex flex-wrap gap-2">
-        <label className="sr-only" htmlFor="plot-address-search">
-          주소 검색
-        </label>
-        <input
-          className="min-w-0 flex-1 rounded-md border border-border bg-surface px-3 py-2.5 text-fg text-sm placeholder:text-fg-subtle transition-colors hover:border-accent focus:border-accent"
-          id="plot-address-search"
-          name="addressQuery"
-          placeholder="도로명·지번 주소로 찾기"
-          type="search"
-        />
-        <button
-          className="shrink-0 rounded-md border border-border-strong px-4 py-2.5 font-medium text-fg text-sm transition-colors duration-200 ease-out-expo hover:border-accent hover:text-accent"
-          type="button"
-        >
-          검색
-        </button>
-        <button
-          className="inline-flex shrink-0 items-center gap-1.5 rounded-md bg-accent px-4 py-2.5 font-medium text-accent-on text-sm transition-colors duration-200 ease-out-expo hover:bg-accent-hover"
-          type="button"
-        >
-          <MapPinIcon />
-          현재 위치
-        </button>
-      </div>
+      {controls}
 
       {/* ── 지도 자리 ────────────────────────────────
           바깥 div 가 테두리·라운드·overflow 를 맡고, 안쪽 컨테이너가 지도 전용이다.
