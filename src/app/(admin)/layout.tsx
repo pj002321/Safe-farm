@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { requireConsentOrRedirect } from "@/shared/auth/consentGate";
 import { requireAdminOrRedirect } from "@/shared/auth/session";
 
 /**
@@ -10,10 +11,13 @@ import { requireAdminOrRedirect } from "@/shared/auth/session";
  * - ⚠️ 그래도 **보안 경계는 아니다.** 이 레이아웃은 Server Action에 영향을 주지
  *   않는다. 관리자 액션은 각자 `requireAdmin()` 을 첫 줄에서 불러야 한다.
  *   Next 공식: "Render-time gating is not a security boundary."
+ * - 관리자도 **동의 게이트를 거친다.** 약관 동의는 역할과 무관한 법적 절차라,
+ *   관리자만 예외로 두면 기록이 비는 계정이 다시 생긴다.
  * ---------------------------------------------
  */
 export default async function AdminLayout({ children }: LayoutProps<"/">) {
   const viewer = await requireAdminOrRedirect();
+  await requireConsentOrRedirect();
 
   return (
     <div className="min-h-dvh">
