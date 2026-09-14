@@ -1,4 +1,10 @@
 import { type NextRequest, NextResponse } from "next/server";
+import {
+  deserializeConsent,
+  isConsentComplete,
+  PENDING_CONSENT_COOKIE,
+} from "@/shared/auth/consent";
+import { recordConsentForUser } from "@/shared/auth/profileStore";
 import { safeNextPath } from "@/shared/auth/redirect";
 import { getSupabaseServer } from "@/shared/supabase/server";
 
@@ -18,6 +24,10 @@ import { getSupabaseServer } from "@/shared/supabase/server";
  *   `safeNextPath` 로 내부 경로임을 보증한 뒤에만 쓴다.
  * - 실패해도 **오류 원문을 사용자에게 보여주지 않는다.** 공급자 오류 메시지에는
  *   내부 설정이 섞여 나온다. `/login?error=1` 로만 알리고 자세한 건 서버 로그에 남긴다.
+ * - 가입 화면에서 온 경우 **동의를 여기서 기록한다.** 구글 로그인은 페이지를
+ *   떠나므로 React 상태의 동의가 사라지는데, 브라우저가 떠나기 직전 쿠키에
+ *   맡겨 두고 여기서 받아 적는다. 이메일 가입은 이 경로를 타지 않는다 —
+ *   `handle_new_user` 트리거가 `raw_user_meta_data.consent` 를 읽어 찍는다.
  *
  * [Usage]
  * ```
@@ -46,7 +56,7 @@ export async function GET(request: NextRequest) {
   }
 
   const supabase = await getSupabaseServer();
-  const { error } = await supabase.auth.exchangeCodeForSession(code);
+  const { data, error } = await supabase.auth.exchangeCodeForSession(code);
 
   if (error) {
     // 원문은 로그에만. 사용자 화면에는 내부 정보를 흘리지 않는다.
@@ -54,5 +64,34 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(new URL("/login?error=1", origin));
   }
 
-  return NextResponse.redirect(new URL(next, origin));
+  const response = NextResponse.redirect(new URL(next, origin));
+
+  // 가입 화면에서 넘어온 동의를 받아 적는다. 로그인 경로에서 왔으면 쿠키가 없고,
+  // 그때는 아무 일도 일어나지 않는다.
+  const pending = deserializeConsent(
+    request.cookies.get(PENDING_CONSENT_COOKIE)?.value,
+  );
+  if (data.user && isConsentComplete(pending)) {
+    try {
+      // 방금 코드 교환을 끝낸 클라이언트를 그대로 넘긴다. 새로 만들면 같은 요청
+      // 안에서 방금 심은 세션 쿠키가 읽히는지에 기대게 된다.
+      await recordConsentForUser(supabase, data.user.id, {
+        termsAgreed: pending.terms,
+        privacyAgreed: pending.privacy,
+        marketingOptIn: pending.marketing,
+      });
+    } catch (consentError) {
+      // ⚠️ 여기서 로그인을 막지 않는다. 신원 확인은 이미 끝났고, 기록이 비는 것은
+      //    동의를 한 번 더 받아 메울 수 있다. 반대로 로그인을 막으면 사용자는
+      //    들어오지도 못하면서 동의도 여전히 기록되지 않는다.
+      //    증상을 숨기는 것이 아니라 **더 나쁜 결과를 피하는 것**이므로, 원인을
+      //    추적할 수 있도록 원문을 로그에 남긴다.
+      console.error("[auth/callback] 동의 기록 실패", consentError);
+    }
+  }
+
+  // 성공했든 실패했든 지운다. 남겨 두면 다음 로그인에 옛 동의가 따라붙는다.
+  response.cookies.delete(PENDING_CONSENT_COOKIE);
+
+  return response;
 }
