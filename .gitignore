@@ -30,12 +30,33 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files — 의도적으로 추적한다 (이 레포는 퍼블릭이므로 실제 키를 넣지 말 것)
+# env files
+# .env 는 키 "이름"을 공유하려고 의도적으로 추적한다. 실제 값은 넣지 않는다.
+# 값은 .env.local(로컬) 또는 배포 환경의 환경변수에만 둔다.
+# (`.env.local` + `.env.*.local` 은 `.env*.local` 과 동치다 — ai-service/.env.local 도 걸린다.)
+.env.local
+.env.*.local
 
-# vercel
-.vercel
 
 # typescript
 *.tsbuildinfo
 next-env.d.ts
 
+
+# firebase
+.firebase/
+firebase-debug.log*
+firestore-debug.log*
+
+# ⚠️ 서비스 계정 키 — 커밋되면 프로젝트 전체 권한이 유출된다.
+# Admin SDK 키는 보안 규칙을 통째로 우회하므로 유출 = 전 데이터 읽기·쓰기·삭제 가능.
+# 값은 .env.local(로컬) 또는 배포 환경의 환경변수에만 둔다.
+*serviceAccount*.json
+*-firebase-adminsdk-*.json
+# 서비스 계정을 두는 유일한 자리. 파일명이 바뀌어도 새는 일이 없도록 디렉터리째 막는다.
+# 이 키 한 장이면 보안 규칙을 전부 우회해 프로젝트 데이터를 읽고 지울 수 있다.
+secrets/
+
+# agent meta
+.claude/.headroom_wrap_marker.json
+ai-service/.env.local
