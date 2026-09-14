@@ -14,16 +14,16 @@ describe("resolveSiteUrl", () => {
 
   it("Firebase 프로젝트 ID 가 있으면 기본 호스팅 도메인을 쓴다", () => {
     const url = resolveSiteUrl({
-      NEXT_PUBLIC_FIREBASE_PROJECT_ID: "safe-farm-ai",
+      RAILWAY_PUBLIC_DOMAIN: "safe-farm.up.railway.app",
     });
 
-    expect(url.toString()).toBe("https://safe-farm-ai.web.app/");
+    expect(url.toString()).toBe("https://safe-farm.up.railway.app/");
   });
 
   it("NEXT_PUBLIC_SITE_URL 이 가장 우선한다 — 커스텀 도메인을 붙였을 때", () => {
     const url = resolveSiteUrl({
       NEXT_PUBLIC_SITE_URL: "https://safefarm.kr",
-      NEXT_PUBLIC_FIREBASE_PROJECT_ID: "safe-farm-ai",
+      RAILWAY_PUBLIC_DOMAIN: "safe-farm.up.railway.app",
     });
 
     expect(url.toString()).toBe("https://safefarm.kr/");
@@ -33,7 +33,7 @@ describe("resolveSiteUrl", () => {
     for (const env of [
       {},
       { PORT: "4000" },
-      { NEXT_PUBLIC_FIREBASE_PROJECT_ID: "safe-farm-ai" },
+      { RAILWAY_PUBLIC_DOMAIN: "safe-farm.up.railway.app" },
       { NEXT_PUBLIC_SITE_URL: "https://safefarm.kr" },
     ]) {
       expect(resolveSiteUrl(env).protocol).toMatch(/^https?:$/);

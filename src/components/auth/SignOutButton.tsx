@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Button } from "@/components/shared/Button";
-import { signOutEverywhere } from "@/shared/auth/firebaseSignIn";
+import { signOutEverywhere } from "@/shared/auth/supabaseSignIn";
 
 /**
  * ---------------------------------------------

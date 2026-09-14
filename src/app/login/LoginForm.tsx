@@ -12,7 +12,7 @@ import {
 } from "@/components/icons";
 import { Button } from "@/components/shared/Button";
 import { Field } from "@/components/shared/Field";
-import { signInWithEmail } from "@/shared/auth/firebaseSignIn";
+import { signInWithEmail } from "@/shared/auth/supabaseSignIn";
 
 /**
  * ---------------------------------------------

@@ -1,81 +1,85 @@
-import type { UserRecord } from "firebase-admin/auth";
-import type { Role } from "@/shared/auth/session";
-import { getAdminAuth } from "@/shared/firebase/admin";
+import "server-only";
+
+import { getSupabaseAdmin } from "@/shared/supabase/server";
+import type { Role } from "./session";
 
 /**
  * ---------------------------------------------
- * [Feature]: 관리자용 계정 목록 조회
+ * [Feature]: 관리자 화면용 계정 목록
  *
  * [Description]
- * - 관리자 화면이 쓰는 **읽기 전용** 모듈이다. 권한을 바꾸는 함수는 여기 두지 않는다 —
- *   custom claims 변경은 `scripts/set-role.mjs`(서비스 계정 키 필요)만 할 수 있어야 한다.
- *   앱 안에 변경 함수를 두면 그 자체가 권한 상승 경로의 시작점이 된다.
- * - 권한은 Firestore 프로필이 아니라 **Firebase Auth 의 custom claims** 에서 읽는다.
- *   프로필의 `role` 은 표시용 사본이라 클레임과 어긋나 있을 수 있다(권한을 막
- *   바꾸고 상대가 아직 재로그인하지 않은 구간). 관리자 화면은 **진짜 값**을 봐야 한다.
- * - `listUsers` 는 한 번에 최대 1000명이다. 그 이상이면 페이지네이션이 필요한데,
- *   지금 규모에서 미리 만들면 쓰이지 않는 코드가 된다. 대신 **잘렸다는 사실을
- *   호출부가 알 수 있도록** `truncated` 를 함께 돌려준다 — 조용히 일부만 보여주면
- *   관리자가 "없는 계정"이라고 오판한다.
+ * - **읽기 전용이다.** 역할을 바꾸는 함수를 여기 두지 않는다. 화면에서 부를 수
+ *   있는 곳에 권한 변경이 있으면, 그 화면의 접근 제어가 한 번 헐거워지는 순간
+ *   권한 상승 경로가 된다. 역할 부여는 `npm run role` 스크립트가 한다.
+ * - 역할은 **`app_metadata.role`** 에서 읽는다. `profiles.role` 컬럼은 표시용
+ *   사본이라 이 목록의 근거로 쓰면 실제 권한과 어긋난 화면이 나온다.
+ * - `getSupabaseAdmin()` 은 **RLS 를 우회**한다. 그래서 이 파일은 `server-only`
+ *   이고, 부르는 쪽(`(admin)/layout.tsx`)이 이미 `requireAdminOrRedirect` 로
+ *   막고 있어야 한다.
+ * - 날짜를 **서버에서 문자열로 만들어** 내려보낸다. 클라이언트에서 포맷하면
+ *   사용자 시간대에 따라 값이 달라져 하이드레이션 불일치가 난다.
  *
  * [Usage]
- * ```ts
+ * ```tsx
  * const accounts = await listAccounts();
  * ```
  * ---------------------------------------------
  */
 
-/** 한 번에 가져올 최대 인원. Firebase Admin SDK 의 상한과 같다. */
-const PAGE_SIZE = 1000;
-
 export interface AccountSummary {
   id: string;
   email: string | null;
-  /** custom claims 기준 — 이것이 실제 권한이다. */
   role: Role;
-  /** "google.com" | "password" | ... */
+  /** 로그인 수단. "email", "google" 등. */
   providers: string[];
-  /** 표시용 가입일. 정렬은 원본 시각으로 이미 끝난 뒤다. */
+  /** 이미 포맷된 한국 시각. 화면은 그대로 찍기만 한다. */
   createdAtKo: string;
 }
 
-/** Firebase 의 UTC 문자열을 화면용 날짜로. 시각까지는 필요 없다. */
-function toKoreanDate(utc: string): string {
-  const date = new Date(utc);
-  if (Number.isNaN(date.getTime())) return "—";
+/**
+ * 한 번에 가져올 인원.
+ *
+ * 지금은 사용자가 손에 꼽아 페이지네이션이 없다. **넘어가면 조용히 잘린다** —
+ * 화면에 "이게 전부"라고 보이므로, 이 수를 넘기 시작하면 페이지네이션을
+ * 붙여야 한다. 그때까지는 이 상수가 그 한계를 드러내는 자리다.
+ */
+const PAGE_SIZE = 200;
 
+function formatKo(iso: string | undefined): string {
+  if (!iso) return "—";
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "—";
   return new Intl.DateTimeFormat("ko-KR", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
+    dateStyle: "medium",
+    timeStyle: "short",
     timeZone: "Asia/Seoul",
   }).format(date);
 }
 
-function toSummary(user: UserRecord): AccountSummary {
-  // 모르는 값이면 가장 약한 권한으로 떨어뜨린다. 애매할 때 admin 으로 보면
-  // 그 자체가 권한 상승이다.
-  const role: Role = user.customClaims?.role === "admin" ? "admin" : "user";
-
-  return {
-    id: user.uid,
-    email: user.email ?? null,
-    role,
-    providers: user.providerData.map((provider) => provider.providerId),
-    createdAtKo: toKoreanDate(user.metadata.creationTime),
-  };
-}
-
-/**
- * 가입한 계정 목록. 최근 가입 순.
- *
- * 조회 실패를 빈 배열로 바꾸지 않는다 — "아직 아무도 없음"과 "불러오지 못함"은
- * 관리자가 내리는 판단이 정반대라, 같은 화면으로 뭉개면 안 된다.
- */
 export async function listAccounts(): Promise<AccountSummary[]> {
-  const { users } = await getAdminAuth().listUsers(PAGE_SIZE);
+  const { data, error } = await getSupabaseAdmin().auth.admin.listUsers({
+    page: 1,
+    perPage: PAGE_SIZE,
+  });
+  if (error) throw error;
 
-  return users
-    .map(toSummary)
-    .sort((a, b) => b.createdAtKo.localeCompare(a.createdAtKo));
+  return data.users.map((user) => {
+    // 권한의 진짜 출처. user_metadata 는 사용자가 고칠 수 있어 보지 않는다.
+    const role: Role = user.app_metadata?.role === "admin" ? "admin" : "user";
+
+    // identities 가 없으면 app_metadata.provider 로 대신한다(초기 계정 등).
+    const providers =
+      user.identities?.map((identity) => identity.provider) ??
+      (typeof user.app_metadata?.provider === "string"
+        ? [user.app_metadata.provider]
+        : []);
+
+    return {
+      id: user.id,
+      email: user.email ?? null,
+      role,
+      providers,
+      createdAtKo: formatKo(user.created_at),
+    };
+  });
 }
