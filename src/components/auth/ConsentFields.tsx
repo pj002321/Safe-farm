@@ -17,8 +17,9 @@ import {
  * - **상태를 부모가 쥔다.** 이 동의는 이메일 폼과 구글 버튼을 동시에 잠그고,
  *   어느 경로로 가입하든 같은 값이 서버로 가야 한다. 그래서 여기서는 보이는
  *   체크박스만 그리고, 전송은 부모가 인증 함수의 인자로 한 번에 넘긴다.
- * - 약관 본문을 링크가 아니라 `<details>` 로 펼친다. 아직 없는 `/terms` 로
- *   링크를 걸면 죽은 링크가 되고, 동의 화면에서 새 탭으로 나가면 입력이 날아간다.
+ * - 요약은 `<details>` 로 그 자리에서 펼치고, **전문은 새 탭 링크**로 연다.
+ *   요약만 보고 동의하게 두면 안 되고, 같은 탭으로 나가면 입력한 이메일·
+ *   비밀번호가 날아가기 때문이다.
  * - "전체 동의"는 편의 장치일 뿐 법적 단위가 아니다. 개별 항목이 각각
  *   체크 가능해야 선택 항목(마케팅)을 거부할 수 있다.
  *
@@ -73,6 +74,20 @@ export function ConsentFields({ consent, onChange }: ConsentFieldsProps) {
                 {item.detail}
               </p>
             </details>
+
+            {/* 요약만 보고 동의하게 두지 않는다. 전문으로 가는 길을 항상 연다.
+                새 탭으로 여는 이유는 지금 화면의 입력(이메일·비밀번호)을
+                잃지 않게 하려는 것이다. */}
+            {item.href && (
+              <a
+                className="mt-1.5 inline-block text-accent text-xs underline underline-offset-4 transition-colors hover:text-accent-hover"
+                href={item.href}
+                rel="noreferrer"
+                target="_blank"
+              >
+                전문 전체 보기 ↗
+              </a>
+            )}
           </Checkbox>
         ))}
       </div>
