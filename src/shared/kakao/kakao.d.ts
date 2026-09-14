@@ -43,6 +43,9 @@ declare namespace kakao.maps {
     level?: number;
   }
 
+  // biome-ignore lint/suspicious/noShadowRestrictedNames: 카카오 SDK 의 실제 이름이
+  // `kakao.maps.Map` 이라 바꿀 수 없다. 전역 Map 을 가리는 범위는 이 네임스페이스
+  // 안뿐이고, 우리 코드는 늘 `sdk.maps.Map` 으로 한정해 부른다.
   class Map {
     constructor(container: HTMLElement, options: MapOptions);
     setCenter(position: LatLng): void;
@@ -85,6 +88,40 @@ declare namespace kakao.maps {
       type: "click",
       handler: (mouseEvent: MouseEvent) => void,
     ): void;
+  }
+
+  /**
+   * 주소↔좌표 변환. **SDK URL 에 `libraries=services` 가 있어야 생긴다.**
+   * 로더가 이미 붙여 두었다 — 빠지면 여기가 통째로 undefined 다.
+   */
+  namespace services {
+    /**
+     * 검색 결과 상태.
+     *
+     * **실제 문자열 값에 기대지 않는다.** `status === "OK"` 로 쓰면 카카오가
+     * 내부 표현을 바꿨을 때 조용히 전부 실패한다. 비교는 이 객체의 필드로 한다.
+     */
+    const Status: {
+      readonly OK: string;
+      readonly ZERO_RESULT: string;
+      readonly ERROR: string;
+    };
+
+    interface AddressResult {
+      /** 경도. ⚠️ **문자열이다.** 숫자로 쓰려면 변환해야 한다. */
+      x: string;
+      /** 위도. 역시 문자열. */
+      y: string;
+      /** 검색에 걸린 주소 전문. */
+      address_name: string;
+    }
+
+    class Geocoder {
+      addressSearch(
+        query: string,
+        callback: (result: AddressResult[], status: string) => void,
+      ): void;
+    }
   }
 }
 

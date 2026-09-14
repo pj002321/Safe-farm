@@ -1,7 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { type FormEvent, useEffect, useRef, useState } from "react";
+import { Button } from "@/components/shared/Button";
+import { Field } from "@/components/shared/Field";
 import type { LatLon } from "@/features/monitoring/domain/geo";
+import { searchAddress } from "@/shared/kakao/geocode";
 import {
   KakaoSdkScript,
   type KakaoSdkStatus,
@@ -56,6 +59,9 @@ export function PlotLocationPicker({
   const mapRef = useRef<kakao.maps.Map | null>(null);
   const markerRef = useRef<kakao.maps.Marker | null>(null);
   const [status, setStatus] = useState<KakaoSdkStatus>("loading");
+  const [query, setQuery] = useState("");
+  const [searching, setSearching] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
 
   // ① 지도 생성. SDK 가 준비된 뒤 한 번만 한다.
   useEffect(() => {
@@ -124,25 +130,77 @@ export function PlotLocationPicker({
     };
   }, [status, onChange]);
 
-  return (
-    <div
-      className={`relative overflow-hidden rounded-lg border border-border ${className}`}
-    >
-      <KakaoSdkScript onStatusChange={setStatus} />
-      <div ref={containerRef} className="size-full" />
+  async function handleSearch(event: FormEvent<HTMLFormElement>) {
+    // 폼 기본 동작은 페이지 새로고침이다. 막지 않으면 지도가 통째로 다시 뜬다.
+    event.preventDefault();
 
-      {status !== "ready" && (
-        <div className="absolute inset-0 grid place-items-center bg-surface p-4 text-center text-sm">
-          {status === "loading" ? (
-            <span className="text-fg-muted">지도를 불러오는 중…</span>
-          ) : (
-            <span className="text-unsuitable">
-              지도를 불러오지 못했습니다. 카카오 개발자 콘솔 &gt; 플랫폼 &gt; Web
-              에 이 주소가 등록돼 있는지 확인하세요.
-            </span>
-          )}
+    const trimmed = query.trim();
+    if (!trimmed || status !== "ready") return;
+
+    setSearching(true);
+    const found = await searchAddress(trimmed);
+    setSearching(false);
+
+    if (!found) {
+      setSearchError("주소를 찾지 못했습니다. 시·군·면 단위로 입력해 보세요.");
+      return;
+    }
+
+    setSearchError(null);
+    onChange(found);
+
+    // 검색은 "여기로 가 달라"는 요청이므로 지도를 반드시 옮긴다.
+    // (effect ② 는 첫 마커일 때만 옮기므로 여기서 직접 부른다.)
+    const sdk = window.kakao;
+    if (sdk && mapRef.current) {
+      mapRef.current.setCenter(new sdk.maps.LatLng(found.lat, found.lon));
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-3">
+      <form className="flex items-end gap-2" onSubmit={handleSearch}>
+        <div className="flex-1">
+          <Field
+            error={searchError ?? undefined}
+            hint="주소로 대략 이동한 뒤, 지도를 클릭해 정확한 위치를 찍으세요."
+            label="주소 검색"
+            name="plot-address"
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="예) 경북 상주시 낙동면"
+            value={query}
+          />
         </div>
-      )}
+
+        <Button
+          disabled={status !== "ready"}
+          loading={searching}
+          size="md"
+          type="submit"
+        >
+          검색
+        </Button>
+      </form>
+
+      <div
+        className={`relative overflow-hidden rounded-lg border border-border ${className}`}
+      >
+        <KakaoSdkScript onStatusChange={setStatus} />
+        <div ref={containerRef} className="size-full" />
+
+        {status !== "ready" && (
+          <div className="absolute inset-0 grid place-items-center bg-surface p-4 text-center text-sm">
+            {status === "loading" ? (
+              <span className="text-fg-muted">지도를 불러오는 중…</span>
+            ) : (
+              <span className="text-unsuitable">
+                지도를 불러오지 못했습니다. 카카오 개발자 콘솔 &gt; 플랫폼 &gt;
+                Web 에 이 주소가 등록돼 있는지 확인하세요.
+              </span>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
