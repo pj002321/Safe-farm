@@ -61,3 +61,5 @@ secrets/
 .claude/.headroom_wrap_marker.json
 ai-service/.env.local
 ai-service/.env
+*.pyc
+
