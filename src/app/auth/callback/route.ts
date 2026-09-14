@@ -5,7 +5,7 @@ import {
   PENDING_CONSENT_COOKIE,
 } from "@/shared/auth/consent";
 import { recordConsentForUser } from "@/shared/auth/profileStore";
-import { safeNextPath } from "@/shared/auth/redirect";
+import { POST_LOGIN_COOKIE, safeNextPath } from "@/shared/auth/redirect";
 import { getSupabaseServer } from "@/shared/supabase/server";
 
 /**
@@ -40,7 +40,13 @@ import { getSupabaseServer } from "@/shared/supabase/server";
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = request.nextUrl;
   const code = searchParams.get("code");
-  const next = safeNextPath(searchParams.get("next"));
+
+  // 복귀 경로는 **쿠키**로 온다. 쿼리로 나르면 `redirectTo` 에 쿼리가 붙는데,
+  // Supabase 가 허용 목록과 대조할 때 어긋나 인증 코드를 Site URL 로 떨어뜨린다.
+  // 쿼리도 함께 본다 — 예전 방식으로 시작한 왕복이 진행 중일 수 있다.
+  const next = safeNextPath(
+    request.cookies.get(POST_LOGIN_COOKIE)?.value ?? searchParams.get("next"),
+  );
 
   // 공급자가 거절한 경우(사용자가 취소 등) code 없이 error 만 온다.
   const providerError =
@@ -90,8 +96,9 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  // 성공했든 실패했든 지운다. 남겨 두면 다음 로그인에 옛 동의가 따라붙는다.
+  // 성공했든 실패했든 지운다. 남겨 두면 다음 로그인에 옛 값이 따라붙는다.
   response.cookies.delete(PENDING_CONSENT_COOKIE);
+  response.cookies.delete(POST_LOGIN_COOKIE);
 
   return response;
 }
