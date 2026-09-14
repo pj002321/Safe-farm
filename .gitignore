@@ -3,7 +3,12 @@
 # dependencies
 /node_modules
 /.pnp
-.pnp.js
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
 
 # testing
 /coverage
@@ -23,17 +28,32 @@
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+.pnpm-debug.log*
 
-# local env files
-.env*.local
-.env
+# env files
+# .env 는 키 "이름"을 공유하려고 의도적으로 추적한다. 실제 값은 넣지 않는다.
+# 값은 .env.local(로컬) 또는 배포 환경의 환경변수에만 둔다.
+# (`.env.local` + `.env.*.local` 은 `.env*.local` 과 동치다 — ai-service/.env.local 도 걸린다.)
+.env.local
+.env.*.local
 
-# vercel
-.vercel
 
 # typescript
 *.tsbuildinfo
 next-env.d.ts
 
+
+# ⚠️ 서비스 계정 키 — 커밋되면 프로젝트 전체 권한이 유출된다.
+# 이런 키는 보안 규칙을 통째로 우회하므로 유출 = 전 데이터 읽기·쓰기·삭제 가능.
+# 값은 .env.local(로컬) 또는 배포 환경의 환경변수에만 둔다.
+*serviceAccount*.json
+*-firebase-adminsdk-*.json
+# 서비스 계정을 두는 유일한 자리. 파일명이 바뀌어도 새는 일이 없도록 디렉터리째 막는다.
+# 실제로 이 파일이 커밋돼 GitHub push protection 에 막힌 적이 있다. 지우지 말 것.
+secrets/
+
+# agent meta
+.claude/.headroom_wrap_marker.json
 .headroom_wrap_marker.json
 .serena
+ai-service/.env.local
