@@ -7,13 +7,15 @@ import { PlotLocationStep } from "@/components/plot/PlotLocationStep";
 import { SowingFields } from "@/components/plot/SowingFields";
 import { WizardNav } from "@/components/plot/WizardNav";
 import { SectionHeading } from "@/components/shared/SectionHeading";
+import { registerPlot } from "./actions";
 
 /**
  * ---------------------------------------------
  * [Feature]: 텃밭 등록 온보딩  →  /plots/new
  *
  * [Description]
- * - **퍼블(마크업) 단계다.** 지도 연결·좌표 변환은 `PlotLocationStep` 이 한다. 저장·임시 저장은 비어 있다.
+ * - 지도 연결·좌표 변환은 `PlotLocationStep` 이, 저장은 `./actions.ts` 의
+ *   `registerPlot` 이 한다. 임시 저장은 아직 없다.
  * - **한 번에 한 단계만 보인다.** 처음에는 네 단계를 모두 펼쳐 뒀는데, 등록 한 번
  *   하려고 화면을 계속 스크롤해야 했다. 정의서도 마법사이므로 한 단계씩이 맞다.
  * - 단계 전환을 **JS 없이** 한다. 숨긴 라디오 넷을 두고
@@ -34,9 +36,9 @@ import { SectionHeading } from "@/components/shared/SectionHeading";
  * [연결하는 사람에게]
  * - 지도는 `PlotMapFrame` 의 `PLOT_MAP_CONTAINER_ID` div 에 붙인다. 지도 중심이
  *   곧 밭 좌표다(중앙 핀 방식).
- * - 저장은 `<form>` 에 action 을 달면 된다. 입력 이름:
- *   latitude · longitude · name · areaM2 · areaUnit · crops(복수) ·
- *   sowingDate · sowingUnknown · sowingMethod
+ * - 입력 이름: latitude · longitude · addressKo · regionCode · regionKo ·
+ *   name · areaM2 · areaUnit · crops(복수) · sowingDate · sowingUnknown ·
+ *   sowingMethod. `registerPlot` 이 이 이름 그대로 읽는다.
  * ---------------------------------------------
  */
 
@@ -117,7 +119,7 @@ export default function PlotRegisterPage() {
         </Link>
       </div>
 
-      <form className="group/wizard mt-6">
+      <form action={registerPlot} className="group/wizard mt-6">
         {/* 화면 상태를 들고 있는 라디오 넷. sr-only 지만 실제 포커스를 받으므로
             **키보드 화살표로 단계가 넘어간다.** group-has 로 읽으므로 위치는
             자유롭지만, 폼 안에 있어야 한다(group 이 폼이다). */}
