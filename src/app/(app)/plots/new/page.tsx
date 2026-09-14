@@ -6,7 +6,7 @@ import { LocationSummary } from "@/components/plot/LocationSummary";
 import { PlotInfoFields } from "@/components/plot/PlotInfoFields";
 import { PlotMapFrame } from "@/components/plot/PlotMapFrame";
 import { SowingFields } from "@/components/plot/SowingFields";
-import { Button } from "@/components/shared/Button";
+import { WizardNav } from "@/components/plot/WizardNav";
 import { SectionHeading } from "@/components/shared/SectionHeading";
 
 /**
@@ -163,24 +163,41 @@ export default function PlotRegisterPage() {
 
         {/* ── 단계별 패널 ───────────────────────────
             보이지 않는 패널의 입력도 DOM 에 남아 있으므로, 단계를 오가도
-            먼저 적은 값이 사라지지 않고 제출에 함께 실린다. */}
-        {STEPS.map((step) => (
-          <StepPanel key={step.id} step={step}>
-            {step.no === 1 && <LocationStep />}
-            {step.no === 2 && <PlotInfoFields />}
-            {step.no === 3 && (
-              <fieldset>
-                <legend className="sr-only">재배할 작물</legend>
-                <CropCards defaultSelected={["cabbage"]} />
-              </fieldset>
-            )}
-            {step.no === 4 && (
-              <div className="max-w-md">
-                <SowingFields />
-              </div>
-            )}
-          </StepPanel>
-        ))}
+            먼저 적은 값이 사라지지 않고 제출에 함께 실린다.
+
+            ⚠️ **높이를 고정한다.** 단계마다 내용 높이가 달라서 아래 이동 버튼이
+            매번 다른 자리로 튀었다. 다음을 연달아 누르는 화면에서 버튼이 움직이면
+            누르려던 자리에 다른 것이 와 있게 된다. 짧은 단계에서는 아래가 비지만,
+            버튼이 제자리에 있는 편이 낫다.
+
+            값은 실측한 **가장 높은 단계**에 맞췄다(눈대중하지 말고 다시 잴 것).
+            단이 셋인 이유는 높이를 바꾸는 지점이 둘이기 때문이다:
+              ~sm   지도 19rem, 세로 배치 → 3단계 605px  → 38rem
+              sm~lg 지도 22rem, 아직 세로 → 1단계 630px  → 40rem
+              lg~   지도 22rem, 가로 배치 → 1단계 509px  → 32rem
+            처음에 `lg` 한 곳만 나눴다가 **태블릿 폭에서 22px 어긋났다** —
+            지도가 sm 에서 커지는데 그리드는 lg 에서야 갈라지기 때문이다. */}
+        <div className="mt-7 min-h-[38rem] sm:min-h-[40rem] lg:min-h-[32rem]">
+          {STEPS.map((step) => (
+            <StepPanel key={step.id} step={step}>
+              {step.no === 1 && <LocationStep />}
+              {step.no === 2 && <PlotInfoFields />}
+              {step.no === 3 && (
+                <fieldset>
+                  <legend className="sr-only">재배할 작물</legend>
+                  <CropCards defaultSelected={["cabbage"]} />
+                </fieldset>
+              )}
+              {step.no === 4 && (
+                <div className="max-w-md">
+                  <SowingFields />
+                </div>
+              )}
+            </StepPanel>
+          ))}
+        </div>
+
+        <WizardNav />
       </form>
     </main>
   );
@@ -205,14 +222,8 @@ function StepPanel({
   step: (typeof STEPS)[number];
   children: ReactNode;
 }) {
-  const previous = STEPS.find((candidate) => candidate.no === step.no - 1);
-  const next = STEPS.find((candidate) => candidate.no === step.no + 1);
-
   return (
-    <section
-      aria-labelledby={`step-${step.no}-title`}
-      className={`mt-7 ${step.panel}`}
-    >
+    <section aria-labelledby={`step-${step.no}-title`} className={step.panel}>
       <div className="mb-4">
         <h2
           className="font-semibold text-[1.15rem] text-fg tracking-tight"
@@ -229,39 +240,6 @@ function StepPanel({
       </div>
 
       {children}
-
-      {/* ── 단계 이동 ─────────────────────────────
-          `<button>` 이 아니라 `<label>` 이다. 버튼으로 만들면 상태를 JS 로
-          들고 있어야 하고, 폼 안의 button 은 실수로 제출을 일으킨다. */}
-      <div className="mt-7 flex flex-col-reverse gap-3 border-border border-t pt-5 sm:flex-row sm:items-center">
-        {previous && (
-          <label
-            className="cursor-pointer rounded-md border border-border-strong px-4 py-2 text-center font-medium text-fg text-sm transition-colors duration-200 ease-out-expo hover:border-accent hover:text-accent"
-            htmlFor={previous.id}
-          >
-            ← {previous.labelKo}
-          </label>
-        )}
-
-        <span className="hidden flex-1 sm:block" />
-
-        {next ? (
-          <label
-            className="cursor-pointer rounded-md bg-accent px-5 py-2.5 text-center font-medium text-accent-on text-sm transition-colors duration-200 ease-out-expo hover:bg-accent-hover"
-            htmlFor={next.id}
-          >
-            {next.labelKo} →
-          </label>
-        ) : (
-          <Button size="lg" type="submit">
-            텃밭 등록하기
-          </Button>
-        )}
-      </div>
-
-      <p className="mt-3 text-fg-subtle text-xs">
-        입력하신 내용은 단계를 오가도 남아 있고, 자동으로 임시 저장됩니다.
-      </p>
     </section>
   );
 }
