@@ -5,7 +5,7 @@ import { useState } from "react";
 import { GoogleIcon } from "@/components/icons";
 import { Button } from "@/components/shared/Button";
 import type { Consent } from "@/shared/auth/consent";
-import { signInWithGoogle } from "@/shared/auth/firebaseSignIn";
+import { signInWithGoogle } from "@/shared/auth/supabaseSignIn";
 import { AuthError } from "./AuthError";
 
 /**

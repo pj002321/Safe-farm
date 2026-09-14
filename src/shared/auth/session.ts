@@ -1,35 +1,27 @@
-import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { getAdminAuth } from "@/shared/firebase/admin";
-import { isInvalidSessionError, SESSION_COOKIE } from "./sessionCookie";
+import { getSupabaseServer } from "@/shared/supabase/server";
 
 /**
  * ---------------------------------------------
- * [Feature]: 서버 측 세션 · 역할 확인 (Firebase 세션 쿠키)
+ * [Feature]: 서버에서 "지금 누가 보고 있나"를 판정
  *
  * [Description]
- * - 브라우저 SDK 가 들고 있는 ID 토큰은 서버가 볼 수 없다. 그래서 로그인 직후
- *   `/api/auth/session` 이 구워 준 **httpOnly 세션 쿠키**를 여기서 검증한다.
- *   서버가 신뢰하는 것은 이 쿠키 하나뿐이다.
- * - 역할은 디코딩된 토큰의 **custom claim `role`** 에서 읽는다.
- *   Supabase 의 `app_metadata` 와 같은 취지다 — **클라이언트가 고칠 수 없는
- *   곳에서만 권한을 읽는다.** custom claims 는 Admin SDK(서버)로만 설정되고
- *   토큰 서명 안에 들어가므로 위조할 수 없다. Firestore 의 프로필 문서처럼
- *   사용자가 쓸 수 있는 저장소를 권한 판단에 쓰면 누구나 관리자가 된다.
- * - `verifySessionCookie(cookie, true)` 의 **두 번째 인자(checkRevoked)를 끄지 말 것.**
- *   끄면 관리자가 계정을 정지시키거나 로그아웃시켜도 쿠키가 만료될 때까지
- *   최대 14일간 계속 통과한다.
- * - ⚠️ **"검증 실패"와 "설정 오류"를 구분한다.** 만료·폐기·위조는 로그인하지
- *   않은 것과 같으므로 `null`. 하지만 서비스 계정 미설정 같은 설정 오류는
- *   **그대로 던진다.** 둘을 뭉뚱그리면 환경변수 하나가 빠졌을 때 전 사용자가
- *   조용히 로그아웃된 것처럼 보이고, 원인이 화면 어디에도 드러나지 않는다.
- * - 페이지/레이아웃의 검사는 **UX** 다. Server Action 은 export 되는 순간 직접
- *   POST 가 가능하므로, 액션 첫 줄에서 `requireUser()` / `requireAdmin()` 을 다시 부른다.
+ * - Server Component·Server Action·Route Handler 가 권한을 판단하는 **유일한**
+ *   입구다. 클라이언트가 보낸 값은 무엇도 믿지 않는다.
+ * - **`getUser()` 를 쓴다. `getSession()` 을 쓰지 말 것.** `getSession()` 은
+ *   쿠키에 든 JWT 를 그대로 디코드해 돌려주므로, 쿠키를 조작하면 아무 사용자나
+ *   될 수 있다. `getUser()` 는 Auth 서버에 물어 토큰을 실제로 검증한다.
+ *   이 파일이 인가의 근거이므로 여기서는 비용을 내고 정확성을 산다.
+ * - 역할은 **`app_metadata.role`** 에서 읽는다. `user_metadata` 는 사용자가
+ *   `updateUser()` 로 직접 고칠 수 있어 권한 판단에 쓰면 곧바로 권한 상승
+ *   경로가 된다. `app_metadata` 는 service_role 로만 바뀐다.
+ * - `profiles.role` 컬럼도 있지만 그건 **표시용 사본**이다. 권한 판단은 언제나
+ *   토큰의 `app_metadata` 로 한다(스키마 주석 참고).
  *
  * [Usage]
  * ```ts
- * const viewer = await getViewer();     // 화면 분기 (비로그인 null)
- * const user = await requireAdmin();    // Server Action 게이트
+ * const viewer = await getViewer();          // 없으면 null
+ * const admin = await requireAdmin();        // 아니면 throw
  * ```
  * ---------------------------------------------
  */
@@ -45,26 +37,49 @@ export interface Viewer {
 
 /** 로그인하지 않았으면 null. 화면 분기용. */
 export async function getViewer(): Promise<Viewer | null> {
-  const cookie = (await cookies()).get(SESSION_COOKIE)?.value;
-  if (!cookie) return null;
+  const supabase = await getSupabaseServer();
 
-  // getAdminAuth() 는 설정이 없으면 여기서 던진다. 의도된 동작이다.
-  const auth = getAdminAuth();
+  // getUser() 는 토큰이 없거나 만료면 error 를 담아 돌려준다(던지지 않는다).
+  // 네트워크·설정 오류도 여기로 오므로 구분하지 않고 "로그인 안 함"으로
+  // 뭉개면 설정 사고가 조용히 숨는다 — 아래에서 나눈다.
+  const { data, error } = await supabase.auth.getUser();
 
-  try {
-    const decoded = await auth.verifySessionCookie(cookie, true);
-    const role: Role = decoded.role === "admin" ? "admin" : "user";
-
-    return {
-      id: decoded.uid,
-      email: decoded.email ?? null,
-      role,
-      isAdmin: role === "admin",
-    };
-  } catch (error) {
-    if (isInvalidSessionError(error)) return null;
+  if (error) {
+    if (isMissingSessionError(error)) return null;
+    // 설정·네트워크 문제는 던진다. 500 이 뜨는 편이 전 사용자가 원인 모를
+    // /login 루프를 도는 것보다 낫다.
     throw error;
   }
+
+  const user = data.user;
+  if (!user) return null;
+
+  const role: Role = user.app_metadata?.role === "admin" ? "admin" : "user";
+
+  return {
+    id: user.id,
+    email: user.email ?? null,
+    role,
+    isAdmin: role === "admin",
+  };
+}
+
+/**
+ * "이 실패는 그냥 로그인 안 한 것"인가?
+ *
+ * supabase-js 는 세션 없음도, 토큰 만료도, 설정 오류도 모두 `AuthError` 로
+ * 준다. 앞의 둘은 사용자가 다시 로그인하면 풀리지만 뒤쪽은 우리가 고쳐야 한다.
+ * 전부 null 로 뭉개면 **권한 설정이 틀려도 "비로그인"으로 보여** 아무도 눈치
+ * 못 챈다 — Firebase 판에서 실제로 밟았던 함정이라 여기서도 나눈다.
+ */
+function isMissingSessionError(error: { message?: string; status?: number }) {
+  const message = error.message ?? "";
+  return (
+    message.includes("Auth session missing") ||
+    message.includes("session_not_found") ||
+    message.includes("JWT expired") ||
+    error.status === 401
+  );
 }
 
 /** Server Action 전용. 로그인하지 않았으면 던진다. */
@@ -81,7 +96,7 @@ export async function requireAdmin(): Promise<Viewer> {
   return viewer;
 }
 
-/** 페이지·레이아웃 전용. 관리자가 아니면 홈으로 돌려보낸다. */
+/** 페이지·레이아웃 전용. 던지는 대신 보낸다. */
 export async function requireAdminOrRedirect(): Promise<Viewer> {
   const viewer = await getViewer();
   if (!viewer) redirect("/login");
