@@ -59,7 +59,7 @@ secrets/
 
 # agent meta
 ai-service/.env.local
-ai-service/.env
+ai-service/.env.*.local
 *.pyc
 
 # agent meta
