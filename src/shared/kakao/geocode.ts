@@ -54,3 +54,83 @@ export function searchAddress(query: string): Promise<GeocodedCoord | null> {
     });
   });
 }
+
+/** 좌표를 되돌린 결과. `LocationSummary` 가 그대로 쓰는 모양이다. */
+export interface ReverseGeocoded {
+  /** 도로명 주소. 없으면 지번 주소로 떨어진다. */
+  addressKo: string;
+  /** 법정동 코드 10자리. */
+  regionCode: string;
+  /** 시·도 시·군·구 읍·면·동. */
+  regionKo: string;
+}
+
+/** 좌표 → 상세 주소 한 줄. */
+function toAddress(
+  geocoder: kakao.maps.services.Geocoder,
+  coord: GeocodedCoord,
+  okStatus: string,
+): Promise<string | null> {
+  return new Promise((resolve) => {
+    // ⚠️ (경도, 위도) 순서다. 바꿔 넣어도 오류 없이 엉뚱한 주소가 나온다.
+    geocoder.coord2Address(coord.lon, coord.lat, (result, status) => {
+      if (status !== okStatus || result.length === 0) {
+        resolve(null);
+        return;
+      }
+
+      // 밭·산간에는 도로명이 없는 경우가 흔하다. 그때는 지번이 유일한 주소다.
+      const [first] = result;
+      resolve(first.road_address?.address_name ?? first.address.address_name);
+    });
+  });
+}
+
+/** 좌표 → 법정동 코드와 이름. */
+function toRegion(
+  geocoder: kakao.maps.services.Geocoder,
+  coord: GeocodedCoord,
+  okStatus: string,
+): Promise<{ code: string; nameKo: string } | null> {
+  return new Promise((resolve) => {
+    geocoder.coord2RegionCode(coord.lon, coord.lat, (result, status) => {
+      if (status !== okStatus) {
+        resolve(null);
+        return;
+      }
+
+      // 법정동(B)과 행정동(H)이 함께 온다. 순서에 기대면 동네에 따라 행정동
+      // 코드가 섞여 들어오므로 종류로 고른다.
+      const legal = result.find((one) => one.region_type === "B");
+      if (!legal) {
+        resolve(null);
+        return;
+      }
+
+      resolve({ code: legal.code, nameKo: legal.address_name });
+    });
+  });
+}
+
+/** 좌표 하나를 주소·행정구역으로 되돌린다. 바다처럼 답이 없는 곳은 null. */
+export async function reverseGeocode(
+  coord: GeocodedCoord,
+): Promise<ReverseGeocoded | null> {
+  const sdk = window.kakao;
+  if (!sdk) return null;
+
+  const geocoder = new sdk.maps.services.Geocoder();
+  const okStatus = sdk.maps.services.Status.OK;
+
+  // 두 호출은 서로를 기다릴 이유가 없다. 순서대로 하면 왕복이 두 배가 되는데,
+  // 지도를 움직일 때마다 도는 경로라 그 지연이 화면에 그대로 보인다.
+  const [addressKo, region] = await Promise.all([
+    toAddress(geocoder, coord, okStatus),
+    toRegion(geocoder, coord, okStatus),
+  ]);
+
+  // 바다·비무장지대처럼 행정구역이 없는 곳이 있다. 하나라도 비면 표시할 수 없다.
+  if (!addressKo || !region) return null;
+
+  return { addressKo, regionCode: region.code, regionKo: region.nameKo };
+}
