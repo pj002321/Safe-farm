@@ -60,3 +60,14 @@ export function TerrainIcon(props: IconProps) {
     </svg>
   );
 }
+
+/** 세 폭으로 접힌 종이 지도. 하단 탭의 "지도"(지점이 아니라 지도 화면)에 쓴다. */
+export function MapIcon(props: IconProps) {
+  return (
+    <svg {...ICON_BASE} aria-hidden="true" {...props}>
+      <path d="M2.5 6.2 9 4l6 2.2L21.5 4v13.8L15 20l-6-2.2-6.5 2.2z" />
+      <path d="M9 4v13.8" />
+      <path d="M15 6.2V20" />
+    </svg>
+  );
+}
