@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="ko" data-theme="dark">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>텃밭 등록 — Safe Farm AI (레이아웃 시안)</title>
+<!-- 카카오맵 JS SDK: 아래 YOUR_KAKAO_JS_KEY 를 실제 앱 키로 교체하고,
+     카카오 개발자 콘솔 > 플랫폼 > Web 에 이 페이지가 뜨는 도메인을 등록해야 지도가 뜬다. -->
+<script src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=YOUR_KAKAO_JS_KEY&libraries=services"></script>
+<style>
+  :root {
+    --slate-0:#ffffff; --slate-50:#f8f8fb; --slate-100:#f0f0f6; --slate-400:#9998b3;
+    --slate-500:#6a6986; --slate-700:#383749; --slate-800:#24232f; --slate-850:#2b2a38;
+    --slate-900:#16161e; --slate-950:#0b0a12;
+    --orbit-200:#c8c2ff; --orbit-300:#a79dff; --orbit-950:#1c1840;
+    --ndvi-300:#bff053; --ndvi-950:#1f2a06;
+
+    --bg: var(--slate-950);
+    --surface: var(--slate-900);
+    --surface-2: var(--slate-800);
+    --border-c: var(--slate-850);
+    --fg: var(--slate-100);
+    --fg-muted: var(--slate-400);
+    --fg-subtle: var(--slate-500);
+    --accent: var(--orbit-300);
+    --accent-subtle: var(--orbit-950);
+    --accent-on: var(--slate-950);
+    --telemetry: var(--ndvi-300);
+    --telemetry-subtle: var(--ndvi-950);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font-family: "Pretendard", -apple-system, "Malgun Gothic", sans-serif;
+  }
+  nav {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 18px 32px; border-bottom: 1px solid var(--border-c);
+  }
+  nav .brand { font-weight: 700; }
+  nav a { color: var(--fg-muted); text-decoration: none; font-size: 14px; }
+
+  main {
+    display: grid;
+    grid-template-columns: 1.4fr 1fr;
+    gap: 20px;
+    padding: 28px 32px;
+    max-width: 1280px;
+    margin: 0 auto;
+  }
+  @media (max-width: 900px) {
+    main { grid-template-columns: 1fr; }
+  }
+
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  .sub { color: var(--fg-muted); font-size: 14px; margin: 0 0 20px; }
+
+  .map-card {
+    background: var(--surface);
+    border: 1px solid var(--border-c);
+    border-radius: 16px;
+    padding: 16px;
+    position: relative;
+  }
+  #map {
+    width: 100%; height: 480px; border-radius: 12px;
+    background: var(--surface-2); /* SDK 로드 전 자리표시 */
+  }
+  .map-search {
+    position: absolute; top: 32px; left: 32px; right: 32px;
+    display: flex; gap: 8px; z-index: 5;
+  }
+  .map-search input {
+    flex: 1; padding: 10px 14px; border-radius: 10px; border: 1px solid var(--border-c);
+    background: var(--surface); color: var(--fg); font-size: 14px;
+  }
+  .map-search button, .locate-btn {
+    padding: 10px 14px; border-radius: 10px; border: 1px solid var(--border-c);
+    background: var(--surface-2); color: var(--fg); font-size: 13px; cursor: pointer;
+  }
+  .locate-btn {
+    position: absolute; bottom: 32px; right: 32px; z-index: 5;
+  }
+  .map-hint {
+    margin-top: 10px; font-size: 12px; color: var(--fg-subtle);
+  }
+
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--border-c);
+    border-radius: 16px;
+    padding: 24px;
+    display: flex; flex-direction: column; gap: 18px;
+    align-self: start;
+  }
+  .field label {
+    display: block; font-size: 13px; color: var(--fg-muted); margin-bottom: 6px;
+  }
+  .field input {
+    width: 100%; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--border-c);
+    background: var(--surface-2); color: var(--fg); font-size: 14px;
+  }
+  .field input[readonly] { color: var(--fg-muted); }
+
+  .crop-picker { display: flex; gap: 8px; flex-wrap: wrap; }
+  .crop-chip {
+    padding: 8px 14px; border-radius: 999px; border: 1px solid var(--border-c);
+    background: var(--surface-2); color: var(--fg-muted); font-size: 13px; cursor: pointer;
+  }
+  .crop-chip[data-selected="true"] {
+    border-color: var(--accent); color: var(--accent); background: var(--accent-subtle);
+  }
+
+  .gdd-note {
+    font-size: 12px; color: var(--telemetry); background: var(--telemetry-subtle);
+    border-radius: 10px; padding: 10px 12px;
+  }
+
+  .submit-btn {
+    margin-top: 4px; padding: 12px; border-radius: 10px; border: none;
+    background: var(--accent); color: var(--accent-on); font-weight: 600; font-size: 14px;
+    cursor: pointer;
+  }
+  .submit-btn[disabled] { opacity: .5; cursor: not-allowed; }
+</style>
+</head>
+<body>
+
+<nav>
+  <span class="brand">Safe Farm AI</span>
+  <a href="/">← 랜딩으로</a>
+</nav>
+
+<main>
+  <section>
+    <h1>내 텃밭 등록</h1>
+    <p class="sub">지도를 눌러 위치를 찍거나 주소로 검색하세요. 좌표는 기상청 5km 격자(nx, ny)로 자동 변환됩니다. (기능ID V1-13~V1-17)</p>
+
+    <div class="map-card">
+      <div class="map-search">
+        <input id="addr-input" type="text" placeholder="주소 검색 (예: 경북 상주시 …)" />
+        <button id="addr-search-btn" type="button">검색</button>
+      </div>
+      <div id="map"></div>
+      <button class="locate-btn" id="locate-btn" type="button">📍 현재 위치</button>
+      <p class="map-hint">지도를 직접 눌러도 그 지점이 선택됩니다. 핀을 옮기면 아래 주소가 갱신됩니다.</p>
+    </div>
+  </section>
+
+  <aside class="panel">
+    <div class="field">
+      <label for="plot-name">텃밭 이름</label>
+      <input id="plot-name" type="text" placeholder="예: 낙동강변 논" />
+    </div>
+
+    <div class="field">
+      <label for="plot-addr">선택된 위치</label>
+      <input id="plot-addr" type="text" readonly placeholder="지도를 눌러 위치를 선택하세요" />
+    </div>
+
+    <div class="field">
+      <label for="plot-area">면적 (㎡)</label>
+      <input id="plot-area" type="number" placeholder="예: 3000" />
+    </div>
+
+    <div class="field">
+      <label>작물 선택 (복수 선택, 기능ID V1-18)</label>
+      <div class="crop-picker" id="crop-picker">
+        <span class="crop-chip" data-crop="rice">벼</span>
+        <span class="crop-chip" data-crop="cabbage">배추</span>
+        <span class="crop-chip" data-crop="persimmon">단감</span>
+      </div>
+    </div>
+
+    <p class="gdd-note">파종/재배 방식(씨앗·모종)을 다음 단계에서 선택하면 GDD 적산이 오늘부터 시작됩니다.</p>
+
+    <button class="submit-btn" id="submit-btn" type="button" disabled>텃밭 등록하기</button>
+  </aside>
+</main>
+
+<script>
+  // ── 크롭 칩 토글 ──────────────────────────────
+  document.querySelectorAll(".crop-chip").forEach((chip) => {
+    chip.addEventListener("click", () => {
+      chip.dataset.selected = chip.dataset.selected === "true" ? "false" : "true";
+    });
+  });
+
+  // ── 카카오맵 ──────────────────────────────────
+  // SDK 로드 실패(키 미설정) 시에도 레이아웃은 그대로 보이도록 가드한다.
+  if (window.kakao && window.kakao.maps) {
+    kakao.maps.load(() => {
+      const container = document.getElementById("map");
+      const map = new kakao.maps.Map(container, {
+        center: new kakao.maps.LatLng(36.4084, 128.1574), // 상주 기본값
+        level: 5,
+      });
+      const geocoder = new kakao.maps.services.Geocoder();
+      let marker = null;
+
+      const placeMarker = (latlng) => {
+        if (marker) marker.setMap(null);
+        marker = new kakao.maps.Marker({ map, position: latlng });
+        map.setCenter(latlng);
+      };
+
+      const reverseGeocode = (latlng) => {
+        geocoder.coord2Address(latlng.getLng(), latlng.getLat(), (result, status) => {
+          if (status === kakao.maps.services.Status.OK) {
+            document.getElementById("plot-addr").value = result[0].address.address_name;
+            document.getElementById("submit-btn").disabled = false;
+          }
+        });
+      };
+
+      const selectPoint = (latlng) => {
+        placeMarker(latlng);
+        reverseGeocode(latlng);
+      };
+
+      kakao.maps.event.addListener(map, "click", (mouseEvent) => {
+        selectPoint(mouseEvent.latLng);
+      });
+
+      document.getElementById("locate-btn").addEventListener("click", () => {
+        if (!navigator.geolocation) return;
+        navigator.geolocation.getCurrentPosition((pos) => {
+          selectPoint(new kakao.maps.LatLng(pos.coords.latitude, pos.coords.longitude));
+        });
+      });
+
+      document.getElementById("addr-search-btn").addEventListener("click", () => {
+        const q = document.getElementById("addr-input").value.trim();
+        if (!q) return;
+        geocoder.addressSearch(q, (result, status) => {
+          if (status === kakao.maps.services.Status.OK) {
+            const latlng = new kakao.maps.LatLng(result[0].y, result[0].x);
+            selectPoint(latlng);
+          }
+        });
+      });
+    });
+  }
+</script>
+
+</body>
+</html>

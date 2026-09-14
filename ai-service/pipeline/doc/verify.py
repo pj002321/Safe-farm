@@ -1,0 +1,88 @@
+"""점검. 개수 / 벡터 차원 / 토큰 / 눈으로 검색. 아무것도 만들지 않는다.
+
+앞:    python -m pipeline.doc.embed
+실행:  python -m pipeline.doc.verify ["질문"]
+"""
+
+import sys
+
+from sqlalchemy import func
+
+from app.core.config import DIMENSION, EMBED_MAX_TOKENS
+from app.core.db import new_session
+from app.knowledge.retriever import retrieve
+from app.models.chunk import Chunk
+from app.models.document import Document
+
+DEFAULT_QUERIES = ["장마철 병해충 관리", "서리 피해를 줄이는 방법"]
+
+
+def banner(title: str) -> None:
+    print()
+    print("=" * 74)
+    print(title)
+    print("=" * 74)
+
+
+def main() -> None:
+    queries = sys.argv[1:] or DEFAULT_QUERIES
+    db = new_session()
+    problems: list[str] = []
+    try:
+        banner("1. 개수")
+        n_docs = db.query(Document).count()
+        n_chunks = db.query(Chunk).count()
+        n_missing = db.query(Chunk).filter(Chunk.embedding.is_(None)).count()
+        print(f"  documents {n_docs:,}건 / chunks {n_chunks:,}개 / 벡터 없는 조각 {n_missing:,}개")
+        if not n_docs:
+            problems.append("documents 가 비어 있다 (load_data 를 먼저)")
+        if n_docs and not n_chunks:
+            problems.append("chunks 가 비어 있다 (chunk 를 먼저)")
+        if n_missing:
+            problems.append(f"벡터 없는 조각 {n_missing}개 (embed 를 다시)")
+
+        # 본문이 빈 채로 들어온 문서가 여기 잡힌다
+        orphan = db.query(Document).filter(~Document.chunks.any()).count()
+        if orphan:
+            problems.append(f"조각이 없는 문서 {orphan}건")
+
+        banner("2. 벡터")
+        sample = db.query(Chunk).filter(Chunk.embedding.is_not(None)).first()
+        if sample is None:
+            problems.append("벡터가 하나도 없다")
+        else:
+            dim = len(sample.embedding)
+            print(f"  차원 {dim} (설정값 {DIMENSION})")
+            if dim != DIMENSION:
+                problems.append(f"차원 불일치: DB {dim} vs 설정 {DIMENSION}")
+
+        banner("3. 토큰")
+        stats = db.query(
+            func.avg(Chunk.n_tokens), func.max(Chunk.n_tokens), func.min(Chunk.n_tokens)
+        ).one()
+        if stats[0] is not None:
+            print(f"  평균 {float(stats[0]):.1f} / 최대 {stats[1]} / 최소 {stats[2]}")
+            over = db.query(Chunk).filter(Chunk.n_tokens > EMBED_MAX_TOKENS).count()
+            if over:
+                problems.append(f"한도({EMBED_MAX_TOKENS})를 넘는 조각 {over}개 - 뒤가 잘렸다")
+
+        banner("4. 눈으로")
+        if sample is not None:
+            for question in queries:
+                print(f"\n  Q. {question}")
+                for rank, chunk in enumerate(retrieve(db, question, top_k=3), 1):
+                    body = chunk.body.replace("\n", " ")[:80]
+                    print(f"    {rank}. [doc {chunk.document_id}] {body}...")
+
+        banner("결과")
+        if problems:
+            for p in problems:
+                print(f"  [문제] {p}")
+        else:
+            print("  이상 없음")
+    finally:
+        db.close()
+
+
+if __name__ == "__main__":
+    main()

@@ -1,4 +1,4 @@
-import type { NextRequest } from "next/server";
+import { type NextRequest, NextResponse } from "next/server";
 import {
   redirectKeepingCookies,
   updateSupabaseSession,
@@ -69,6 +69,25 @@ const ADMIN_PREFIX = "/admin";
 export async function updateSession(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
 
+  // ⓪ 랜딩에 잘못 배달된 인증 코드를 콜백으로 넘긴다.
+  //
+  //    Supabase 는 돌아온 주소를 **허용 목록과 대조**하고, 어긋나면 조용히
+  //    Site URL(= 우리 랜딩)로 떨어뜨린다. 오류를 내지 않으므로 화면에는
+  //    "로그인을 눌렀는데 그냥 첫 화면으로 돌아왔다"로만 보인다. 실제로 이
+  //    증상을 겪었고, 원인은 콘솔의 Redirect URLs 설정이었다.
+  //
+  //    설정을 고치는 것이 근본 해결이고 아래는 그것을 대신하지 않는다.
+  //    다만 Site URL 폴백은 Supabase 의 **문서화된 동작**이라, 그 자리에서
+  //    코드를 받아 넘겨 주는 편이 로그인이 조용히 실패하는 것보다 낫다.
+  //    넘기는 파라미터는 우리가 아는 것만이고 목적지는 우리 경로로 고정이라
+  //    열린 리다이렉트가 되지 않는다.
+  const strayCode = pathname === "/" ? forwardableAuthParams(request) : null;
+  if (strayCode) {
+    return NextResponse.redirect(
+      new URL(`/auth/callback?${strayCode}`, request.url),
+    );
+  }
+
   // ① 토큰 갱신을 **먼저** 한다. 공개 경로에서도 한다(위 주석 참고).
   //    response 에는 갱신된 쿠키가 실려 있으므로, 아래 어떤 갈래로 가든
   //    이 응답을 그대로 돌려주거나 redirectKeepingCookies 로 옮겨야 한다.
@@ -103,4 +122,25 @@ export async function updateSession(request: NextRequest) {
   }
 
   return response;
+}
+
+/**
+ * 랜딩에 도착한 OAuth 파라미터를 콜백으로 넘길 쿼리 문자열로 만든다.
+ *
+ * **우리가 아는 이름만** 옮긴다. 들어온 쿼리를 통째로 전달하면 사용자가 만든
+ * 값이 콜백으로 흘러 들어간다. 넘길 것이 없으면 null 이고, 그때는 랜딩이
+ * 평소대로 그려진다(정적 프리렌더를 잃지 않도록 페이지가 아니라 여기서 본다).
+ */
+function forwardableAuthParams(request: NextRequest): string | null {
+  const source = request.nextUrl.searchParams;
+  const code = source.get("code");
+  const error = source.get("error");
+  if (!code && !error) return null;
+
+  const forwarded = new URLSearchParams();
+  if (code) forwarded.set("code", code);
+  if (error) forwarded.set("error", error);
+  const description = source.get("error_description");
+  if (description) forwarded.set("error_description", description);
+  return forwarded.toString();
 }

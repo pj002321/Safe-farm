@@ -499,8 +499,7 @@ def my_regions(reg_id, table):
 
 ```
 # 위경도 → 격자
-https://apihub.kma.go.kr/api/typ01/cgi-bin/url/nph-dfs_xy_lonlat
-  ?authKey={KEY}&lon=128.1574&lat=36.4084&help=0
+https://apihub.kma.go.kr/api/typ01/cgi-bin/url/nph-dfs_xy_lonlat?authKey={KEY}&lon=128.1574&lat=36.4084&help=0
 
 # 격자 → 위경도 (반대 방향. 같은 엔드포인트)
   ?authKey={KEY}&x=60&y=127&help=1

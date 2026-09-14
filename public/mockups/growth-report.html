@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="ko" data-theme="dark">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>오늘의 배추 소식 — Safe Farm AI (레이아웃 시안)</title>
+<style>
+  :root {
+    --slate-0:#ffffff; --slate-100:#f0f0f6; --slate-400:#9998b3; --slate-500:#6a6986;
+    --slate-700:#383749; --slate-800:#24232f; --slate-850:#2b2a38; --slate-900:#16161e; --slate-950:#0b0a12;
+    --orbit-300:#a79dff; --orbit-950:#1c1840;
+    --ndvi-300:#bff053; --ndvi-950:#1f2a06;
+    --ember-300:#fbaa4a; --ember-950:#2a1a06;
+    --flare-300:#ff7a90; --flare-950:#2a0a10;
+    --glacier-300:#79c0ff;
+
+    --bg: var(--slate-950);
+    --surface: var(--slate-900);
+    --surface-2: var(--slate-800);
+    --border-c: var(--slate-850);
+    --fg: var(--slate-100);
+    --fg-muted: var(--slate-400);
+    --fg-subtle: var(--slate-500);
+    --accent: var(--orbit-300);
+    --accent-subtle: var(--orbit-950);
+    --accent-on: var(--slate-950);
+    --telemetry: var(--ndvi-300);
+
+    --good: var(--ndvi-300);
+    --caution: var(--ember-300);
+    --caution-subtle: var(--ember-950);
+    --unsuitable: var(--flare-300);
+    --unsuitable-subtle: var(--flare-950);
+    --info: var(--glacier-300);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--fg);
+    font-family: "Pretendard", -apple-system, "Malgun Gothic", sans-serif;
+  }
+  nav {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 18px 32px; border-bottom: 1px solid var(--border-c);
+  }
+  nav .brand { font-weight: 700; }
+  nav a { color: var(--fg-muted); text-decoration: none; font-size: 14px; }
+
+  main { max-width: 760px; margin: 0 auto; padding: 32px; }
+
+  .head { margin-bottom: 20px; }
+  .head .eyebrow { color: var(--accent); font-size: 13px; margin-bottom: 6px; }
+  .head h1 { margin: 0 0 6px; font-size: 24px; }
+  .head .sub { color: var(--fg-muted); font-size: 14px; margin: 0; }
+
+  /* ── 입력 스냅샷: 코드가 계산한 값을 먼저 보여준다(근거 투명성) ── */
+  .snapshot {
+    background: var(--surface); border: 1px solid var(--border-c); border-radius: 14px;
+    padding: 18px 20px; margin-bottom: 20px;
+  }
+  .snapshot-grid {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px 18px;
+    font-size: 13px;
+  }
+  .snapshot-grid dt { color: var(--fg-subtle); margin-bottom: 2px; }
+  .snapshot-grid dd { margin: 0; font-size: 15px; font-weight: 600; }
+
+  .gdd-bar-row { margin-top: 16px; }
+  .gdd-bar-row .label { display: flex; justify-content: space-between; font-size: 12px; color: var(--fg-muted); margin-bottom: 6px; }
+  .gdd-bar { height: 6px; border-radius: 999px; background: var(--surface-2); overflow: hidden; }
+  .gdd-bar > span { display: block; height: 100%; background: var(--telemetry); }
+
+  /* ── 쿼리 진행 상태 ── */
+  #query-state {
+    display: flex; align-items: center; gap: 10px;
+    background: var(--surface); border: 1px solid var(--border-c); border-radius: 14px;
+    padding: 16px 20px; margin-bottom: 20px; font-size: 14px; color: var(--fg-muted);
+  }
+  .spinner {
+    width: 16px; height: 16px; border-radius: 50%;
+    border: 2px solid var(--surface-2); border-top-color: var(--accent);
+    animation: spin 0.8s linear infinite; flex-shrink: 0;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  #query-state[data-state="done"] { display: none; }
+
+  /* ── LLM 응답 (5단 구조 요약 + 할일 + 주의) ── */
+  #report { display: none; flex-direction: column; gap: 16px; }
+  #report[data-visible="true"] { display: flex; }
+
+  .card {
+    background: var(--surface); border: 1px solid var(--border-c); border-radius: 14px;
+    padding: 20px;
+  }
+  .card h2 { margin: 0 0 10px; font-size: 15px; }
+  .card p { margin: 0; line-height: 1.6; font-size: 14px; color: var(--fg); }
+  .card p + p { margin-top: 10px; }
+
+  .todo-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+  .todo-list li {
+    display: flex; gap: 8px; align-items: flex-start; font-size: 14px;
+    padding: 10px 12px; background: var(--surface-2); border-radius: 10px;
+  }
+  .todo-list li::before { content: "✓"; color: var(--good); flex-shrink: 0; }
+
+  .warn-card {
+    border-color: var(--caution);
+    background: var(--caution-subtle);
+  }
+  .warn-card h2 { color: var(--caution); }
+
+  .evidence-toggle {
+    background: none; border: none; color: var(--fg-subtle); font-size: 12px;
+    cursor: pointer; text-decoration: underline; padding: 0; margin-top: 4px;
+  }
+  pre.evidence {
+    display: none; margin-top: 10px; background: var(--slate-950); border-radius: 10px;
+    padding: 12px; font-size: 12px; color: var(--fg-muted); overflow-x: auto;
+  }
+  pre.evidence[data-open="true"] { display: block; }
+
+  .disclaimer { font-size: 11px; color: var(--fg-subtle); margin-top: 24px; line-height: 1.6; }
+</style>
+</head>
+<body>
+
+<nav>
+  <span class="brand">Safe Farm AI</span>
+  <a href="/">← 내 밭으로</a>
+</nav>
+
+<main>
+  <div class="head">
+    <p class="eyebrow">오늘의 소식 · 배추밭 · 2026-09-14</p>
+    <h1>오늘의 배추 소식</h1>
+    <p class="sub">기상청 실측과 농진청 기준으로 계산한 값을, LLM이 쉬운 말로 풀어드립니다.</p>
+  </div>
+
+  <!-- 코드가 계산한 입력값: LLM은 이 값을 문장으로 바꾸기만 한다(수치 창작 금지 원칙) -->
+  <section class="snapshot">
+    <dl class="snapshot-grid">
+      <div><dt>파종일 → 오늘</dt><dd>7/9 → D+67</dd></div>
+      <div><dt>현재 생육단계</dt><dd>결구기</dd></div>
+      <div><dt>평년 대비 편차</dt><dd>+1.2°C</dd></div>
+      <div><dt>최근 7일 강수량</dt><dd>0.1mm</dd></div>
+      <div><dt>내일 최저기온</dt><dd>15.0°C</dd></div>
+      <div><dt>목표까지</dt><dd>8일</dd></div>
+    </dl>
+    <div class="gdd-bar-row">
+      <div class="label"><span>누적 GDD</span><span>384 / 520</span></div>
+      <div class="gdd-bar"><span style="width:74%"></span></div>
+    </div>
+  </section>
+
+  <!-- 쿼리 진행 상태: 요청 중엔 이것만 보이고, 응답 도착하면 #report 로 바뀐다 -->
+  <div id="query-state" data-state="loading">
+    <span class="spinner"></span>
+    <span id="query-state-text">입력값을 정리해서 LLM에 보내는 중…</span>
+  </div>
+
+  <section id="report" data-visible="false">
+    <article class="card">
+      <h2>📋 요약</h2>
+      <p>배추가 결구기에 들어섰습니다. 표준 결구 적기(15~16°C)보다 낮 기온이 아직 높아 속이 천천히 차는 중입니다.</p>
+      <p>같은 조건의 평년 배추밭과 비교하면 생육 자체는 순조롭지만, 최근 이레 동안 비가 0.1mm밖에 오지 않아 토양이 마른 상태입니다.</p>
+    </article>
+
+    <article class="card">
+      <h2>✅ 할 일</h2>
+      <ul class="todo-list">
+        <li>오늘~내일 중 이동식 스프링클러나 물뿌리개로 물 주기</li>
+        <li>짚 덮기(멀칭)로 토양 수분 증발 늦추기</li>
+        <li>결구 진행 상태를 사흘 뒤 다시 확인하기</li>
+      </ul>
+    </article>
+
+    <article class="card warn-card">
+      <h2>⚠️ 주의</h2>
+      <p>내일 최저기온이 15.0°C로 결구 적기 하한에 가깝습니다. 이후 급격한 저온특보가 뜨면 알림으로 다시 안내합니다.</p>
+    </article>
+
+    <button class="evidence-toggle" id="evidence-toggle" type="button">이 답변의 근거(입력 스냅샷) 보기</button>
+    <pre class="evidence" id="evidence">{
+  "seed_date": "2026-07-09",
+  "today": "2026-09-14",
+  "crop": "배추",
+  "stage": "결구기",
+  "gdd_cum": 384,
+  "gdd_target": 520,
+  "deviation_from_normal_c": 1.2,
+  "rain_7d_mm": 0.1,
+  "tmin_tomorrow_c": 15.0
+}</pre>
+
+    <p class="disclaimer">
+      이 요약은 위 입력값만으로 생성됩니다. 병해충 진단은 하지 않으며, 관찰 포인트 안내까지만 제공합니다.
+      위성 데이터는 이 리포트에 직접 쓰이지 않고, 지역 단위 이상기후 조기경보에만 별도로 쓰입니다.
+    </p>
+  </section>
+</main>
+
+<script>
+  // ── 쿼리 발신 → 응답 표시 시뮬레이션 ──────────────────────
+  // 실제 연동 시 이 setTimeout 자리에 /api/recommendation 같은 엔드포인트 fetch가 들어간다.
+  const stateEl = document.getElementById("query-state");
+  const stateText = document.getElementById("query-state-text");
+  const report = document.getElementById("report");
+
+  setTimeout(() => {
+    stateText.textContent = "LLM이 답변을 쓰는 중…";
+  }, 700);
+
+  setTimeout(() => {
+    stateEl.dataset.state = "done";
+    report.dataset.visible = "true";
+  }, 1600);
+
+  document.getElementById("evidence-toggle").addEventListener("click", () => {
+    const el = document.getElementById("evidence");
+    el.dataset.open = el.dataset.open === "true" ? "false" : "true";
+  });
+</script>
+
+</body>
+</html>

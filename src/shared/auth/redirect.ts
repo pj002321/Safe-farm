@@ -43,3 +43,19 @@ export function safeNextPath(raw: string | null): string {
   if (CONTROL_CHARS.test(raw)) return DEFAULT_AFTER_LOGIN;
   return raw;
 }
+
+/**
+ * 구글 로그인처럼 **페이지를 떠나는** 흐름에서 복귀 경로를 맡겨 두는 쿠키 이름.
+ *
+ * 예전에는 `redirectTo` 의 쿼리스트링(`/auth/callback?next=…`)으로 날랐다.
+ * 그런데 Supabase 는 돌아온 주소를 **허용 목록과 대조**하고, 어긋나면 조용히
+ * Site URL 로 떨어뜨린다. 쿼리가 붙으면 `…/auth/callback` 만 등록된 목록과
+ * 어긋날 수 있어, 콜백 대신 랜딩으로 코드가 배달되고 로그인이 완성되지 않는다.
+ *
+ * 그래서 `redirectTo` 는 **쿼리 없는 고정 주소**로 두고, 복귀 경로는 쿠키로 나른다.
+ * 허용 목록에 한 줄만 등록하면 되므로 설정이 어긋날 여지도 함께 준다.
+ *
+ * ⚠️ `SameSite=Lax` 여야 한다. `Strict` 면 구글에서 돌아오는 교차 사이트
+ *    최상위 이동에 실리지 않아 콜백이 빈손이 된다.
+ */
+export const POST_LOGIN_COOKIE = "sf-post-login";

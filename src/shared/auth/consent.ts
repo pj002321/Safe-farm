@@ -6,12 +6,15 @@
  * - 동의는 **화면과 서버** 두 곳에서 같은 규칙으로 판정돼야 한다. 화면에서만
  *   막으면 세션 생성 요청을 직접 POST 해서 우회할 수 있다. 그래서 판정 규칙을
  *   순수 함수로 여기 모은다.
- * - 예전에는 동의 값을 쿠키에 직렬화해서 들고 다녔다. 구글 가입이 페이지를
- *   떠났다 돌아오는 OAuth 리다이렉트였기 때문이다. Firebase 는
- *   `signInWithPopup` 으로 **페이지를 떠나지 않으므로** 동의는 React 상태로
- *   남아 있다가 `POST /api/auth/session` 의 body 에 그대로 실린다.
- *   그래서 쿠키 직렬화 계층은 전부 지웠다.
- * - 대신 body 로 들어오는 값은 **신뢰할 수 없다.** `parseConsent` 가 좁힌다.
+ * - 기록 경로가 **가입 방식에 따라 둘**이다. 하나로 합치려다 실패한 자리이므로
+ *   왜 나뉘는지 적어 둔다:
+ *     · 이메일 — `signUp(options.data)` 로 `raw_user_meta_data.consent` 에 실려
+ *       가고, `handle_new_user` 트리거가 프로필 행을 만들면서 같이 찍는다.
+ *       앱 코드가 끼어들지 않아 **메일 인증 대기 중에도** 기록이 남는다.
+ *     · 구글 — OAuth 라 페이지를 떠난다. 위 방법을 쓸 수 없어(공급자 로그인에는
+ *       user_metadata 를 실을 자리가 없다) 쿠키에 맡겼다가 `/auth/callback` 이
+ *       세션을 만든 직후 기록한다.
+ * - 어느 쪽이든 들어오는 값은 **신뢰할 수 없다.** `parseConsent` 가 좁힌다.
  *
  * ⚠️ 알려진 구멍: **`/login` 의 구글 버튼으로 처음 오는 사용자.**
  *   구글은 로그인과 가입을 구분하지 않으므로, 계정이 없는 사람이 로그인 화면의
@@ -119,4 +122,43 @@ export function toConsentMetadata(consent: Consent, agreedAt: string) {
     privacy_agreed_at: agreedAt,
     marketing_opt_in: consent.marketing,
   };
+}
+
+/**
+ * 구글 가입처럼 **페이지를 떠나는** 흐름에서 동의를 잠시 맡겨 두는 쿠키 이름.
+ *
+ * sessionStorage 가 아니라 쿠키인 이유: 돌아오는 곳이 `/auth/callback` 이라는
+ * **서버 라우트**이고, 세션이 거기서 막 만들어진다. 같은 요청 안에서 동의를
+ * 기록하려면 서버가 값을 읽을 수 있어야 하는데, sessionStorage 는 브라우저
+ * 밖으로 나오지 않는다.
+ *
+ * ⚠️ `SameSite=Lax` 로 심어야 한다. `Strict` 면 구글에서 돌아오는 **교차 사이트
+ *    최상위 이동**에 쿠키가 실리지 않아 콜백이 빈손이 된다.
+ */
+export const PENDING_CONSENT_COOKIE = "sf-pending-consent";
+
+/** 쿠키에 실을 문자열. */
+export function serializeConsent(consent: Consent): string {
+  return JSON.stringify({
+    terms: consent.terms,
+    privacy: consent.privacy,
+    marketing: consent.marketing,
+  });
+}
+
+/**
+ * 쿠키에서 읽은 문자열을 `Consent` 로.
+ *
+ * **던지지 않는다.** 쿠키는 사용자가 고칠 수 있고, 깨진 값 하나로 콜백이 500 을
+ * 내면 로그인 자체가 막힌다. 해석에 실패하면 `parseConsent` 와 같은 방침으로
+ * "아무것도 동의하지 않음"이 된다 — 받지 않은 동의를 기록하는 것이 기록하지
+ * 않는 것보다 나쁘다.
+ */
+export function deserializeConsent(raw: string | null | undefined): Consent {
+  if (!raw) return parseConsent(null);
+  try {
+    return parseConsent(JSON.parse(raw));
+  } catch {
+    return parseConsent(null);
+  }
 }
