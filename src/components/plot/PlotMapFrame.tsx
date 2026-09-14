@@ -77,7 +77,7 @@ export function PlotMapFrame() {
           둘을 합치면 지도가 모서리를 뚫고 나온다(카카오맵이 자식에 overflow 를 건다). */}
       <div className="relative overflow-hidden rounded-lg border-2 border-accent/30 bg-accent-subtle/40 shadow-e1">
         <div
-          className="h-[20rem] w-full sm:h-[26rem]"
+          className="h-[19rem] w-full sm:h-[22rem]"
           id={PLOT_MAP_CONTAINER_ID}
           style={{
             backgroundImage:
