@@ -18,44 +18,75 @@ Supabase 연결 시 주의:
 
 from __future__ import annotations
 
-from functools import lru_cache
-
 from sqlalchemy import Engine, create_engine
+from sqlalchemy.engine import URL
 from sqlalchemy.orm import Session, declarative_base, sessionmaker
 
-from app.core.config import DATABASE_URL
+from app.core.config import (
+    DATABASE_URL,
+    DB_CONNECT_TIMEOUT,
+    DB_HOST,
+    DB_NAME,
+    DB_PASSWORD,
+    DB_POOL_RECYCLE,
+    DB_POOL_SIZE,
+    DB_PORT,
+    DB_SSLMODE,
+    DB_USER,
+)
 
 Base = declarative_base()
+SessionLocal = sessionmaker()
+
+_engine: Engine | None = None
 
 
-@lru_cache(maxsize=1)
-def get_engine() -> Engine:
-    """엔진을 한 번만 만들어 재사용한다. DATABASE_URL 이 없으면 여기서 던진다."""
-    if not DATABASE_URL:
+def _resolve_url() -> str | URL:
+    """DATABASE_URL 이 있으면 그쪽, 없으면 조각으로 조립.
+
+    URL.create 가 비번을 대신 인코딩한다. 문자열로 이으면 @ 가 든 비번에서
+    호스트 경계가 밀리는데, 에러 없이 조용히 틀린다.
+    """
+    if DATABASE_URL:
+        return DATABASE_URL
+    if not DB_HOST:
         raise RuntimeError(
-            "DATABASE_URL 이 설정되지 않았습니다. "
-            "Supabase > Project Settings > Database > Connection string 의 "
-            "Session mode(5432) 값을 넣으세요."
+            "DB 접속 정보가 없습니다. ai-service/.env.local 에 둘 중 하나를 넣으세요.\n"
+            "  1) DATABASE_URL=postgresql://...  (비밀번호는 퍼센트 인코딩)\n"
+            "  2) DB_HOST / DB_USER / DB_PASSWORD (+ DB_PORT, DB_NAME)  (비밀번호 날것)"
         )
-    return create_engine(
-        DATABASE_URL,
-        # 풀러가 유휴 연결을 끊으므로 꺼내 쓰기 전에 살아있는지 확인한다.
-        pool_pre_ping=True,
-        # 컨테이너 하나가 들고 있을 연결 수. Supabase Nano 는 풀러 클라이언트
-        # 연결이 200개라, 레플리카를 늘릴 것을 감안해 작게 잡는다.
-        pool_size=5,
-        max_overflow=5,
+    return URL.create(
+        "postgresql+psycopg2",
+        username=DB_USER,
+        password=DB_PASSWORD,
+        host=DB_HOST,
+        port=DB_PORT,
+        database=DB_NAME,
     )
 
 
-@lru_cache(maxsize=1)
-def get_session_factory() -> sessionmaker[Session]:
-    return sessionmaker(bind=get_engine(), expire_on_commit=False)
+def get_engine() -> Engine:
+    global _engine
+    if _engine is None:
+        _engine = create_engine(
+            _resolve_url(),
+            pool_pre_ping=True,  # pooler 가 유휴 연결을 말없이 끊는다. 긴 배치가 여기서 죽는다
+            pool_recycle=DB_POOL_RECYCLE,
+            pool_size=DB_POOL_SIZE,
+            max_overflow=0,  # 배치가 연결을 불려 pooler 한도를 치지 않게
+            connect_args={"sslmode": DB_SSLMODE, "connect_timeout": DB_CONNECT_TIMEOUT},
+        )
+    return _engine
+
+
+def new_session() -> Session:
+    """배치 스크립트용. 쓰는 쪽이 close 까지 책임진다."""
+    return SessionLocal(bind=get_engine())
 
 
 def get_db():
     """FastAPI 의존성. 요청 하나당 세션 하나."""
-    db = get_session_factory()()
+    db = new_session()
     try:
         yield db
     finally:
