@@ -130,7 +130,14 @@ export async function reverseGeocode(
   ]);
 
   // 바다·비무장지대처럼 행정구역이 없는 곳이 있다. 하나라도 비면 표시할 수 없다.
-  if (!addressKo || !region) return null;
+  // 행정구역은 필수다 — 기상·위성 조회의 키라서 없으면 등록해도 쓸 수 없다.
+  // 반면 상세 주소는 표시용이라, 못 얻으면 행정구역 이름으로 대신한다.
+  // 둘 다 요구하면 주소만 비는 지점에서 멀쩡한 밭이 등록을 못 한다.
+  if (!region) return null;
 
-  return { addressKo, regionCode: region.code, regionKo: region.nameKo };
+  return {
+    addressKo: addressKo ?? region.nameKo,
+    regionCode: region.code,
+    regionKo: region.nameKo,
+  };
 }
