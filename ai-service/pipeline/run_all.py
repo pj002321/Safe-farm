@@ -10,7 +10,7 @@
 import argparse
 
 from app.core.config import KMA_API_KEY
-from app.core.db import get_session_factory
+from app.core.db import new_session
 from pipeline.load_data import load_alerts, load_disaster_rule, load_normals, load_weather_daily
 
 
@@ -33,7 +33,7 @@ def main():
     if not KMA_API_KEY:
         raise SystemExit("KMA_API_KEY 가 없습니다 — ai-service/.env.local 확인")
 
-    db = get_session_factory()()
+    db = new_session()
     try:
         n = load_weather_daily(
             db, args.plot_id, KMA_API_KEY, args.stn, args.lat, args.lon,

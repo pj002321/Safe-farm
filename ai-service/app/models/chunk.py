@@ -1,1 +1,6 @@
 """청크가 뭔지 (테이블 스키마: 컬럼,타입)"""
+
+
+class Chunk:
+    def __init__(self):
+        pass

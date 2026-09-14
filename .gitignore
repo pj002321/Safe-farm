@@ -58,8 +58,14 @@ firestore-debug.log*
 secrets/
 
 # agent meta
-.claude/.headroom_wrap_marker.json
 ai-service/.env.local
 ai-service/.env
 *.pyc
 
+# agent meta
+.claude/.headroom_wrap_marker.json
+.claude/.headroom_wrap_owners.json
+.claude/.headroom_wrap_settings.lock
+# Claude Code — 개인 설정 (내 PC 경로·로컬 프록시가 들어간다)
+# 팀 규칙은 AGENTS.md, 팀 공용 스킬은 .claude/skills/ 에 두고 커밋한다.
+.claude/settings.local.json

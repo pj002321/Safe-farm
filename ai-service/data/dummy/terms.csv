@@ -1,0 +1,6 @@
+type,version,is_required,effective_at,content_url
+TERMS,v1.0,true,2026-01-01T00:00:00+09:00,https://example.invalid/terms/v1.0
+PRIVACY,v1.0,true,2026-01-01T00:00:00+09:00,https://example.invalid/privacy/v1.0
+LOCATION,v1.0,true,2026-01-01T00:00:00+09:00,https://example.invalid/location/v1.0
+MARKETING,v1.0,false,2026-01-01T00:00:00+09:00,https://example.invalid/marketing/v1.0
+TERMS,v1.1,true,2026-06-01T00:00:00+09:00,https://example.invalid/terms/v1.1
