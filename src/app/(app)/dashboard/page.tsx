@@ -53,12 +53,12 @@ export default async function DashboardPage() {
   const profile = await getCurrentProfile();
 
   return (
-    <main className="mx-auto flex max-w-6xl flex-col gap-8 px-6 py-8 sm:py-10">
-      {/* ── 최상단 고정 알림 ───────────────────────── */}
-      <div className="flex flex-col gap-3">
-        <HazardBanner alert={SAMPLE_ALERT} />
-        <DeviationBanner deviationKo={SAMPLE_DEVIATION} />
-      </div>
+    <main className="mx-auto flex max-w-6xl flex-col gap-7 px-6 py-6 sm:py-8">
+      {/* ── 최상단 고정 알림 ─────────────────────────
+          특보만 여기 둔다. 생육 편차(중 우선순위)까지 위에 쌓으면 화면 맨 위를
+          두 덩어리가 먹어, 정작 봐야 할 할 일이 접힌 곳 아래로 밀린다.
+          편차는 텃밭 생육 얘기라 아래 텃밭 섹션이 제자리다. */}
+      <HazardBanner alert={SAMPLE_ALERT} />
 
       {/* ── 머리말 ─────────────────────────────────── */}
       <div className="flex flex-wrap items-end justify-between gap-4">
@@ -95,6 +95,9 @@ export default async function DashboardPage() {
           </span>
         </h2>
         <PlotStrip plots={SAMPLE_PLOTS} />
+        <div className="mt-3">
+          <DeviationBanner deviationKo={SAMPLE_DEVIATION} />
+        </div>
       </section>
 
       {/* ── 할 일 + 주말 예보 ──────────────────────── */}
