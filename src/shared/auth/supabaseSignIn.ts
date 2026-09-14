@@ -1,7 +1,11 @@
 "use client";
 
 import { getSupabaseBrowser } from "@/shared/supabase/client";
-import type { Consent } from "./consent";
+import {
+  type Consent,
+  PENDING_CONSENT_COOKIE,
+  serializeConsent,
+} from "./consent";
 import { safeNextPath } from "./redirect";
 
 /**
@@ -108,24 +112,34 @@ export async function signUpWithEmail(input: {
  *
  * 실패(설정 누락 등)일 때만 결과가 돌아온다.
  */
-/** 콜백에서 동의를 기록하려고 잠시 맡겨 두는 자리. */
-export const PENDING_CONSENT_KEY = "safe-farm-pending-consent";
+/**
+ * 동의를 쿠키에 맡긴다. 구글에서 돌아온 `/auth/callback`(서버)이 읽어 기록한다.
+ *
+ * 예전에는 sessionStorage 에 넣었는데 **읽는 쪽이 없었다** — 브라우저 안에만
+ * 있는 값이라 서버 라우트인 콜백이 볼 수 없었기 때문이다. 그 결과 구글로 가입한
+ * 사용자의 동의가 한 건도 기록되지 않았다.
+ */
+function stashConsentForCallback(consent: Consent): void {
+  const attributes = [
+    `${PENDING_CONSENT_COOKIE}=${encodeURIComponent(serializeConsent(consent))}`,
+    "Path=/",
+    // 구글 왕복에 넉넉하고, 다음 로그인까지 남지는 않을 길이.
+    "Max-Age=600",
+    // Strict 면 구글에서 돌아오는 교차 사이트 이동에 실리지 않는다. Lax 여야 한다.
+    "SameSite=Lax",
+  ];
+  // 로컬은 http 라 Secure 를 붙이면 쿠키가 아예 안 심긴다.
+  if (window.location.protocol === "https:") attributes.push("Secure");
+  // biome-ignore lint/suspicious/noDocumentCookie: 대안으로 권하는 Cookie Store API 는 Chrome 계열에만 있다. Safari·Firefox 에 없어 쓰면 iOS 사용자가 구글 가입을 통째로 못 한다.
+  document.cookie = attributes.join("; ");
+}
 
 export async function signInWithGoogle(
   consent?: Consent,
   next?: string,
 ): Promise<SignInResult> {
-  // 구글 로그인은 **페이지를 떠난다.** React 상태에 든 동의는 돌아올 때 사라지므로
-  // 세션스토리지에 맡긴다(탭을 닫으면 같이 사라져 localStorage 보다 수명이 짧다).
-  // 콜백 이후 화면이 이 값을 읽어 서버에 기록한다.
-  if (consent) {
-    try {
-      sessionStorage.setItem(PENDING_CONSENT_KEY, JSON.stringify(consent));
-    } catch {
-      // 사이트 데이터를 막은 브라우저에서는 접근만으로 던진다. 동의 기록은
-      // 온보딩 화면에서 다시 받으면 되므로 로그인 자체를 막지 않는다.
-    }
-  }
+  // 구글 로그인은 **페이지를 떠난다.** React 상태에 든 동의는 돌아올 때 사라진다.
+  if (consent) stashConsentForCallback(consent);
 
   const { error } = await getSupabaseBrowser().auth.signInWithOAuth({
     provider: "google",
