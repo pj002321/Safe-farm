@@ -1,4 +1,22 @@
-"""DB 연결. 엔진은 처음 쓸 때 만든다 — 접속 정보가 없어도 import 는 되어야 한다."""
+"""DB 연결과 세션.
+
+왜 엔진을 모듈 최상위에서 만들지 않는가:
+    예전 코드는 `engine = create_engine(DATABASE_URL)` 을 import 시점에 실행했다.
+    DATABASE_URL 이 비어 있으면 **모듈을 import 하는 것만으로** 예외가 터진다.
+    로컬에서는 바로 보이지만, 컨테이너(Railway·Cloud Run)에서는 "앱이 포트를
+    열지 않았다"는 모호한 오류로만 나타나서 원인을 찾기 어렵다.
+    그래서 첫 사용 시점까지 미룬다 — DB 없이도 앱이 뜨고 /health 가 응답한다.
+
+Supabase 연결 시 주의:
+    - **Session mode(5432)** 를 쓴다. 호스트가 `aws-N-REGION.pooler.supabase.com`,
+      유저가 `postgres.<프로젝트REF>` 인 쪽이다. Direct(db.<REF>.supabase.co)는
+      IPv6 전용이라 대부분의 컨테이너 호스트에서 안 붙는다.
+    - `pool_pre_ping=True` 가 필수다. 풀러가 유휴 연결을 끊는데, 이게 없으면
+      다음 요청이 죽은 커넥션을 집어 `server closed the connection unexpectedly`
+      로 실패한다. 간헐적이라 재현이 어려운 종류다.
+"""
+
+from __future__ import annotations
 
 from sqlalchemy import Engine, create_engine
 from sqlalchemy.engine import URL
@@ -67,7 +85,7 @@ def new_session() -> Session:
 
 
 def get_db():
-    """FastAPI 의존성. 요청 하나에 세션 하나."""
+    """FastAPI 의존성. 요청 하나당 세션 하나."""
     db = new_session()
     try:
         yield db

@@ -1,0 +1,32 @@
+# ─────────────────────────────────────────────────────────────
+# `gcloud run deploy --source=.` 가 Cloud Storage 로 올릴 때 뺄 것.
+#
+# ⚠️ gcloud 는 `.dockerignore` 를 보지 않는다. 이 파일이 없으면 `.gitignore`
+# 로 대체하는데, 그 동작에 기대지 않고 명시한다 — 서비스 계정 키가 GCS 버킷에
+# 업로드되는 것과 이미지에 들어가는 것은 별개의 유출이다.
+#
+# 이미지 안으로 들어가는 것은 `.dockerignore` 가 따로 막는다. 둘 다 필요하다.
+# ─────────────────────────────────────────────────────────────
+secrets/
+*serviceAccount*.json
+*-firebase-adminsdk-*.json
+.env.local
+.env.*.local
+
+# 업로드할 필요 없는 것 (Cloud Build 안에서 다시 만든다)
+node_modules
+.next
+out
+.git
+.github
+.claude
+coverage
+.firebase
+*.log
+.DS_Store
+
+# Python AI 서비스. Next 컨테이너는 이걸 실행하지 않는다 — 별도 배포 대상이다.
+# 넣어봐야 이미지만 커지고, docs/ 의 시안 HTML 까지 따라 들어간다.
+ai-service/
+
+# NOTE: `.env` 는 일부러 남긴다 — 공개값(NEXT_PUBLIC_*)이고 빌드에 필요하다.

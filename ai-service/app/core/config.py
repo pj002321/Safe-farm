@@ -60,6 +60,7 @@ DB_POOL_RECYCLE = _env_int("DB_POOL_RECYCLE", 1800)  # 초. pooler 가 끊기 �
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 OPENAI_MODEL = os.getenv("OPENAI_MODEL")
+KMA_API_KEY = os.getenv("KMA_API_KEY")
 
 # --- 임베딩 ---
 # 아래 넷은 일부러 env 로 빼지 않는다. 바꾸면 쌓인 벡터가 무의미해지고(공간이 갈린다),

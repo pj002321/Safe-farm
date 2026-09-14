@@ -62,6 +62,16 @@
       "options": { "cwd": "${workspaceFolder}/ai-service" },
       "presentation": { "clear": true },
       "problemMatcher": []
+    },
+    {
+      "label": "🛰️ ai-service: preview kma data",
+      "type": "shell",
+      "command": "${command:python.interpreterPath}",
+      "args": ["-m", "pipeline.preview"],
+      "options": {
+        "cwd": "${workspaceFolder}/ai-service"
+      },
+      "problemMatcher": []
     }
   ]
 }
