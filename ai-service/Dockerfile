@@ -21,11 +21,18 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-# 의존성을 먼저 깔아 레이어 캐시를 살린다. 소스만 바뀌면 재설치하지 않는다.
-COPY requirements.txt ./
-RUN pip install --no-cache-dir -r requirements.txt
-
+# 의존성 선언은 **pyproject.toml 한 곳뿐**이다. requirements.txt 를 다시 만들지
+# 말 것 — 두 벌이 되는 순간 한쪽에만 추가되고, 둘 다 설치해야 도는 상태로 돌아간다
+# (pyproject.toml 의 주석과 같은 이야기다).
+#
+# 소스를 먼저 넣고 설치한다. setuptools 가 app/·pipeline/ 을 찾아야 하기 때문이다
+# ([tool.setuptools.packages.find]). 의존성만 따로 캐시하던 레이어는 그래서 포기했다
+# — 캐시보다 "빌드가 실제로 되는 것"이 먼저다.
+#
+# `-e` 를 빼지 말 것. 빼면 app/·pipeline/ 이 sys.path 에 올라가지 않아 cwd 가
+# /app 일 때만 import 가 풀린다(pyproject.toml 주석 참고).
 COPY . .
+RUN pip install --no-cache-dir -e .
 
 # root 로 돌리지 않는다.
 RUN useradd --create-home --uid 1001 appuser && chown -R appuser:appuser /app
