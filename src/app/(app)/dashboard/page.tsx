@@ -6,7 +6,8 @@ import {
   type CropProfile,
   rankCrops,
 } from "@/features/recommendation/domain/suitability";
-import { displayNameOf, getCurrentProfile } from "@/shared/auth/profile";
+import { displayNameOf } from "@/shared/auth/profile";
+import { getCurrentProfile } from "@/shared/auth/profileStore";
 import { getViewer } from "@/shared/auth/session";
 import { formatRainfall, formatTemperature } from "@/shared/utils/format";
 

@@ -20,11 +20,12 @@
     "@langchain/core": "^1.2.9",
     "@langchain/langgraph": "^1.4.14",
     "@react-three/fiber": "^9.7.0",
-    "firebase": "^12.19.0",
-    "firebase-admin": "^14.4.0",
+    "@supabase/ssr": "^0.12.7",
+    "@supabase/supabase-js": "^2.116.0",
     "next": "16.3.4",
     "react": "19.2.8",
     "react-dom": "19.2.8",
+    "server-only": "^0.0.1",
     "three": "^0.186.0"
   },
   "devDependencies": {

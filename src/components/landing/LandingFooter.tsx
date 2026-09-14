@@ -51,6 +51,8 @@ const COLUMNS: readonly FooterColumn[] = [
       { label: "오늘 상주", href: "#today" },
       { label: "로그인", href: "/login" },
       { label: "밭 등록하기", href: "/signup" },
+      { label: "서비스 이용약관", href: "/terms" },
+      { label: "개인정보처리방침", href: "/privacy" },
     ],
   },
 ];

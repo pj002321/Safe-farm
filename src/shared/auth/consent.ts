@@ -45,6 +45,8 @@ export const CONSENT_ITEMS = [
     key: "terms",
     label: "서비스 이용약관에 동의합니다",
     required: true,
+    /** 전문 경로. 요약만 보고 동의하지 않도록 화면이 링크를 건다. */
+    href: "/terms",
     summary:
       "Safe Farm AI가 제공하는 관측·분석 리포트의 이용 조건과 책임 범위에 대한 동의입니다.",
     detail:
@@ -54,6 +56,7 @@ export const CONSENT_ITEMS = [
     key: "privacy",
     label: "개인정보 수집·이용에 동의합니다",
     required: true,
+    href: "/privacy",
     summary: "수집 항목 · 이용 목적 · 보유 기간을 확인해 주세요.",
     detail:
       "수집 항목: 이메일, 이름, (구글 로그인 시) 프로필 사진 주소, 등록한 농지의 위치와 작물 정보. 이용 목적: 계정 식별, 농지별 생육·재해 리포트 생성과 발송. 보유 기간: 회원 탈퇴 시까지이며, 탈퇴 요청 시 지체 없이 파기합니다. 동의를 거부하실 수 있으나, 그 경우 계정 생성과 리포트 제공이 불가능합니다.",
@@ -62,6 +65,7 @@ export const CONSENT_ITEMS = [
     key: "marketing",
     label: "마케팅 정보 수신에 동의합니다",
     required: false,
+    href: undefined,
     summary: "동의하지 않아도 가입과 관측 리포트 이용에는 영향이 없습니다.",
     detail:
       "신규 기능 안내, 영농 정보 소식지, 이벤트 정보를 이메일로 보내드립니다. 수신 거부는 메일 하단 링크나 설정 화면에서 언제든 가능합니다.",
@@ -70,6 +74,8 @@ export const CONSENT_ITEMS = [
   key: keyof Consent;
   label: string;
   required: boolean;
+  /** 전문 페이지. 없으면(마케팅) 링크를 그리지 않는다. */
+  href: string | undefined;
   summary: string;
   detail: string;
 }[];
