@@ -22,6 +22,15 @@ import { getSupabaseServer } from "@/shared/supabase/server";
  * - 돌아갈 곳(`next`)은 **사용자가 주소창에서 고칠 수 있다.** 그대로 쓰면
  *   `?next=https://evil.example` 로 우리 도메인을 발판 삼은 피싱이 된다.
  *   `safeNextPath` 로 내부 경로임을 보증한 뒤에만 쓴다.
+ * - ⚠️ **리다이렉트를 상대 경로로 보낸다.** 절대 주소를 만들려면 origin 이
+ *   필요한데, Railway 컨테이너 안에서 `request.nextUrl.origin` 은 공개 주소가
+ *   아니라 **내부 바인드 주소(`https://0.0.0.0:8080`)** 로 잡힌다. 그 주소로
+ *   보내면 브라우저가 갈 곳이 없어 로그인이 실패한 것처럼 보인다 — 코드 교환은
+ *   이미 끝나 쿠키가 심겼기 때문에, 새로고침하고 다시 누르면 "두 번째엔 바로
+ *   된다"는 기묘한 증상이 된다. 실제로 이 증상을 겪었다.
+ *   상대 경로는 프록시가 몇 겹이든 항상 옳다. `next` 는 `safeNextPath` 가
+ *   내부 경로임을 보증하므로 그대로 Location 에 넣어도 안전하다.
+ *   (미들웨어는 Next 가 알아서 상대로 직렬화해 같은 문제가 없다.)
  * - 실패해도 **오류 원문을 사용자에게 보여주지 않는다.** 공급자 오류 메시지에는
  *   내부 설정이 섞여 나온다. `/login?error=1` 로만 알리고 자세한 건 서버 로그에 남긴다.
  * - 가입 화면에서 온 경우 **동의를 여기서 기록한다.** 구글 로그인은 페이지를
@@ -38,7 +47,7 @@ import { getSupabaseServer } from "@/shared/supabase/server";
  */
 
 export async function GET(request: NextRequest) {
-  const { searchParams, origin } = request.nextUrl;
+  const { searchParams } = request.nextUrl;
   const code = searchParams.get("code");
 
   // 복귀 경로는 **쿠키**로 온다. 쿼리로 나르면 `redirectTo` 에 쿼리가 붙는데,
@@ -53,12 +62,12 @@ export async function GET(request: NextRequest) {
     searchParams.get("error_description") ?? searchParams.get("error");
   if (providerError) {
     console.error("[auth/callback] 공급자 오류", providerError);
-    return NextResponse.redirect(new URL("/login?error=1", origin));
+    return redirectTo("/login?error=1");
   }
 
   if (!code) {
     console.error("[auth/callback] code 파라미터가 없습니다");
-    return NextResponse.redirect(new URL("/login?error=1", origin));
+    return redirectTo("/login?error=1");
   }
 
   const supabase = await getSupabaseServer();
@@ -67,10 +76,10 @@ export async function GET(request: NextRequest) {
   if (error) {
     // 원문은 로그에만. 사용자 화면에는 내부 정보를 흘리지 않는다.
     console.error("[auth/callback] 코드 교환 실패", error);
-    return NextResponse.redirect(new URL("/login?error=1", origin));
+    return redirectTo("/login?error=1");
   }
 
-  const response = NextResponse.redirect(new URL(next, origin));
+  const response = redirectTo(next);
 
   // 가입 화면에서 넘어온 동의를 받아 적는다. 로그인 경로에서 왔으면 쿠키가 없고,
   // 그때는 아무 일도 일어나지 않는다.
@@ -101,4 +110,22 @@ export async function GET(request: NextRequest) {
   response.cookies.delete(POST_LOGIN_COOKIE);
 
   return response;
+}
+
+/**
+ * 상대 경로로 보내는 리다이렉트.
+ *
+ * `NextResponse.redirect()` 는 절대 URL 을 요구하는데, 그 절대 주소를 만들려면
+ * 요청에서 origin 을 꺼내야 한다. Railway 컨테이너 안에서는 그 값이 공개 주소가
+ * 아니라 내부 바인드 주소라서, 만들어진 주소가 브라우저에서 열리지 않는다.
+ *
+ * Location 헤더는 상대 경로를 허용한다(RFC 9110). 프록시가 몇 겹이든, 호스트가
+ * 무엇이든 항상 옳으므로 origin 을 추측할 이유가 없다.
+ *
+ * ⚠️ 넣는 경로는 **반드시 내부 경로**여야 한다. `//evil.test` 같은 값이 들어오면
+ *    프로토콜 상대 URL 로 해석되어 외부로 나간다. 호출부는 `safeNextPath` 를
+ *    통과한 값이나 이 파일의 리터럴만 넘긴다.
+ */
+function redirectTo(path: string): NextResponse {
+  return new NextResponse(null, { status: 307, headers: { Location: path } });
 }
