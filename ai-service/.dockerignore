@@ -1,0 +1,23 @@
+# 이미지에 들어갈 이유가 없는 것들
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# ⚠️ 실제 키가 들어있는 파일. .env(템플릿, 값 비어 있음)는 남기지 않는다 —
+# 설정은 Railway 변수로 주입하고, 이미지에는 아무 값도 굽지 않는다.
+.env
+.env.local
+.env.*.local
+
+# 참고 문서·시안. 런타임에 필요 없다(docs/ 만 144KB).
+docs/
+logs/
+tests/
+README.md
+AGENTS.md
+Dockerfile
+.dockerignore
