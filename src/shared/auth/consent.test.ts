@@ -2,8 +2,11 @@ import { describe, expect, it } from "vitest";
 import {
   CONSENT_ITEMS,
   type Consent,
+  deserializeConsent,
   isConsentComplete,
+  PENDING_CONSENT_COOKIE,
   parseConsent,
+  serializeConsent,
   toConsentMetadata,
 } from "./consent";
 
@@ -106,5 +109,36 @@ describe("toConsentMetadata", () => {
       marketing_opt_in: true,
     });
     expect(toConsentMetadata(REQUIRED_ONLY, at).marketing_opt_in).toBe(false);
+  });
+});
+
+describe("쿠키 왕복 (구글 가입 경로)", () => {
+  it("직렬화한 값을 되읽으면 원래 동의가 나온다", () => {
+    for (const consent of [NONE, REQUIRED_ONLY, ALL]) {
+      expect(deserializeConsent(serializeConsent(consent))).toEqual(consent);
+    }
+  });
+
+  it("쿠키가 없으면 아무것도 동의하지 않은 것으로 본다", () => {
+    expect(deserializeConsent(undefined)).toEqual(NONE);
+    expect(deserializeConsent(null)).toEqual(NONE);
+    expect(deserializeConsent("")).toEqual(NONE);
+  });
+
+  it("깨진 값에 던지지 않는다 — 콜백이 500 을 내면 로그인 자체가 막힌다", () => {
+    for (const junk of ["{", "null", "[]", '"true"', "42", "%%%"]) {
+      expect(() => deserializeConsent(junk)).not.toThrow();
+      expect(deserializeConsent(junk)).toEqual(NONE);
+    }
+  });
+
+  it("동의를 꾸며낸 값은 통과시키지 않는다 — 문자열 true 는 동의가 아니다", () => {
+    // parseConsent 와 같은 방침. 받지 않은 동의를 기록하면 거짓 증거가 된다.
+    expect(deserializeConsent('{"terms":"true","privacy":1}')).toEqual(NONE);
+  });
+
+  it("쿠키 이름에 인코딩이 필요한 문자가 없다", () => {
+    // 이름에 =·;·공백이 섞이면 document.cookie 조립이 조용히 깨진다.
+    expect(PENDING_CONSENT_COOKIE).toMatch(/^[A-Za-z0-9_-]+$/);
   });
 });

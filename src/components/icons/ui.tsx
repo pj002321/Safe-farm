@@ -155,3 +155,24 @@ export function LoaderIcon(props: IconProps) {
     </svg>
   );
 }
+
+/** 어깨선 위의 머리. 계정·내 정보. 하단 탭에 쓰려고 추가했다(기존에 사람 아이콘이 없었다). */
+export function UserIcon(props: IconProps) {
+  return (
+    <svg {...ICON_BASE} aria-hidden="true" {...props}>
+      <circle cx="12" cy="8" r="3.5" />
+      <path d="M4.5 20a7.5 7.5 0 0 1 15 0" />
+    </svg>
+  );
+}
+
+/** 말풍선 안의 물음표. 물어보기 탭. */
+export function QuestionIcon(props: IconProps) {
+  return (
+    <svg {...ICON_BASE} aria-hidden="true" {...props}>
+      <path d="M20.5 12.5a7.5 7.5 0 0 1-10.9 6.7L4.5 20.5l1.3-5.1A7.5 7.5 0 1 1 20.5 12.5Z" />
+      <path d="M10.4 9.6a1.8 1.8 0 1 1 2.4 1.7c-.5.2-.8.7-.8 1.2v.4" />
+      <path d="M12 16.1h.01" />
+    </svg>
+  );
+}

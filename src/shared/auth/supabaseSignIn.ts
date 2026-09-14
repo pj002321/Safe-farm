@@ -1,8 +1,12 @@
 "use client";
 
 import { getSupabaseBrowser } from "@/shared/supabase/client";
-import type { Consent } from "./consent";
-import { safeNextPath } from "./redirect";
+import {
+  type Consent,
+  PENDING_CONSENT_COOKIE,
+  serializeConsent,
+} from "./consent";
+import { POST_LOGIN_COOKIE, safeNextPath } from "./redirect";
 
 /**
  * ---------------------------------------------
@@ -108,28 +112,25 @@ export async function signUpWithEmail(input: {
  *
  * 실패(설정 누락 등)일 때만 결과가 돌아온다.
  */
-/** 콜백에서 동의를 기록하려고 잠시 맡겨 두는 자리. */
-export const PENDING_CONSENT_KEY = "safe-farm-pending-consent";
-
+/**
+ * 동의를 쿠키에 맡긴다. 구글에서 돌아온 `/auth/callback`(서버)이 읽어 기록한다.
+ *
+ * 예전에는 sessionStorage 에 넣었는데 **읽는 쪽이 없었다** — 브라우저 안에만
+ * 있는 값이라 서버 라우트인 콜백이 볼 수 없었기 때문이다. 그 결과 구글로 가입한
+ * 사용자의 동의가 한 건도 기록되지 않았다.
+ */
 export async function signInWithGoogle(
   consent?: Consent,
   next?: string,
 ): Promise<SignInResult> {
-  // 구글 로그인은 **페이지를 떠난다.** React 상태에 든 동의는 돌아올 때 사라지므로
-  // 세션스토리지에 맡긴다(탭을 닫으면 같이 사라져 localStorage 보다 수명이 짧다).
-  // 콜백 이후 화면이 이 값을 읽어 서버에 기록한다.
-  if (consent) {
-    try {
-      sessionStorage.setItem(PENDING_CONSENT_KEY, JSON.stringify(consent));
-    } catch {
-      // 사이트 데이터를 막은 브라우저에서는 접근만으로 던진다. 동의 기록은
-      // 온보딩 화면에서 다시 받으면 되므로 로그인 자체를 막지 않는다.
-    }
-  }
+  // 구글 로그인은 **페이지를 떠난다.** React 상태에 든 값은 돌아올 때 사라지므로
+  // 필요한 것만 쿠키에 맡긴다. 콜백이 읽고 지운다.
+  if (consent) stashCookie(PENDING_CONSENT_COOKIE, serializeConsent(consent));
+  if (next) stashCookie(POST_LOGIN_COOKIE, safeNextPath(next));
 
   const { error } = await getSupabaseBrowser().auth.signInWithOAuth({
     provider: "google",
-    options: { redirectTo: callbackUrl(next) },
+    options: { redirectTo: callbackUrl() },
   });
   if (error) {
     console.error("[auth] 구글 로그인 실패", error);
@@ -153,8 +154,23 @@ export async function signOutEverywhere(): Promise<void> {
  * 돌아와야 하기 때문이다. 환경변수에 박으면 프리뷰에서 운영으로 튄다.
  * `next` 는 사용자가 고칠 수 있으므로 `safeNextPath` 로 내부 경로임을 보증한다.
  */
-function callbackUrl(next?: string): string {
-  const url = new URL("/auth/callback", window.location.origin);
-  if (next) url.searchParams.set("next", safeNextPath(next));
-  return url.toString();
+function callbackUrl(): string {
+  // ⚠️ **쿼리를 붙이지 않는다.** Supabase 는 돌아온 주소를 허용 목록과 대조하고,
+  //    어긋나면 조용히 Site URL 로 떨어뜨린다. `?next=` 하나 때문에 인증 코드가
+  //    콜백 대신 랜딩으로 배달되어 로그인이 완성되지 않는 일이 실제로 있었다.
+  //    복귀 경로는 쿠키(POST_LOGIN_COOKIE)로 나른다.
+  return new URL("/auth/callback", window.location.origin).toString();
+}
+
+/** 브라우저에서 짧게 사는 쿠키 하나를 심는다. 구글 왕복 동안만 필요하다. */
+function stashCookie(name: string, value: string): void {
+  const attributes = [
+    `${name}=${encodeURIComponent(value)}`,
+    "Path=/",
+    "Max-Age=600",
+    "SameSite=Lax",
+  ];
+  if (window.location.protocol === "https:") attributes.push("Secure");
+  // biome-ignore lint/suspicious/noDocumentCookie: 대안으로 권하는 Cookie Store API 는 Chrome 계열에만 있다. Safari·Firefox 에 없어 쓰면 iOS 사용자가 구글 로그인을 통째로 못 한다.
+  document.cookie = attributes.join("; ");
 }
