@@ -91,6 +91,18 @@ export const metadata: Metadata = {
     images: [OG_IMAGE],
   },
   icons: { icon: "/icon.svg" },
+
+  /**
+   * 구글 서치 콘솔 소유 확인.
+   *
+   * `*.up.railway.app` 은 Railway 소유 도메인이라 **DNS TXT 를 넣을 수 없다.**
+   * 그래서 서치 콘솔에서 "도메인" 속성이 아니라 **"URL 접두어" 속성**을 만들고,
+   * 거기서 주는 "HTML 태그" 방식의 토큰을 이 환경변수에 넣는다.
+   * 값이 없으면 태그 자체가 나가지 않으므로 로컬·프리뷰에 빈 태그가 남지 않는다.
+   */
+  verification: process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION
+    ? { google: process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION }
+    : undefined,
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
