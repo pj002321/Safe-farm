@@ -46,5 +46,5 @@ export async function insertPlot(
     sowing_method: input.sowingMethod,
   });
 
-  if (error) throw error;
+  if (error) throw new Error(error.message);
 }
