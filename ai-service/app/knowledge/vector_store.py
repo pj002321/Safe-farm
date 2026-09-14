@@ -1,20 +1,73 @@
-"""chunks 테이블에 대한 벡터 저장/조회.
-DB 접근을 이 파일 뒤로 숨겨서 다른 파일들이 SQL/pgvector 문법을 몰라도 되게 하는 게 목적"""
+"""chunks 벡터 저장/조회. pgvector 문법을 아는 곳을 여기 하나로 묶는다."""
 
 from sqlalchemy.orm import Session
 
 from app.models.chunk import Chunk
 
 
-def find_chunks_to_embed(db: Session) -> list[Chunk]:
-    return db.query(Chunk).filter(Chunk.embedding.is_(None)).all()
+def find_chunks_to_embed(db: Session, limit: int | None = None) -> list[Chunk]:
+    """
+    # summary
+    아직 벡터가 없는 조각. 이게 증분 색인의 기준이다.
+
+    # params
+    db: 세션<br>
+    limit: 한 번에 가져올 개수. None 이면 전부<br>
+
+    # returns
+    id 오름차순 조각 목록. 남은 것이 없으면 빈 리스트라 배치 루프의 종료 조건이 된다
+
+    # examples
+        find_chunks_to_embed(db, limit=100)  -> [Chunk(id=1), Chunk(id=2), ...]
+    """
+    query = db.query(Chunk).filter(Chunk.embedding.is_(None)).order_by(Chunk.id)
+    if limit is not None:
+        query = query.limit(limit)
+    return query.all()
+
 
 def save_embeddings(db: Session, chunks: list[Chunk], vectors: list[list[float]]) -> None:
+    """
+    # summary
+    조각과 벡터를 짝지어 채우고 commit 한다. 배치마다 부르면 중간에 끊겨도 거기까지는
+    남아서 같은 값에 두 번 돈을 쓰지 않는다. 개수가 어긋나면 ValueError 로 멈춘다.
+
+    # params
+    db: 세션<br>
+    chunks: 채울 조각들<br>
+    vectors: chunks 와 같은 순서·같은 길이의 벡터<br>
+
+    # examples
+        save_embeddings(db, batch, embed_texts([c.body for c in batch]))
+    """
+    # strict 없이는 개수가 어긋날 때 zip 이 조용히 자른다 = 엉뚱한 조각에 엉뚱한 벡터
     for chunk, vector in zip(chunks, vectors, strict=True):
         chunk.embedding = vector
     db.commit()
 
+
 def search(db: Session, query_vector: list[float], top_k: int = 10) -> list[Chunk]:
-    """TODO: pgvector의 거리 연산 메서드 사용
-    Chunk.embedding.cosine_distance(querty_vector)로 정렬 후 k산출"""
-    raise NotImplementedError
+    """
+    # summary
+    질의 벡터와 가까운 조각 top-k. 거리 연산(cosine)은 색인한 HNSW 와 맞춘다 —
+    어긋나면 인덱스를 타지 못하고 전수 비교가 된다.
+
+    # params
+    db: 세션<br>
+    query_vector: 질의 임베딩<br>
+    top_k: 가져올 개수<br>
+
+    # returns
+    가까운 순서의 조각 목록. embedding 이 NULL 인 조각은 빠진다.
+    거리 값 자체는 돌려주지 않는다
+
+    # examples
+        search(db, vector, top_k=3)  -> [Chunk(id=7), Chunk(id=2), Chunk(id=9)]
+    """
+    return (
+        db.query(Chunk)
+        .filter(Chunk.embedding.is_not(None))
+        .order_by(Chunk.embedding.cosine_distance(query_vector))
+        .limit(top_k)
+        .all()
+    )

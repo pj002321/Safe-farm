@@ -23,8 +23,12 @@ def read_all(directory: Path, tables: Sequence[str]) -> dict[str, list[dict]]:
     파일 이름이 곧 테이블 이름이라는 약속에 기댄다.
 
     # params
-    directory: CSV 가 모여 있는 디렉터리
-    tables: 읽을 테이블 이름들
+    directory: CSV 가 모여 있는 디렉터리<br>
+    tables: 읽을 테이블 이름들<br>
+
+    # returns
+    테이블 이름 -> 행 목록. tables 의 이름이 전부 키로 들어 있다.
+    파일이 없으면 FileNotFoundError 라 빈 값은 나오지 않는다
 
     # examples
         read_all(Path("data/dummy"), ["crops", "grids"])
@@ -39,8 +43,8 @@ def count_rows(data: dict[str, list[dict]], tables: Sequence[str]) -> None:
     테이블별 CSV 행 수를 찍는다. 넣기 전에 무엇이 얼마나 들어갈지 보려고 쓴다.
 
     # params
-    data: read_all 결과
-    tables: 찍을 순서
+    data: read_all 결과<br>
+    tables: 찍을 순서<br>
 
     # examples
         count_rows(data, ["crops"])
@@ -57,7 +61,7 @@ def check_refs(refs: Sequence[Ref]) -> None:
     어긋난 것이 있으면 전부 찍고 SystemExit(1) 로 멈춘다 — 첫 실패에서 서지 않는다.
 
     # params
-    refs: Ref 목록. 무엇이 무엇을 가리키는지는 호출하는 쪽이 안다
+    refs: Ref 목록. 무엇이 무엇을 가리키는지는 호출하는 쪽이 안다<br>
 
     # examples
         check_refs([("crop_variants -> 작물", rows, lambda r: r["crop_name"], names)])
@@ -81,9 +85,9 @@ def require_tables(engine: Engine, tables: Sequence[str], hint: str) -> None:
     없는 채로 시작하면 한참 뒤 엉뚱한 자리에서 에러가 난다.
 
     # params
-    engine: 검사할 DB
-    tables: 있어야 하는 테이블 이름들
-    hint: 없을 때 안내할 명령 — 무엇을 먼저 돌려야 하는지
+    engine: 검사할 DB<br>
+    tables: 있어야 하는 테이블 이름들<br>
+    hint: 없을 때 안내할 명령 — 무엇을 먼저 돌려야 하는지<br>
 
     # examples
         require_tables(engine, TABLES, "py -3.12 -m pipeline.farm.init_farm_db")
@@ -101,9 +105,9 @@ def report(data: dict[str, list[dict]], tables: Sequence[str], done: dict[str, i
     upsert 라 "반영" 은 새로 넣은 것과 갱신한 것을 합친 수다.
 
     # params
-    data: read_all 결과
-    tables: 찍을 순서
-    done: 테이블 이름 -> 반영된 행 수
+    data: read_all 결과<br>
+    tables: 찍을 순서<br>
+    done: 테이블 이름 -> 반영된 행 수<br>
 
     # examples
         report(data, ["crops"], {"crops": 8})

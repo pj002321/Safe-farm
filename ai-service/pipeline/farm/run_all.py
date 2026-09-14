@@ -33,8 +33,8 @@ def run(name: str, *args: str) -> None:
     끝나면 되돌린다. 단계 이름이 그대로 새면 옵션으로 잘못 읽힌다.
 
     # params
-    name: STEPS 의 키
-    args: 그 단계에 넘길 옵션
+    name: STEPS 의 키<br>
+    args: 그 단계에 넘길 옵션<br>
 
     # examples
         run("master", "--check")
