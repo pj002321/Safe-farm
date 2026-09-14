@@ -43,9 +43,12 @@ declare namespace kakao.maps {
     level?: number;
   }
 
-  // biome-ignore lint/suspicious/noShadowRestrictedNames: 카카오 SDK 의 실제 이름이
-  // `kakao.maps.Map` 이라 바꿀 수 없다. 전역 Map 을 가리는 범위는 이 네임스페이스
-  // 안뿐이고, 우리 코드는 늘 `sdk.maps.Map` 으로 한정해 부른다.
+  /**
+   * 카카오 SDK 의 실제 이름이 `kakao.maps.Map` 이라 바꿀 수 없다. 전역 Map 을
+   * 가리는 범위는 이 네임스페이스 안뿐이고, 우리 코드는 늘 `sdk.maps.Map` 으로
+   * 한정해 부른다.
+   */
+  // biome-ignore lint/suspicious/noShadowRestrictedNames: SDK 의 실제 이름이라 바꿀 수 없다.
   class Map {
     constructor(container: HTMLElement, options: MapOptions);
     setCenter(position: LatLng): void;
