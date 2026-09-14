@@ -30,6 +30,7 @@ def test_clean_filters_missing():
     assert clean(-999) is None
     assert clean("-999") is None
     assert clean(None) is None
+    assert clean("nan") is None  # 천리안 LST 결측 표기 (실측 확인)
     assert clean("15.5") == 15.5
     assert clean(0) == 0
 

@@ -5,6 +5,7 @@
 - 특보현황(wrn_now_data_new)  disp=1 → 맨 배열 [...] (disp=2 는 XML 로 깨짐 — 쓰지 말 것)
 - 천리안 LST(nph-arcltr_sat_txt) disp=2 → [{"TM_INT0":.., "TM_INT1":..}] · 호출당 최대 24개 구간
 """
+import math
 from datetime import date, datetime, timedelta
 
 import requests
@@ -22,6 +23,8 @@ def clean(v):
     try:
         v = float(v)
     except (TypeError, ValueError):
+        return None
+    if math.isnan(v):  # 천리안 LST 는 결측을 문자열 "nan"으로도 준다(실측 확인)
         return None
     return None if v <= -900 else v
 
