@@ -15,6 +15,11 @@ def save_embeddings(db: Session, chunks: list[Chunk], vectors: list[list[float]]
     db.commit()
 
 def search(db: Session, query_vector: list[float], top_k: int = 10) -> list[Chunk]:
-    """TODO: pgvector의 거리 연산 메서드 사용
-    Chunk.embedding.cosine_distance(querty_vector)로 정렬 후 k산출"""
-    raise NotImplementedError
+    """질문 벡터를 받아, chunk테이블에서 가장 근접한 k개 찾기"""
+    return (
+        db.query(Chunk)
+        .filter(Chunk.embedding.is_not(None))
+        .order_by(Chunk.embedding.cosine_distance(query_vector))
+        .limit(top_k)
+        .all()
+    )
