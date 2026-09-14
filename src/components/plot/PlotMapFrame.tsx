@@ -1,13 +1,13 @@
-import { MapPinIcon, SatelliteIcon } from "@/components/icons";
-import { Badge } from "@/components/shared/Badge";
+import { MapPinIcon } from "@/components/icons";
 
 /**
  * ---------------------------------------------
  * [Feature]: 밭 위치 지정 지도 자리 (레이아웃 전용)
  *
  * [Description]
- * - **지도 로직은 여기 없다.** 카카오맵 연결은 다른 사람이 맡기로 해서, 이
- *   컴포넌트는 지도가 들어갈 **자리와 주변 조작 UI 의 모양**만 잡는다.
+ * - **지도 로직은 여기 없다.** 이 컴포넌트는 지도가 들어갈 **자리와 주변 조작
+ *   UI 의 모양**만 잡는다. 실제 연결은 `PlotLocationStep` 이 한다 — 상태가 필요한
+ *   부분만 클라이언트 컴포넌트로 내려야 이 파일이 서버 컴포넌트로 남는다.
  * - 연결하는 쪽이 찾아야 할 곳은 하나다 — `PLOT_MAP_CONTAINER_ID` 를 가진 `<div>`.
  *   크기가 이미 잡혀 있어 지도를 붙이면 바로 그 크기로 그려진다.
  *   (카카오맵은 컨테이너 높이가 0이면 아무것도 안 보인다.)
@@ -87,8 +87,10 @@ export function PlotMapFrame() {
         />
 
         {/* 중앙 고정 핀. 지도를 끌어도 여기 그대로 있고, 지도 중심이 곧 밭 위치다.
-            pointer-events-none 이라 지도 드래그를 가로채지 않는다. */}
-        <div className="pointer-events-none absolute inset-0 grid place-items-center">
+            pointer-events-none 이라 지도 드래그를 가로채지 않는다.
+            ⚠️ z-10 을 빼지 말 것. 카카오맵이 컨테이너 안에 z-index 를 박은
+            타일을 그려 넣어서, z-index 없는 형제는 지도 아래로 깔린다. */}
+        <div className="pointer-events-none absolute inset-0 z-10 grid place-items-center">
           <div className="relative grid place-items-center">
             {/* 십자선. 핀이 정확히 어디를 가리키는지 눈으로 맞출 수 있어야 한다. */}
             <span
@@ -110,17 +112,9 @@ export function PlotMapFrame() {
         </div>
 
         {/* 조작 안내. 아래쪽이라 핀을 가리지 않는다. */}
-        <p className="pointer-events-none absolute inset-x-0 bottom-3 mx-auto w-fit rounded-full bg-surface/90 px-3.5 py-1.5 text-center text-fg text-xs shadow-e1 backdrop-blur">
+        <p className="pointer-events-none absolute inset-x-0 bottom-3 z-10 mx-auto w-fit rounded-full bg-surface/90 px-3.5 py-1.5 text-center text-fg text-xs shadow-e1 backdrop-blur">
           지도를 움직여 밭을 한가운데 맞춰 주세요
         </p>
-
-        {/* 연결 상태 표식. 퍼블 단계임을 화면에서 바로 알 수 있어야
-            검토하는 사람이 "지도가 왜 안 뜨냐"고 묻지 않는다. */}
-        <div className="absolute top-3 left-3">
-          <Badge dot icon={<SatelliteIcon />} size="sm" tone="accent">
-            지도 연결 예정
-          </Badge>
-        </div>
       </div>
 
       <p className="text-fg-subtle text-xs leading-relaxed">

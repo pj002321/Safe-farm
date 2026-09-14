@@ -2,9 +2,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { CropCards } from "@/components/plot/CropCards";
-import { LocationSummary } from "@/components/plot/LocationSummary";
 import { PlotInfoFields } from "@/components/plot/PlotInfoFields";
-import { PlotMapFrame } from "@/components/plot/PlotMapFrame";
+import { PlotLocationStep } from "@/components/plot/PlotLocationStep";
 import { SowingFields } from "@/components/plot/SowingFields";
 import { Button } from "@/components/shared/Button";
 import { SectionHeading } from "@/components/shared/SectionHeading";
@@ -166,7 +165,7 @@ export default function PlotRegisterPage() {
             먼저 적은 값이 사라지지 않고 제출에 함께 실린다. */}
         {STEPS.map((step) => (
           <StepPanel key={step.id} step={step}>
-            {step.no === 1 && <LocationStep />}
+            {step.no === 1 && <PlotLocationStep />}
             {step.no === 2 && <PlotInfoFields />}
             {step.no === 3 && (
               <fieldset>
@@ -183,18 +182,6 @@ export default function PlotRegisterPage() {
         ))}
       </form>
     </main>
-  );
-}
-
-/** 1단계 본문. 지도가 넓고 결과 칸이 옆에 붙는다. */
-function LocationStep() {
-  return (
-    <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
-      <PlotMapFrame />
-      <div className="self-start">
-        <LocationSummary />
-      </div>
-    </div>
   );
 }
 
