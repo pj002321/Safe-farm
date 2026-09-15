@@ -69,21 +69,27 @@ export function KakaoSdkScript({ onStatusChange }: KakaoSdkScriptProps) {
     return null;
   }
 
+  const handleReady = () => {
+    const sdk = window.kakao;
+    if (!sdk) {
+      onStatusChange("error");
+      return;
+    }
+
+    // 2단계 초기화. 이미 끝났으면 콜백이 즉시 실행되므로 재마운트에도 안전하다.
+    sdk.maps.load(() => onStatusChange("ready"));
+  };
+
   return (
     <Script
       src={sdkUrl(appKey)}
       // 기본값이지만 명시한다. 지도는 첫 화면 페인트를 막을 만큼 급하지 않다.
       strategy="afterInteractive"
-      onReady={() => {
-        const sdk = window.kakao;
-        if (!sdk) {
-          onStatusChange("error");
-          return;
-        }
-
-        // 2단계 초기화. 이미 끝났으면 콜백이 즉시 실행되므로 재마운트에도 안전하다.
-        sdk.maps.load(() => onStatusChange("ready"));
-      }}
+      // 이 페이지엔 같은 src로 KakaoSdkScript가 여러 번 마운트된다(텃밭 지도 +
+      // 시군구 지도). next/script는 src가 같으면 두 번째부터 onReady 를 영영
+      // 안 불러준다(onLoad 만 호출) — onLoad 에도 같은 콜백을 걸어 둔다.
+      onLoad={handleReady}
+      onReady={handleReady}
       onError={() => onStatusChange("error")}
     />
   );

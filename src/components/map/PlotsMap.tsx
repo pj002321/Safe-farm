@@ -62,7 +62,7 @@ function summaryHtml(point: PlotMapPoint, now: Date): string {
   const stage = calendar && days !== null ? stageAt(calendar, days) : null;
 
   return renderToStaticMarkup(
-    <div className="max-w-56 rounded-lg border border-border bg-surface px-3 py-2 text-sm shadow-md">
+    <div className="max-w-56 whitespace-normal rounded-lg border border-border bg-surface px-3 py-2 text-sm shadow-md">
       <p className="font-medium text-fg">{point.nameKo ?? "이름 없는 밭"}</p>
       <p className="text-fg-muted">{crop?.labelKo ?? "작물 미정"}</p>
       {stage && (

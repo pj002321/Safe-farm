@@ -43,6 +43,27 @@ export interface AiServiceStatus {
   };
 }
 
+/** 시군구 경계 + 올해 누적 GDD·평년 대비 편차·색상. `/map` 색칠 지도(V1-37)가 그대로 그린다. */
+export interface SigunguGddFeatureCollection {
+  type: "FeatureCollection";
+  features: Array<{
+    type: "Feature";
+    properties: {
+      code: string;
+      name: string;
+      /** 평년값이 없는 관측소(AWS 다수)에 걸리면 GDD 관련 필드가 전부 없다. */
+      station?: string;
+      stationName?: string;
+      actualGdd?: number | null;
+      normalGdd?: number | null;
+      deviationPct?: number | null;
+      color?: string;
+      label?: string;
+    };
+    geometry: { type: "Polygon" | "MultiPolygon"; coordinates: unknown };
+  }>;
+}
+
 export type AiResult<T> =
   | { ok: true; data: T }
   | { ok: false; reason: AiFailure; detail?: string };
@@ -132,4 +153,9 @@ async function call<T>(
 export const aiService = {
   /** 서비스가 살아 있는지, 무엇을 할 수 있는지. */
   status: () => call<AiServiceStatus>("/v1/status"),
+  /** 시군구 250개 폴리곤 + GDD 편차. 매번 DB 를 훑으므로 상태 조회보다 타임아웃을 넉넉히 준다. */
+  sigunguGdd: () =>
+    call<SigunguGddFeatureCollection>("/v1/map/sigungu-gdd", {
+      timeoutMs: 15_000,
+    }),
 };

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { MapIcon } from "@/components/icons";
 import { PlotsMap } from "@/components/map/PlotsMap";
+import { SigunguGddMap } from "@/components/map/SigunguGddMap";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { SectionHeading } from "@/components/shared/SectionHeading";
 import { listPlots } from "@/features/plots/plotStore";
@@ -11,11 +12,8 @@ import { getCurrentProfile } from "@/shared/auth/profileStore";
  * [Feature]: 지도  →  /map
  *
  * [Description]
- * - 하단 탭 다섯 개 중 하나. **아직 내용이 없는 화면**이라 빈 상태만 둔다.
- *   탭은 있는데 경로가 없으면 404 가 나므로, 자리를 먼저 만들고 "다음 행동"을
- *   제안한다(정의서의 빈 상태 규칙).
- * - 내용이 붙으면 이 파일의 EmptyState 를 목록으로 바꾸고, 비었을 때만
- *   같은 EmptyState 를 남긴다.
+ * - 텃밭 마커 지도(PlotsMap)와 시군구 GDD 색칠 지도(SigunguGddMap, V1-37)를 함께 둔다.
+ *   후자는 텃밭 등록 여부와 무관한 전국 통계라 텃밭이 없어도 항상 보여준다.
  * ---------------------------------------------
  */
 
@@ -42,6 +40,12 @@ export default async function Page() {
       ) : (
         <PlotsMap points={plots} />
       )}
+
+      <SectionHeading
+        description="GDD(생육적산온도)는 하루 평균기온에서 기준온도(5℃)를 뺀 값을 누적한 지표입니다. 시군구별 올해 누적 GDD가 평년보다 높은지 낮은지 색으로 봅니다."
+        title="지역 생육 기상"
+      />
+      <SigunguGddMap />
     </main>
   );
 }
