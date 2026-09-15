@@ -14,29 +14,55 @@
  *    이 스크립트가 못 읽어 새로고침할 때마다 테마가 풀린다.
  *    src/shared/theme/theme.test.ts 가 두 값이 같은지 검사한다.
  *
- * **기본값은 다크다.** 저장된 값이 없으면 OS 설정을 따르지 않고 다크를 칠한다.
- * 이 서비스의 주 화면이 위성 관측 데이터라 어두운 배경이 기준 디자인이고,
- * 라이트로 시작했다가 사용자가 토글하는 것보다 처음부터 의도한 화면을 보여주는
- * 편이 맞다. 라이트를 원하는 사용자는 토글 한 번이면 되고 그 선택은 저장된다.
+ * **기본값은 "system" 이다.** 저장된 선택이 없으면 OS 설정을 그대로 따른다.
+ * 예전에는 다크로 고정했는데, 라이트 OS 를 쓰는 사람이 사이트에 들어올 때마다
+ * 어두운 화면을 받고 매번 토글해야 했다. 기기 설정을 존중하는 편이 맞다.
  *
- * 그래서 속성을 **항상** 세팅한다. 예전처럼 속성을 지워 OS 설정에 맡기면
- * 라이트 OS 사용자가 기본 다크를 볼 수 없다.
+ * 그래도 속성은 **항상** 세팅한다. 지우고 CSS 의 prefers-color-scheme 에 맡기면
+ * 토글이 현재 테마를 읽을 곳이 없어지고, 첫 페인트 이전 보장도 CSS 쪽으로 넘어간다.
+ * 여기서 OS 선호를 읽어 값으로 박아 두는 편이 한 곳에서 끝난다.
+ *
+ * 저장된 선택이 **없을 때만** OS 변경을 따라간다. 사용자가 토글로 고른 값이
+ * 있으면 그 선택이 이긴다 — 명시적 선택을 OS 설정이 덮으면 안 된다.
  *
  * try/catch 로 감싸고 실패 시 기본값으로 넘어가는 것은 증상 은폐가 아니라 브라우저
  * 계약이다 — 쿠키를 막은 Safari 프라이빗 모드에서는 localStorage 에 접근하는 것만
- * 으로 SecurityError 가 난다. 그때도 기본값(다크)은 칠해져야 한다.
+ * 으로 SecurityError 가 난다. 그때도 화면은 칠해져야 한다.
  */
 (() => {
   let stored = null;
   try {
     stored = localStorage.getItem("safe-farm-theme");
   } catch {
-    // 위 주석 참고: 접근 자체가 던지는 환경에서도 기본값은 적용한다.
+    // 위 주석 참고: 접근 자체가 던지는 환경에서도 테마는 적용한다.
     // (optional catch binding 은 2019년 이후 모든 브라우저가 지원한다.)
   }
-  // 명시적으로 저장된 "light" 만 라이트다. 그 외(없음·"dark"·쓰레기값)는 전부 다크.
-  document.documentElement.setAttribute(
-    "data-theme",
-    stored === "light" ? "light" : "dark",
-  );
+
+  const chosen = stored === "light" || stored === "dark" ? stored : null;
+
+  // matchMedia 가 없는 환경(아주 오래된 브라우저, 일부 웹뷰)에서는 라이트로 둔다.
+  // 본문이 밝은 배경 위 어두운 글씨라 읽히지 않는 쪽으로 떨어지지 않는다.
+  const media =
+    typeof window.matchMedia === "function"
+      ? window.matchMedia("(prefers-color-scheme: dark)")
+      : null;
+
+  const apply = () => {
+    document.documentElement.setAttribute(
+      "data-theme",
+      chosen ?? (media?.matches ? "dark" : "light"),
+    );
+  };
+
+  apply();
+
+  // 고른 값이 없을 때만 OS 를 따라간다. 시스템 설정을 바꾸면 새로고침 없이 바뀐다.
+  if (!chosen && media) {
+    // addEventListener 가 없는 옛 Safari 를 위해 addListener 로 물러난다.
+    if (typeof media.addEventListener === "function") {
+      media.addEventListener("change", apply);
+    } else if (typeof media.addListener === "function") {
+      media.addListener(apply);
+    }
+  }
 })();
