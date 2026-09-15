@@ -76,8 +76,10 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
       {children}
 
       {/*
-        페이지가 **자기 전용 하단 독**을 띄우면 공용 독이 비켜선다(텃밭 등록 마법사가
-        그렇게 한다). 안 비키면 좁은 화면 아래에 막대가 둘 쌓인다.
+        페이지가 **자기 전용 하단 독**을 띄우면 공용 독이 비켜선다(등록 마법사의
+        단계 조작, 마이페이지의 삭제 확인). 안 비키면 막대가 둘 쌓인다.
+        id 는 `components/shared/pageDock.ts` 가 들고 있는 하나뿐이다 — 독마다
+        다른 id 를 주면 여기에 조건을 하나씩 더해야 하는데, 그게 아래 함정이다.
 
         ⚠️ 이 조건을 `BottomTabs` **안에** 넣지 않는다. 의존성은 한 방향이고
            (shared → features → app) 공용 컴포넌트가 특정 기능의 id 를 알면 그 규칙이
@@ -87,7 +89,7 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
            한 요소에 붙이면 특이도가 같아 **Tailwind 의 정렬 순서**가 승자를 정한다
            — 클래스를 적은 순서가 아니다.
       */}
-      <div className="group-has-[#plot-dock]/app:hidden">
+      <div className="group-has-[#page-dock]/app:hidden">
         <BottomTabs />
       </div>
     </div>

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ArrowRightIcon, CloseIcon, MenuIcon } from "@/components/icons";
 import { APP_TABS } from "@/components/shared/appTabs";
+import { PAGE_DOCK_ID } from "@/components/shared/pageDock";
 
 /**
  * ---------------------------------------------
@@ -50,9 +51,6 @@ import { APP_TABS } from "@/components/shared/appTabs";
  * ```
  * ---------------------------------------------
  */
-
-/** 이 독이 떠 있으면 공용 하단 독이 비켜선다. `(app)/layout.tsx` 와 아는 약속이다. */
-export const PLOT_DOCK_ID = "plot-dock";
 
 /** 메뉴 열림 상태. 이름이 없어야 폼에 안 실린다(어차피 폼 밖이지만 이중으로 막는다). */
 const MENU_ID = "dock-menu";
@@ -137,7 +135,7 @@ export function PlotWizardDock({ formId }: { formId: string }) {
 
       <div
         className="fixed inset-x-0 bottom-0 z-40 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] lg:hidden"
-        id={PLOT_DOCK_ID}
+        id={PAGE_DOCK_ID}
       >
         <div className="relative mx-auto max-w-md overflow-hidden rounded-[1.75rem] bg-bg/70 shadow-e3 ring-1 ring-fg/10 ring-inset backdrop-blur-2xl">
           {/* 진행 막대. 독 자체가 진행률을 말하므로 본문에 또 그릴 필요가 없다. */}
