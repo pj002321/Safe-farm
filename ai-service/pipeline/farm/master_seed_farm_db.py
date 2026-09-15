@@ -21,7 +21,8 @@ from sqlalchemy import select
 from app.core.config import DATA_DIR
 from app.core.db import get_engine, new_session
 from app.models.farm import Crop, CropStage, CropVariant, Grid, Station
-from pipeline.prep.seeding import Ref, check_refs, count_rows, read_all, report, require_tables
+from pipeline.prep import check
+from pipeline.prep.seeding import count_rows, read_all, report, require_tables
 from pipeline.prep.table import key_dict, upsert
 
 DUMMY_DIR = DATA_DIR / "dummy"
@@ -36,34 +37,102 @@ TABLES = [
     "stations",
 ]
 
+# CSV 안에서 겹치면 안 되는 컬럼 조합. DB 의 UNIQUE·PK 와 같은 조합이다
+UNIQUE = [
+    ("crops", ["name"]),
+    ("crop_variants", ["crop_name", "maturity_type"]),
+    ("crop_stages", ["crop_name", "maturity_type", "stage_order"]),
+    ("grids", ["nx", "ny"]),
+    ("stations", ["station_code"]),
+]
 
-def refs(data: dict[str, list[dict]]) -> list[Ref]:
+# 자식 -> 부모. identity id 는 적재 때 정해지므로 CSV 끼리는 자연키로 맞춰 본다.
+# grids·stations 는 가리키는 대상이 없어 여기 없다
+REFS = [
+    ("crop_variants", ["crop_name"], "crops", ["name"]),
+    (
+        "crop_stages",
+        ["crop_name", "maturity_type"],
+        "crop_variants",
+        ["crop_name", "maturity_type"],
+    ),
+]
+
+
+def _int(value) -> int | None:
+    """CSV 값은 전부 문자열이라 비교 전에 바꾼다. 숫자가 아니면 None 으로 알린다."""
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def stage_problems(data: dict[str, list[dict]]) -> list[str]:
     """
     # summary
-    마스터 안에서 서로 가리키는 관계를 모은다. 작물 계층 둘뿐이고,
-    grids·stations 는 가리키는 대상이 없다.
+    품종별로 단계가 0 에서 시작해 끊김 없이 이어지고, gdd_target 에서 끝나는지 본다.
+    구간이 반개구간이라 앞 단계의 gdd_to 와 다음 단계의 gdd_from 이 같은 값이어야 한다.
+    DB 는 행 하나씩만 보므로(ck_crop_stages_gdd_range) 이 검사를 대신하지 못한다 —
+    구멍이 뚫린 채로 들어가면 그 구간에 걸린 밭이 단계 판정에서 빠진다.
 
     # params
-    data: read_all 결과<br>
+    data: read_all 결과. crop_variants·crop_stages 가 있어야 한다<br>
 
     # returns
-    Ref 목록 2개. 작물 계층뿐이라 grids·stations·terms 는 빠진다
+    위반 설명 한 줄씩. crop_variants 순서대로다. 이상이 없으면 빈 리스트
 
     # examples
-        check_refs(refs(data))  -> 자연키 전부 해석됨
+        stage_problems(data)
+        -> ['상추/EARLY 2단계: gdd_from 80, 앞 단계 gdd_to 100']
     """
-    crops = {r["name"] for r in data["crops"]}
-    variants = {(r["crop_name"], r["maturity_type"]) for r in data["crop_variants"]}
+    stages: dict[tuple[str, str], list[dict]] = {}
+    for row in data["crop_stages"]:
+        stages.setdefault((row["crop_name"], row["maturity_type"]), []).append(row)
 
-    return [
-        ("crop_variants -> 작물", data["crop_variants"], lambda r: r["crop_name"], crops),
-        (
-            "crop_stages -> 품종",
-            data["crop_stages"],
-            lambda r: (r["crop_name"], r["maturity_type"]),
-            variants,
-        ),
-    ]
+    problems: list[str] = []
+    for variant in data["crop_variants"]:
+        key = (variant["crop_name"], variant["maturity_type"])
+        name = f"{key[0]}/{key[1]}"
+
+        rows = stages.get(key)
+        if not rows:
+            problems.append(f"{name}: 단계가 하나도 없다")
+            continue
+
+        # 숫자로 못 바꾸는 값이 섞이면 아래 비교가 전부 무의미해진다. 여기서 끊는다
+        bad = [
+            column
+            for column in ("stage_order", "gdd_from", "gdd_to")
+            if any(_int(row[column]) is None for row in rows)
+        ]
+        if bad:
+            problems.append(f"{name}: 정수가 아닌 값이 있다 {bad}")
+            continue
+
+        rows.sort(key=lambda r: int(r["stage_order"]))
+
+        orders = [int(row["stage_order"]) for row in rows]
+        if orders != list(range(1, len(orders) + 1)):
+            problems.append(f"{name}: stage_order 가 1부터 연속이 아니다 {orders}")
+
+        if int(rows[0]["gdd_from"]) != 0:
+            problems.append(f"{name}: 첫 단계 gdd_from {rows[0]['gdd_from']}, 0 이어야 한다")
+
+        # 길이가 하나 차이 나는 게 정상이라 strict 를 켜지 않는다
+        for prev, cur in zip(rows, rows[1:], strict=False):
+            if int(prev["gdd_to"]) != int(cur["gdd_from"]):
+                problems.append(
+                    f"{name} {cur['stage_order']}단계: gdd_from {cur['gdd_from']}, "
+                    f"앞 단계 gdd_to {prev['gdd_to']}"
+                )
+
+        target = _int(variant["gdd_target"])
+        if target is None:
+            problems.append(f"{name}: gdd_target 이 정수가 아니다 {variant['gdd_target']}")
+        elif int(rows[-1]["gdd_to"]) != target:
+            problems.append(f"{name}: 마지막 gdd_to {rows[-1]['gdd_to']}, gdd_target {target}")
+
+    return problems
 
 
 def load(db, data: dict[str, list[dict]]) -> dict[str, int]:
@@ -147,7 +216,14 @@ def main() -> None:
 
     if "--check" in sys.argv:
         count_rows(data, TABLES)
-        check_refs(refs(data))
+        # 한 번에 모아 찍고 한 번만 멈춘다. 종류별로 고치고 다시 돌리지 않게
+        check.report(
+            [
+                *check.duplicates(data, UNIQUE),
+                *check.refs(data, REFS),
+                *stage_problems(data),
+            ]
+        )
         return
 
     require_tables(get_engine(), TABLES, INIT_HINT)

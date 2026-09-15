@@ -154,3 +154,33 @@ def missing_refs(rows: Iterable[dict], key_of: Callable[[dict], Any], known: set
         if key not in known:
             bad.append(key)
     return bad
+
+
+def duplicate_keys(rows: Iterable[dict], key_of: Callable[[dict], Any]) -> list:
+    """
+    # summary
+    같은 키가 두 번 이상 나오는 행의 키만 모은다. DB 없이 CSV 안에서 검사할 때 쓴다.
+    upsert 가 행을 한 문장에 몰아 넣어서, DB 제약에 걸려도 어느 행이 겹쳤는지 모른다.
+
+    # params
+    rows: 검사할 행들<br>
+    key_of: 행에서 자연키를 꺼내는 함수. 어느 컬럼이 키인지가 테이블마다 달라
+        호출하는 쪽에서 준다<br>
+
+    # returns
+    두 번째로 나온 것부터의 키. 세 번 나오면 두 번 들어간다.
+    겹치는 것이 없으면 빈 리스트
+
+    # examples
+        duplicate_keys([{"name": "상추"}, {"name": "상추"}], lambda r: r["name"])
+        -> ['상추']
+    """
+    seen: set = set()
+    dup = []
+    for row in rows:
+        key = key_of(row)
+        if key in seen:
+            dup.append(key)
+        else:
+            seen.add(key)
+    return dup

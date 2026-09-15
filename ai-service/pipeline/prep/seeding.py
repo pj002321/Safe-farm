@@ -1,19 +1,15 @@
 """CSV 시드 스크립트의 공통 뼈대. 어느 테이블을 다루는지는 알지 않는다.
 
-무엇을 어떤 순서로 넣을지, 자연키가 무엇인지는 호출하는 쪽이 정한다.
-여기 있는 것은 시드 스크립트마다 똑같이 반복되던 입출력과 사전 검사뿐이다.
+무엇을 어떤 순서로 넣을지는 호출하는 쪽이 정한다. 여기 있는 것은 시드 스크립트마다
+똑같이 반복되던 입출력과 사전 확인뿐이다 — CSV 내용 검사는 check.py 가 한다.
 """
 
-from collections.abc import Callable, Sequence
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Any
 
 from sqlalchemy import Engine
 
-from pipeline.prep.table import missing_refs, missing_tables, read_csv
-
-# (설명, 검사할 행들, 행에서 키를 꺼내는 함수, 있다고 아는 키 집합)
-Ref = tuple[str, Sequence[dict], Callable[[dict], Any], set]
+from pipeline.prep.table import missing_tables, read_csv
 
 
 def read_all(directory: Path, tables: Sequence[str]) -> dict[str, list[dict]]:
@@ -52,30 +48,6 @@ def count_rows(data: dict[str, list[dict]], tables: Sequence[str]) -> None:
     """
     for name in tables:
         print(f"  {name:18s} {len(data[name]):3d} 행")
-
-
-def check_refs(refs: Sequence[Ref]) -> None:
-    """
-    # summary
-    CSV 끼리 자연키가 맞는지 본다. DB 에 붙지 않는다.
-    어긋난 것이 있으면 전부 찍고 SystemExit(1) 로 멈춘다 — 첫 실패에서 서지 않는다.
-
-    # params
-    refs: Ref 목록. 무엇이 무엇을 가리키는지는 호출하는 쪽이 안다<br>
-
-    # examples
-        check_refs([("crop_variants -> 작물", rows, lambda r: r["crop_name"], names)])
-        -> 자연키 전부 해석됨
-    """
-    broken = False
-    for label, rows, key_of, known in refs:
-        bad = missing_refs(rows, key_of, known)
-        if bad:
-            broken = True
-            print(f"\n{label}: 없는 대상 {sorted(set(map(str, bad)))}")
-    if broken:
-        raise SystemExit(1)
-    print("\n자연키 전부 해석됨")
 
 
 def require_tables(engine: Engine, tables: Sequence[str], hint: str) -> None:
