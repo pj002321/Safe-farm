@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { SproutIcon } from "@/components/icons";
 import { CROPS } from "@/components/plot/CropChips";
+import { CROP_CALENDARS, stageAt } from "@/features/growth/domain/growthStage";
 import {
   daysSincePlanting,
   type PlotMapPoint,
@@ -20,7 +21,8 @@ import {
  * [Description]
  * - 텃밭이 하나면 그 점 중심으로 고정 줌(스펙), 여럿이면 bounds 로 전부 담는다.
  * - 마커는 작물 아이콘 + D+n 라벨을 얹은 CustomOverlay다(V1-35).
- * - 마커를 누르면 밭 이름·작물 요약 카드가 토글된다(V1-36).
+ * - 마커를 누르면 밭 이름·작물·생육단계·다음 작업·상세 링크 요약 카드가 토글된다(V1-36).
+ *   생육단계는 `CROP_CALENDARS`(features/growth)에 없는 작물(단감 등 과수)이면 생략된다.
  * ---------------------------------------------
  */
 
@@ -51,14 +53,32 @@ function markerElement(point: PlotMapPoint, now: Date): HTMLDivElement {
   return el;
 }
 
-/** 마커를 눌렀을 때 뜨는 밭 이름·작물 요약 카드. */
-function summaryHtml(point: PlotMapPoint): string {
+/** 마커를 눌렀을 때 뜨는 밭 이름·작물·생육단계·다음 작업 요약 카드. */
+function summaryHtml(point: PlotMapPoint, now: Date): string {
   const crop = CROPS.find((c) => c.id === point.cropId);
+  const calendar = point.cropId ? CROP_CALENDARS[point.cropId] : undefined;
+  const days = daysSincePlanting(point, now);
+  // persimmon 처럼 CROP_CALENDARS 에 없는 작물은 생육단계를 못 낸다 — 별도 계산식이 필요하다(과수).
+  const stage = calendar && days !== null ? stageAt(calendar, days) : null;
 
   return renderToStaticMarkup(
-    <div className="rounded-lg border border-border bg-surface px-3 py-2 text-sm shadow-md">
+    <div className="max-w-56 rounded-lg border border-border bg-surface px-3 py-2 text-sm shadow-md">
       <p className="font-medium text-fg">{point.nameKo ?? "이름 없는 밭"}</p>
       <p className="text-fg-muted">{crop?.labelKo ?? "작물 미정"}</p>
+      {stage && (
+        <>
+          <p className="mt-1.5 text-accent text-xs font-medium">
+            {stage.nameKo}
+          </p>
+          <p className="text-fg-muted text-xs">{stage.adviceKo}</p>
+        </>
+      )}
+      <a
+        className="mt-1.5 inline-block text-accent text-xs underline"
+        href={`/plots/${point.id}`}
+      >
+        상세 보기
+      </a>
     </div>,
   );
 }
@@ -93,7 +113,7 @@ export function PlotsMap({ points }: PlotsMapProps) {
 
       const summary = new sdk.maps.CustomOverlay({
         position,
-        content: summaryHtml(point),
+        content: summaryHtml(point, now),
         yAnchor: 2.2,
       });
 
@@ -104,9 +124,11 @@ export function PlotsMap({ points }: PlotsMapProps) {
         summary.setMap(isOpen ? map : null);
       });
 
-      new sdk.maps.CustomOverlay({ position, content: marker, yAnchor: 1 }).setMap(
-        map,
-      );
+      new sdk.maps.CustomOverlay({
+        position,
+        content: marker,
+        yAnchor: 1,
+      }).setMap(map);
     }
   }, [status, points]);
 

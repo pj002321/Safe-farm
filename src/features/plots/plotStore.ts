@@ -1,7 +1,7 @@
 import "server-only";
 
 import { getSupabaseServer } from "@/shared/supabase/server";
-import { toPlotMapPoint, type PlotMapPoint } from "./domain/plotSummary";
+import { type PlotMapPoint, toPlotMapPoint } from "./domain/plotSummary";
 import type { PlotRegistrationInput } from "./domain/registerPlot";
 
 /**
@@ -63,4 +63,23 @@ export async function listPlots(userId: string): Promise<PlotMapPoint[]> {
   if (error) throw new Error(error.message);
 
   return (data ?? []).map(toPlotMapPoint);
+}
+
+/** 텃밭 하나(상세 화면용). 없거나 남의 밭이면 null. */
+export async function getPlot(
+  userId: string,
+  plotId: string,
+): Promise<PlotMapPoint | null> {
+  const supabase = await getSupabaseServer();
+
+  const { data, error } = await supabase
+    .from("plots")
+    .select("id, name, latitude, longitude, crops, sowing_date, sowing_unknown")
+    .eq("user_id", userId)
+    .eq("id", plotId)
+    .maybeSingle();
+
+  if (error) throw new Error(error.message);
+
+  return data ? toPlotMapPoint(data) : null;
 }
