@@ -208,11 +208,14 @@ export function PlotLocationStep() {
             </p>
           )}
           {/* SDK 를 못 받으면 지도와 주소 검색이 함께 죽는다 — 둘 다 window.kakao
-              를 쓴다. 좌표 문제와 성격이 달라 PLOT_LOCATION_MESSAGE 에는 넣지 않는다. */}
+              를 쓴다. 좌표 문제와 성격이 달라 PLOT_LOCATION_MESSAGE 에는 넣지 않는다.
+              `<output>` 은 role="status" 를 기본으로 가진다. p+role 조합보다 보조기기
+              지원이 넓고 biome 의 a11y/useSemanticElements 도 이쪽을 요구한다
+              (ConsentFields·Skeleton 과 같은 방식). */}
           {status === "error" && (
-            <p className="mt-2 text-sm text-unsuitable" role="status">
+            <output className="mt-2 block text-sm text-unsuitable">
               지도를 불러오지 못했습니다. 새로고침해 주세요.
-            </p>
+            </output>
           )}
         </div>
       </div>
