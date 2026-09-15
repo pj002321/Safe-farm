@@ -2,6 +2,7 @@ import Link from "next/link";
 import { LogoWordmark } from "@/components/icons";
 import { BottomTabs } from "@/components/shared/BottomTabs";
 import { BOTTOM_TABS_SPACER } from "@/components/shared/bottomTabsLayout";
+import { HeaderTabs } from "@/components/shared/HeaderTabs";
 import { ThemeToggle } from "@/components/shared/ThemeToggle";
 import { requireConsentOrRedirect } from "@/shared/auth/consentGate";
 
@@ -19,8 +20,12 @@ import { requireConsentOrRedirect } from "@/shared/auth/consentGate";
  *   동의 화면을 거치지 않고 만들어진 계정이 생기기 때문이다.
  *   ⚠️ 렌더 시점 검사라 **Server Action 에는 미치지 않는다.** 동의가 전제인
  *   액션은 첫 줄에서 `requireConsent()` 를 부를 것.
- * - **좁은 화면에는 하단 탭이 붙는다.** 모바일 우선 구조라 주요 이동은 엄지가
- *   닿는 아래쪽에 둔다. 넓은 화면에서는 상단 헤더가 그 일을 하므로 탭을 숨긴다 —
+ * - **주요 메뉴가 화면 크기에 따라 자리를 옮긴다.** 좁으면 하단 독, 넓으면 헤더
+ *   가운데 세그먼트 탭이다. 목록은 `appTabs.tsx` 한 곳에서 오므로 둘이 어긋나지
+ *   않는다. 예전에는 넓은 화면에 주요 메뉴가 **아예 없어서** 지도·날씨·질문·
+ *   내정보로 갈 길이 데스크톱에서 끊겨 있었다.
+ *   모바일 우선 구조라 주요 이동은 엄지가 닿는 아래쪽에 둔다. 넓은 화면에서는
+ *   헤더가 그 일을 하므로 독을 숨긴다 —
  *   둘을 같이 두면 같은 이동을 두 군데서 제공해 현재 위치가 흐려진다.
  *   본문 아래 여백(`BOTTOM_TABS_SPACER`)을 빠뜨리면 페이지 마지막 요소가
  *   탭에 가려 영영 안 보인다.
@@ -36,13 +41,18 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
   return (
     <div className={`min-h-dvh ${BOTTOM_TABS_SPACER}`}>
       <header className="sticky top-0 z-40 border-border border-b bg-bg/80 backdrop-blur">
-        <nav className="mx-auto flex max-w-5xl items-center gap-4 px-6 py-4">
+        <div className="mx-auto flex max-w-6xl items-center gap-4 px-6 py-3">
           <Link
             href="/dashboard"
             className="text-fg transition-colors hover:text-accent"
           >
             <LogoWordmark />
           </Link>
+
+          <span className="flex-1" />
+
+          {/* 넓은 화면의 주요 메뉴. 좁은 화면에서는 하단 독이 대신한다. */}
+          <HeaderTabs />
 
           <span className="flex-1" />
 
@@ -61,7 +71,7 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
           </span>
 
           <ThemeToggle />
-        </nav>
+        </div>
       </header>
       {children}
 
