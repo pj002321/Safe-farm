@@ -25,7 +25,12 @@
  */
 
 /**
- * 본문 아래 여백. 탭 바 높이(아이콘 + 글자 + 상하 padding ≈ 4.75rem)만큼 비운다.
- * 넓은 화면에서는 탭이 숨으므로 여백도 없앤다.
+ * 본문 아래 여백.
+ *
+ * 독이 **떠 있으므로**(가장자리에 붙어 있지 않다) 높이 + 아래 띄운 만큼을 비운다.
+ * 독 높이 ≈ 3.5rem, 아래 띄움 0.75rem, 안전 영역은 그때그때 다르다 —
+ * env() 를 여기서도 더해 홈 인디케이터가 있는 기기에서 마지막 요소가 가리지
+ * 않게 한다. 넓은 화면에서는 독이 숨으므로 여백도 없앤다.
  */
-export const BOTTOM_TABS_SPACER = "pb-[4.75rem] lg:pb-0";
+export const BOTTOM_TABS_SPACER =
+  "pb-[calc(5rem+env(safe-area-inset-bottom))] lg:pb-0";
