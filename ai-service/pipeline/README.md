@@ -31,9 +31,9 @@ CSV 자연키가 어긋나면 DB 에 손대기 전에 멈춘다.
 
 | 단계 | 대상 테이블 | 쓰는 방식 |
 |---|---|---|
-| `init` | FarmBase 전체 | CREATE TABLE 만. 데이터는 안 건드림 |
-| `master` | crops · crop_variants · crop_stages · grids · stations · terms | upsert |
-| `seed` | weather_forecast · weather_obs_daily · profiles · user_agreements | upsert |
+| `init` | FarmBase 전체 − 회원·약관·텃밭 계열 | CREATE TABLE 만. 데이터는 안 건드림 |
+| `master` | crops · crop_variants · crop_stages · grids · stations | upsert |
+| `seed` | weather_forecast · weather_obs_daily | upsert |
 
 - 원본은 `data/dummy/*.csv`. 파일 이름이 테이블 이름이다.
 - **upsert** — 자연키가 이미 있으면 UPDATE, 없으면 INSERT. **삭제는 없다.**
@@ -42,8 +42,10 @@ CSV 자연키가 어긋나면 DB 에 손대기 전에 멈춘다.
   `crop_stages.(variant_id, stage_order)`.
 - `crop_id`·`variant_id` 같은 identity 값은 CSV 에 없다. 부모를 넣고 flush 한 뒤
   조회해서 자식 행에 채운다. 그래서 CSV 는 `crop_name` 같은 자연키로 부모를 가리킨다.
-- `master` 가 먼저다. `seed` 는 `grid_id`·`terms_id` 를 마스터에서 조회하므로
-  비어 있으면 멈춘다.
+- `master` 가 먼저다. `seed` 는 `grid_id` 를 마스터에서 조회하므로 비어 있으면 멈춘다.
+- `profiles`·`plots`·`terms`·`user_agreements` 는 여기서 만들지도 넣지도 않는다.
+  쓰기는 Next.js 몫이고, ai-service 는 필요한 값을 요청으로 받는다. ORM 정의는
+  남아 있지만 파이프라인 대상에서 빠진다.
 
 | 명령 | 하는 일 |
 |---|---|

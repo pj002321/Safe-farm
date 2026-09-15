@@ -1,8 +1,11 @@
 """data/dummy/*.csv -> farm 마스터 테이블. 사람이 관리하는 기준 정보다.
 
 마스터는 운영 중에 스스로 늘지 않는다. 작물 도메인(crops·crop_variants·crop_stages),
-기상청 격자와 관측소 목록(grids·stations), 약관(terms) 이 여기 속한다.
-날씨 실측·예보와 회원 데이터는 런타임에 들어오므로 여기서 다루지 않는다 — seed_farm_db.py.
+기상청 격자와 관측소 목록(grids·stations) 이 여기 속한다.
+날씨 실측·예보는 런타임에 들어오므로 여기서 다루지 않는다 — seed_farm_db.py.
+
+약관(terms)·동의(user_agreements)·회원·텃밭은 Next.js 몫이라 이 파이프라인이 건드리지
+않는다. ORM 정의는 남아 있지만 적재 대상이 아니다.
 
 crop_id 같은 identity 값은 CSV 에 없다. 부모를 먼저 넣고 조회해서 자식에 채운다.
 CSV 를 고치고 다시 돌리면 그 값이 DB 에 반영된다.
@@ -17,7 +20,7 @@ from sqlalchemy import select
 
 from app.core.config import DATA_DIR
 from app.core.db import get_engine, new_session
-from app.models.farm import Crop, CropStage, CropVariant, Grid, Station, Terms
+from app.models.farm import Crop, CropStage, CropVariant, Grid, Station
 from pipeline.prep.seeding import Ref, check_refs, count_rows, read_all, report, require_tables
 from pipeline.prep.table import key_dict, upsert
 
@@ -31,7 +34,6 @@ TABLES = [
     "crop_stages",
     "grids",
     "stations",
-    "terms",
 ]
 
 
@@ -39,7 +41,7 @@ def refs(data: dict[str, list[dict]]) -> list[Ref]:
     """
     # summary
     마스터 안에서 서로 가리키는 관계를 모은다. 작물 계층 둘뿐이고,
-    grids·stations·terms 는 가리키는 대상이 없다.
+    grids·stations 는 가리키는 대상이 없다.
 
     # params
     data: read_all 결과<br>
@@ -123,9 +125,6 @@ def load(db, data: dict[str, list[dict]]) -> dict[str, int]:
     # 컬럼이 nx, ny 뿐이라 갱신할 것이 없다. 충돌하면 건너뛴다
     done["grids"] = upsert(db, Grid, data["grids"], ["nx", "ny"])
     done["stations"] = upsert(db, Station, data["stations"], ["station_code"])
-
-    rows = [dict(r, is_required=r["is_required"] == "true") for r in data["terms"]]
-    done["terms"] = upsert(db, Terms, rows, ["type", "version"])
 
     db.commit()
     return done
