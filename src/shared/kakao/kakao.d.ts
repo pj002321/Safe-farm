@@ -84,12 +84,12 @@ declare namespace kakao.maps {
   interface CustomOverlayOptions {
     position: LatLng;
     /** 마커 대신 얹을 실제 HTML 문자열. React 조각을 문자열로 굳혀 넘긴다. */
-    content: string;
+    content: string | HTMLElement;
     map?: Map;
     /** 좌표가 콘텐츠의 어디에 오는지. 1이면 바닥 중앙(핀처럼). 기본은 중앙(0.5). */
     yAnchor?: number;
   }
-  
+
   /** 이미지 한 장뿐인 Marker 와 달리 원하는 HTML(아이콘+글자)을 그대로 지도 위에 얹는다. */
   class CustomOverlay {
     constructor(options: CustomOverlayOptions);

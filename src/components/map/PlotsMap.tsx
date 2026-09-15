@@ -15,11 +15,12 @@ import {
 
 /**
  * ---------------------------------------------
- * [Feature]: 지도 탭 — 등록 텃밭 초기 뷰 (V1-34)
+ * [Feature]: 지도 탭 — 등록 텃밭 초기 뷰 + 마커 (V1-34~36)
  *
  * [Description]
- * - 마커는 아직 없다(V1-35 몫). "카메라가 올바른 위치·배율로 시작하는가"만 책임진다.
  * - 텃밭이 하나면 그 점 중심으로 고정 줌(스펙), 여럿이면 bounds 로 전부 담는다.
+ * - 마커는 작물 아이콘 + D+n 라벨을 얹은 CustomOverlay다(V1-35).
+ * - 마커를 누르면 밭 이름·작물 요약 카드가 토글된다(V1-36).
  * ---------------------------------------------
  */
 
@@ -32,17 +33,32 @@ interface PlotsMapProps {
   points: readonly PlotMapPoint[];
 }
 
-/** 작물 아이콘 + D+n 글자를 지도 위 말풍선 HTML로 굳힌다. */
-function markerHtml(point: PlotMapPoint, now: Date): string {
+/** 작물 아이콘 + D+n 을 그리고, 클릭하면 요약 카드를 여닫는 실제 DOM 마커를 만든다. */
+function markerElement(point: PlotMapPoint, now: Date): HTMLDivElement {
   const crop = CROPS.find((c) => c.id === point.cropId);
   const days = daysSincePlanting(point, now);
 
-  return renderToStaticMarkup(
+  const el = document.createElement("div");
+  el.style.cursor = "pointer";
+  el.innerHTML = renderToStaticMarkup(
     <div className="flex items-center gap-1 rounded-full border border-border bg-surface px-2 py-1 text-accent shadow-sm">
       {crop?.icon ?? <SproutIcon />}
       {days !== null && (
         <span className="text-fg text-xs font-medium">D+{days}</span>
       )}
+    </div>,
+  );
+  return el;
+}
+
+/** 마커를 눌렀을 때 뜨는 밭 이름·작물 요약 카드. */
+function summaryHtml(point: PlotMapPoint): string {
+  const crop = CROPS.find((c) => c.id === point.cropId);
+
+  return renderToStaticMarkup(
+    <div className="rounded-lg border border-border bg-surface px-3 py-2 text-sm shadow-md">
+      <p className="font-medium text-fg">{point.nameKo ?? "이름 없는 밭"}</p>
+      <p className="text-fg-muted">{crop?.labelKo ?? "작물 미정"}</p>
     </div>,
   );
 }
@@ -73,12 +89,24 @@ export function PlotsMap({ points }: PlotsMapProps) {
 
     const now = new Date();
     for (const point of points) {
-      const overlay = new sdk.maps.CustomOverlay({
-        position: new sdk.maps.LatLng(point.latitude, point.longitude),
-        content: markerHtml(point, now),
-        yAnchor: 1,
+      const position = new sdk.maps.LatLng(point.latitude, point.longitude);
+
+      const summary = new sdk.maps.CustomOverlay({
+        position,
+        content: summaryHtml(point),
+        yAnchor: 2.2,
       });
-      overlay.setMap(map);
+
+      const marker = markerElement(point, now);
+      let isOpen = false;
+      marker.addEventListener("click", () => {
+        isOpen = !isOpen;
+        summary.setMap(isOpen ? map : null);
+      });
+
+      new sdk.maps.CustomOverlay({ position, content: marker, yAnchor: 1 }).setMap(
+        map,
+      );
     }
   }, [status, points]);
 
