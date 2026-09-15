@@ -41,6 +41,44 @@ export function toPlotMapPoint(row: PlotRow): PlotMapPoint {
   };
 }
 
+/** 목록 카드 한 장이 쓰는 값. 지도 마커(PlotMapPoint)보다 넓다. */
+export interface PlotCard {
+  id: string;
+  nameKo: string | null;
+  regionKo: string;
+  areaM2: number | null;
+  cropIds: string[];
+  sowingDate: string | null;
+  sowingUnknown: boolean;
+  createdAt: string;
+}
+
+/** 카드 목록이 읽어 오는 plots 한 행. */
+export interface PlotCardRow {
+  id: string;
+  name: string | null;
+  area_m2: number | null;
+  region_ko: string;
+  crops: string[];
+  sowing_date: string | null;
+  sowing_unknown: boolean;
+  created_at: string;
+}
+
+export function toPlotCard(row: PlotCardRow): PlotCard {
+  return {
+    id: row.id,
+    nameKo: row.name,
+    regionKo: row.region_ko,
+    areaM2: row.area_m2,
+    // 마커는 대표 작물 하나만 쓰지만, 카드는 심은 작물을 전부 보여준다.
+    cropIds: row.crops,
+    sowingDate: row.sowing_date,
+    sowingUnknown: row.sowing_unknown,
+    createdAt: row.created_at,
+  };
+}
+
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 /** 심은 날부터 지난 날수(D+n). 모르면 null. */

@@ -12,7 +12,7 @@ import sys
 from pipeline.doc import chunk, embed, init_doc_db, load_data, verify
 
 STEPS = {
-    "init": init_doc_db.main,
+    "init": init_doc_db.main, # vector DB extension
     "load": load_data.main,
     "chunk": chunk.main,
     "embed": embed.main,
@@ -21,6 +21,18 @@ STEPS = {
 
 
 def main() -> None:
+    """
+    # summary
+    단계를 순서대로 부른다. 이름을 주면 그 단계만 돈다. 각 단계가 멱등이라
+    통째로 다시 돌려도 바뀐 것만 다시 만든다.
+
+    # params
+    없다. 단계 이름은 argv 에서 읽는다 — init, load, chunk, embed, verify<br>
+
+    # examples
+        py -3.12 -m pipeline.doc.run_all
+        py -3.12 -m pipeline.doc.run_all chunk embed
+    """
     names = sys.argv[1:] or list(STEPS)
     unknown = [n for n in names if n not in STEPS]
     if unknown:
