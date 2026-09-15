@@ -5,6 +5,7 @@ import { Checkbox } from "@/components/shared/Checkbox";
 import { Field } from "@/components/shared/Field";
 import type { Profile } from "@/shared/auth/profile";
 import { formatFarmDate } from "@/shared/utils/format";
+import { WithdrawPanel } from "./WithdrawPanel";
 
 /**
  * ---------------------------------------------
@@ -128,6 +129,9 @@ export function AccountPanel({
           )}
         </div>
       </form>
+
+      {/* 탈퇴는 계정 구역 맨 아래. 접혀 있어 평소에는 눈에 걸리지 않는다. */}
+      <WithdrawPanel />
     </div>
   );
 }
