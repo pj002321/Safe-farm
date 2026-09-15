@@ -21,12 +21,20 @@ from pipeline.prep.schema import create, ddl, own_tables
 # 선은 그대로 둔다 — auth 관련 정의가 늘어도 여기서 만들어지지 않게
 SKIP_SCHEMAS = ["auth"]
 
+# 회원·약관·텃밭 계열. 쓰기도 읽기도 Next.js 몫이라 여기서 만들지 않는다.
+# profiles·plots 는 정본이 supabase/migrations 라 여기서 만들면 RLS·트리거가 빠진
+# 반쪽이 생기고, --drop 이 남의 데이터를 지운다. terms·user_agreements 는 동의 절차가
+# 채우는 것이라 같이 둔다.
+# 옵션으로도 열지 않음 — 이 DB 를 빈 상태로 띄워야 하면 supabase db push 를 쓴다
+EXTERNAL_TABLES = ["profiles", "plots", "terms", "user_agreements"]
+
 
 def main() -> None:
     """
     # summary
     FarmBase 에 등록된 테이블을 만든다. --sql 이면 DB 에 붙지 않고 문장만 찍는다.
     --drop 이면 만들기 전에 같은 이름의 테이블을 지운다. 들어 있던 데이터도 같이 없어진다.
+    EXTERNAL_TABLES 는 어떤 옵션으로도 대상에 들어가지 않는다.
 
     # params
     없다. 옵션은 argv 에서 읽는다 — --sql, --drop<br>
@@ -35,11 +43,14 @@ def main() -> None:
         py -3.12 -m pipeline.farm.init_farm_db --sql
         py -3.12 -m pipeline.farm.init_farm_db --drop
     """
-    tables = own_tables(FarmBase.metadata, SKIP_SCHEMAS)
+    tables = own_tables(FarmBase.metadata, SKIP_SCHEMAS, EXTERNAL_TABLES)
 
     if "--sql" in sys.argv:
         print(ddl(tables))
         return
+
+    # 왜 profiles 가 안 생겼는지 나중에 찾아 헤매지 않게 건너뛴 사실을 남김
+    print("건너뜀(정본은 supabase/migrations):", ", ".join(EXTERNAL_TABLES))
 
     drop = "--drop" in sys.argv
     if drop:

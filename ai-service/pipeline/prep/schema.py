@@ -13,15 +13,21 @@ from sqlalchemy.dialects import postgresql
 from sqlalchemy.schema import CreateTable
 
 
-def own_tables(metadata: MetaData, skip_schemas: Iterable[str] = ()) -> list[Table]:
+def own_tables(
+    metadata: MetaData,
+    skip_schemas: Iterable[str] = (),
+    skip_tables: Iterable[str] = (),
+) -> list[Table]:
     """
     # summary
     우리가 만들어도 되는 테이블만 의존 순서대로 고른다. skip_schemas 에 든
-    스키마는 남이 소유한 것으로 보고 뺀다.
+    스키마는 남이 소유한 것으로 보고 뺀다. 같은 스키마 안에서 일부만 빼야 하면
+    skip_tables 를 쓴다 — 정본이 다른 곳(마이그레이션)에 있는 테이블이 그렇다.
 
     # params
     metadata: 대상 MetaData<br>
     skip_schemas: 건드리지 않을 스키마 이름 — Supabase 가 만드는 "auth" 같은 것<br>
+    skip_tables: 건드리지 않을 테이블 이름. 스키마 없이 이름만 비교함<br>
 
     # returns
     의존 순서대로 정렬된 테이블. 부모가 자식보다 앞에 온다 — 그대로 CREATE 해도 된다
@@ -29,9 +35,15 @@ def own_tables(metadata: MetaData, skip_schemas: Iterable[str] = ()) -> list[Tab
     # examples
         own_tables(FarmBase.metadata, ["auth"])
         -> [Table('crops'...), Table('grids'...), ...]   # auth.users 는 빠진다
+        own_tables(FarmBase.metadata, ["auth"], ["profiles"])   # profiles 도 뺀다
     """
     skip = set(skip_schemas)
-    return [table for table in metadata.sorted_tables if table.schema not in skip]
+    skip_names = set(skip_tables)
+    return [
+        table
+        for table in metadata.sorted_tables
+        if table.schema not in skip and table.name not in skip_names
+    ]
 
 
 def ddl(tables: Iterable[Table]) -> str:
