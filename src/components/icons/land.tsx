@@ -65,9 +65,12 @@ export function TerrainIcon(props: IconProps) {
 export function MapIcon(props: IconProps) {
   return (
     <svg {...ICON_BASE} aria-hidden="true" {...props}>
-      <path d="M2.5 6.2 9 4l6 2.2L21.5 4v13.8L15 20l-6-2.2-6.5 2.2z" />
-      <path d="M9 4v13.8" />
-      <path d="M15 6.2V20" />
+      {/* 접힌 종이 지도. 기하에 결함은 없었고 인상만 손봤다 — 지그재그를 2.2 에서
+          1.8 로 낮추고 폭을 19 에서 18 로 줄였다. 옆에 놓이는 해·사람·게이지가
+          둥근 편이라 혼자 각지고 꽉 차 보였다. 중심은 (12,12) 그대로다. */}
+      <path d="M3 6.4 9 4.6l6 1.8L21 4.6v13L15 19.4l-6-1.8-6 1.8z" />
+      <path d="M9 4.6v13" />
+      <path d="M15 6.4v13" />
     </svg>
   );
 }

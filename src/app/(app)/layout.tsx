@@ -39,7 +39,7 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
   const { viewer } = await requireConsentOrRedirect();
 
   return (
-    <div className={`min-h-dvh ${BOTTOM_TABS_SPACER}`}>
+    <div className={`group/app min-h-dvh ${BOTTOM_TABS_SPACER}`}>
       <header className="sticky top-0 z-40 border-border border-b bg-bg/80 backdrop-blur">
         <div className="mx-auto flex max-w-6xl items-center gap-4 px-6 py-3">
           <Link
@@ -75,7 +75,21 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
       </header>
       {children}
 
-      <BottomTabs />
+      {/*
+        페이지가 **자기 전용 하단 독**을 띄우면 공용 독이 비켜선다(텃밭 등록 마법사가
+        그렇게 한다). 안 비키면 좁은 화면 아래에 막대가 둘 쌓인다.
+
+        ⚠️ 이 조건을 `BottomTabs` **안에** 넣지 않는다. 의존성은 한 방향이고
+           (shared → features → app) 공용 컴포넌트가 특정 기능의 id 를 알면 그 규칙이
+           뒤집힌다. 아는 쪽은 **여기**(app 층)여야 한다.
+        ⚠️ display 유틸리티를 겨루게 하지 말 것. `hidden` 과 `group-has-[…]:hidden` 은
+           둘 다 display:none 이라 안전하지만, 조건이 서로 다른 group-has 두 개를
+           한 요소에 붙이면 특이도가 같아 **Tailwind 의 정렬 순서**가 승자를 정한다
+           — 클래스를 적은 순서가 아니다.
+      */}
+      <div className="group-has-[#plot-dock]/app:hidden">
+        <BottomTabs />
+      </div>
     </div>
   );
 }
