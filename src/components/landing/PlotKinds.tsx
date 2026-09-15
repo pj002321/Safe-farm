@@ -111,7 +111,7 @@ function StageTimeline({
   } (${Math.round(percent)}% 진행).`;
 
   return (
-    <div aria-label={label} className="mt-6" role="img">
+    <div aria-label={label} className="mt-3" role="img">
       {/* 눈금 라벨. 좁은 화면에서는 겹치므로 숨기고 아래 한 줄로 대신한다. */}
       <div aria-hidden="true" className="relative hidden h-4 sm:block">
         {stagesKo.map((stage, index) => {
@@ -141,8 +141,10 @@ function StageTimeline({
       </div>
 
       <div className="relative mt-1 h-2 rounded-full bg-surface-2">
+        {/* 채움도 밭 종류 색. 여기만 accent(인디고)로 두면 카드가 색을 갖고도
+            정작 가장 넓은 면이 다시 한 톤으로 돌아간다. */}
         <div
-          className="h-full rounded-full bg-accent"
+          className={`h-full rounded-full ${markClass}`}
           style={{ width: `${percent}%` }}
         />
 
@@ -209,14 +211,29 @@ export function PlotKinds() {
                       {style.icon}
                     </span>
                     <div className="min-w-0">
-                      <h3 className="font-semibold text-2xl text-fg tracking-tight">
-                        {style.labelKo}
-                      </h3>
-                      <p className="font-mono text-fg-subtle text-xs">
-                        {plot.methodKo}
+                      {/* 밭 이름이 제목이다. 예전에는 "논"·"밭"·"과수" 만 찍었는데,
+                        데이터에는 "낙동강변 논"·"배추밭"·"단감 과수원" 과 작물명이
+                        이미 들어 있었다. 종류는 배지로 남겨 이 절의 논지(재는 방식이
+                        다르다)를 지키면서, 작물이 화면에 드러나게 한다. */}
+                      <div className="flex items-center gap-2">
+                        <h3 className="truncate font-semibold text-fg text-xl tracking-tight">
+                          {plot.nameKo}
+                        </h3>
+                        <span
+                          className={`shrink-0 rounded-full px-2 py-0.5 font-medium text-[0.7rem] ${style.chip}`}
+                        >
+                          {style.labelKo}
+                        </span>
+                      </div>
+                      <p className="mt-0.5 truncate text-fg-muted text-sm">
+                        {plot.cropKo}
                       </p>
                     </div>
                   </div>
+
+                  <p className="mt-5 font-mono text-fg-subtle text-xs">
+                    {plot.methodKo}
+                  </p>
 
                   <StageTimeline
                     markClass={style.mark}
