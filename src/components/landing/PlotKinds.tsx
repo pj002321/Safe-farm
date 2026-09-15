@@ -1,7 +1,10 @@
+import type { ReactNode } from "react";
+import { FieldIcon, HarvestIcon, SproutIcon } from "@/components/icons";
 import { Reveal } from "@/components/shared/Reveal";
 import { SectionHeading } from "@/components/shared/SectionHeading";
 import type { PlotKind } from "@/features/monitoring/domain/observation";
 import { PLOTS } from "@/features/monitoring/domain/plots";
+import { FieldGutter } from "./FieldGutter";
 
 /**
  * ---------------------------------------------
@@ -28,11 +31,44 @@ import { PLOTS } from "@/features/monitoring/domain/plots";
  * ---------------------------------------------
  */
 
-/** 카드 머리에 쓰는 한 글자~두 글자 이름. 원본 시안의 h3 과 같다. */
-const KIND_LABEL: Record<PlotKind, string> = {
-  paddy: "논",
-  field: "밭",
-  orchard: "과수",
+/**
+ * 밭 종류의 얼굴.
+ *
+ * 셋이 똑같은 흰 카드에 글자만 다르게 있어서, 작물이 화면에 전혀 드러나지
+ * 않았다. 아이콘과 색을 붙여 한눈에 구분되게 한다. 색은 **의미에서** 골랐다:
+ *   논   물을 대는 곳     → info(빙하색)
+ *   밭   드러난 흙        → earth(점토색)
+ *   과수 잎이 덮은 나무   → telemetry(식생지수 라임)
+ * 임의로 예쁜 색을 고른 것이 아니라 globals.css 의 색 언어를 그대로 쓴 것이다.
+ *
+ * ⚠️ 클래스를 조립하지 말 것. Tailwind 는 클래스 문자열을 정적으로 읽으므로
+ *    `text-${tone}` 같은 조립은 생성되지 않는다(조용히 사라진다).
+ */
+const KIND_STYLE: Record<
+  PlotKind,
+  { labelKo: string; icon: ReactNode; chip: string; mark: string; text: string }
+> = {
+  paddy: {
+    labelKo: "논",
+    icon: <SproutIcon />,
+    chip: "bg-info/10 text-info",
+    mark: "bg-info",
+    text: "text-info",
+  },
+  field: {
+    labelKo: "밭",
+    icon: <FieldIcon />,
+    chip: "bg-earth-subtle text-earth",
+    mark: "bg-earth",
+    text: "text-earth",
+  },
+  orchard: {
+    labelKo: "과수",
+    icon: <HarvestIcon />,
+    chip: "bg-telemetry-subtle text-telemetry",
+    mark: "bg-telemetry",
+    text: "text-telemetry",
+  },
 };
 
 /** 눈금 i번째가 놓일 위치(0~1). 단계가 하나뿐이면 나눗셈이 깨지므로 0 으로 둔다. */
@@ -53,9 +89,18 @@ interface StageTimelineProps {
   stagesKo: readonly string[];
   progress: { label: string; ratio: number };
   methodKo: string;
+  /** 밭 종류 색. 완성된 클래스 문자열이어야 한다(위 주석 참고). */
+  markClass: string;
+  textClass: string;
 }
 
-function StageTimeline({ stagesKo, progress, methodKo }: StageTimelineProps) {
+function StageTimeline({
+  stagesKo,
+  progress,
+  methodKo,
+  markClass,
+  textClass,
+}: StageTimelineProps) {
   // 데이터가 0~1 을 벗어나도 막대가 칸 밖으로 나가지 않게 잘라 쓴다.
   const ratio = Math.min(1, Math.max(0, progress.ratio));
   const percent = ratio * 100;
@@ -67,14 +112,13 @@ function StageTimeline({ stagesKo, progress, methodKo }: StageTimelineProps) {
   } (${Math.round(percent)}% 진행).`;
 
   return (
-    <div aria-label={label} className="mt-6" role="img">
+    <div aria-label={label} className="mt-3" role="img">
       {/* 눈금 라벨. 좁은 화면에서는 겹치므로 숨기고 아래 한 줄로 대신한다. */}
       <div aria-hidden="true" className="relative hidden h-4 sm:block">
         {stagesKo.map((stage, index) => {
           const isFirst = index === 0;
           const isLast = index === stagesKo.length - 1;
-          const tone =
-            index === currentIndex ? "text-accent" : "text-fg-subtle";
+          const tone = index === currentIndex ? textClass : "text-fg-subtle";
           const place = isFirst
             ? "left-0 text-left"
             : isLast
@@ -98,8 +142,10 @@ function StageTimeline({ stagesKo, progress, methodKo }: StageTimelineProps) {
       </div>
 
       <div className="relative mt-1 h-2 rounded-full bg-surface-2">
+        {/* 채움도 밭 종류 색. 여기만 accent(인디고)로 두면 카드가 색을 갖고도
+            정작 가장 넓은 면이 다시 한 톤으로 돌아간다. */}
         <div
-          className="h-full rounded-full bg-accent"
+          className={`h-full rounded-full ${markClass}`}
           style={{ width: `${percent}%` }}
         />
 
@@ -118,7 +164,7 @@ function StageTimeline({ stagesKo, progress, methodKo }: StageTimelineProps) {
         {/* 현재 위치 마커 */}
         <span
           aria-hidden="true"
-          className="-top-1 -translate-x-1/2 absolute h-4 w-0.5 rounded-full bg-fg"
+          className={`-top-1 -translate-x-1/2 absolute h-4 w-0.5 rounded-full ${markClass}`}
           style={{ left: `${percent}%` }}
         />
       </div>
@@ -126,7 +172,7 @@ function StageTimeline({ stagesKo, progress, methodKo }: StageTimelineProps) {
       {/* 좁은 화면 전용 대체 라벨 */}
       <p
         aria-hidden="true"
-        className="mt-2 font-mono text-accent text-xs sm:hidden"
+        className={`mt-2 font-mono text-xs sm:hidden ${textClass}`}
       >
         {currentStage}
       </p>
@@ -136,8 +182,20 @@ function StageTimeline({ stagesKo, progress, methodKo }: StageTimelineProps) {
 
 export function PlotKinds() {
   return (
-    <div className="w-full bg-surface-2" id="plots">
-      <section className="mx-auto w-full max-w-6xl px-6 py-24 md:py-32">
+    <div
+      // 잎(라임) → 흙(점토) 방향의 옅은 물. 이 절이 "작물" 절인데 배경이 다른
+      // 절과 똑같은 무채색이라, 화면 전체가 회백색 한 톤으로 읽혔다.
+      // subtle 토큰은 테마별로 값이 갈려 있어 다크에서도 짙은 녹/갈로 따라온다.
+      className="relative w-full overflow-hidden bg-gradient-to-b from-telemetry-subtle via-surface-2 to-earth-subtle"
+      id="plots"
+    >
+      {/* 본문 양옆 빈 띠에 까는 장식. 폭이 여백을 그대로 따라가므로 좁은 화면에서는
+          저절로 0 이 된다. 왼쪽은 잎(라임), 오른쪽은 흙(점토)으로 이 절의 색 언어를
+          가장자리까지 잇는다. */}
+      <FieldGutter className="text-telemetry" side="left" />
+      <FieldGutter className="text-earth" side="right" />
+
+      <section className="relative mx-auto w-full max-w-6xl px-6 py-24 md:py-32">
         <SectionHeading
           description="논과 밭은 심은 날부터 열을 쌓아 세지만, 과수는 심은 지 몇 해 된 나무라 그 셈법이 통하지 않습니다. 그래서 화면도 계산도 따로 갑니다."
           eyebrow="세 가지 밭"
@@ -145,38 +203,70 @@ export function PlotKinds() {
         />
 
         <ul className="mt-14 grid gap-6 md:grid-cols-3">
-          {PLOTS.map((plot, index) => (
-            <Reveal as="li" delay={index * 80} key={plot.kind}>
-              <article className="flex h-full flex-col rounded-xl border border-border bg-surface p-6">
-                <h3 className="font-semibold text-2xl text-fg tracking-tight">
-                  {KIND_LABEL[plot.kind]}
-                </h3>
-                <p className="mt-1 font-mono text-fg-subtle text-xs">
-                  {plot.methodKo}
-                </p>
+          {PLOTS.map((plot, index) => {
+            const style = KIND_STYLE[plot.kind];
+            return (
+              <Reveal as="li" delay={index * 80} key={plot.kind}>
+                <article className="flex h-full flex-col rounded-xl border border-border bg-surface p-6">
+                  <div className="flex items-center gap-3">
+                    {/* 아이콘이 카드의 얼굴이다. 색은 종류마다 다르고, 글자와
+                      함께 두므로 색만으로 구분하게 두지 않는다. */}
+                    <span
+                      aria-hidden="true"
+                      className={`grid size-11 shrink-0 place-items-center rounded-xl text-xl ${style.chip}`}
+                    >
+                      {style.icon}
+                    </span>
+                    <div className="min-w-0">
+                      {/* 밭 이름이 제목이다. 예전에는 "논"·"밭"·"과수" 만 찍었는데,
+                        데이터에는 "낙동강변 논"·"배추밭"·"단감 과수원" 과 작물명이
+                        이미 들어 있었다. 종류는 배지로 남겨 이 절의 논지(재는 방식이
+                        다르다)를 지키면서, 작물이 화면에 드러나게 한다. */}
+                      <div className="flex items-center gap-2">
+                        <h3 className="truncate font-semibold text-fg text-xl tracking-tight">
+                          {plot.nameKo}
+                        </h3>
+                        <span
+                          className={`shrink-0 rounded-full px-2 py-0.5 font-medium text-[0.7rem] ${style.chip}`}
+                        >
+                          {style.labelKo}
+                        </span>
+                      </div>
+                      <p className="mt-0.5 truncate text-fg-muted text-sm">
+                        {plot.cropKo}
+                      </p>
+                    </div>
+                  </div>
 
-                <StageTimeline
-                  methodKo={plot.methodKo}
-                  progress={plot.progress}
-                  stagesKo={plot.stagesKo}
-                />
-
-                <p className="mt-5 font-mono text-2xl text-fg tabular-nums">
-                  {plot.progress.label}
-                </p>
-
-                <p className="mt-3 text-pretty text-fg-muted text-sm leading-relaxed">
-                  {plot.bodyKo}
-                </p>
-
-                <div className="mt-auto pt-6">
-                  <p className="border-border border-t pt-4 text-fg-subtle text-xs leading-relaxed">
-                    {plot.noteKo}
+                  <p className="mt-5 font-mono text-fg-subtle text-xs">
+                    {plot.methodKo}
                   </p>
-                </div>
-              </article>
-            </Reveal>
-          ))}
+
+                  <StageTimeline
+                    markClass={style.mark}
+                    methodKo={plot.methodKo}
+                    progress={plot.progress}
+                    stagesKo={plot.stagesKo}
+                    textClass={style.text}
+                  />
+
+                  <p className="mt-5 font-mono text-2xl text-fg tabular-nums">
+                    {plot.progress.label}
+                  </p>
+
+                  <p className="mt-3 text-pretty text-fg-muted text-sm leading-relaxed">
+                    {plot.bodyKo}
+                  </p>
+
+                  <div className="mt-auto pt-6">
+                    <p className="border-border border-t pt-4 text-fg-subtle text-xs leading-relaxed">
+                      {plot.noteKo}
+                    </p>
+                  </div>
+                </article>
+              </Reveal>
+            );
+          })}
         </ul>
       </section>
     </div>

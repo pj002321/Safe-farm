@@ -30,7 +30,7 @@ export interface PlotRow {
 }
 
 export function toPlotMapPoint(row: PlotRow): PlotMapPoint {
-   return {
+  return {
     id: row.id,
     nameKo: row.name,
     latitude: row.latitude,
@@ -41,38 +41,53 @@ export function toPlotMapPoint(row: PlotRow): PlotMapPoint {
   };
 }
 
-/** 목록 카드 한 장이 쓰는 값. 지도 마커(PlotMapPoint)보다 넓다. */
-export interface PlotCard {
+/**
+ * 마이페이지 텃밭 관리 목록의 한 줄.
+ *
+ * `PlotMapPoint` 를 넓혀 쓰지 않는다. 그쪽은 **지도 전용**이라 주소·면적을 일부러
+ * 버린 모양이고, 여기에 맞춰 넓히면 지도 화면이 그리지도 않는 주소 문자열을 매번
+ * 실어 나르게 된다. 같은 테이블이라도 화면이 다르면 모양도 다른 편이 정직하다.
+ */
+export interface PlotManageItem {
   id: string;
   nameKo: string | null;
-  regionKo: string;
+  addressKo: string;
+  /** ㎡. 등록할 때 건너뛸 수 있는 값이라 없을 수 있다. */
   areaM2: number | null;
-  cropIds: string[];
+  crops: readonly string[];
   sowingDate: string | null;
   sowingUnknown: boolean;
   createdAt: string;
 }
 
-/** 카드 목록이 읽어 오는 plots 한 행. */
-export interface PlotCardRow {
+/** 관리 목록이 읽는 컬럼. `PlotRow` 와 겹치지만 select 목록이 달라 따로 둔다. */
+export interface PlotManageRow {
   id: string;
   name: string | null;
-  area_m2: number | null;
-  region_ko: string;
+  address_ko: string;
+  area_m2: number | string | null;
   crops: string[];
   sowing_date: string | null;
   sowing_unknown: boolean;
   created_at: string;
 }
 
-export function toPlotCard(row: PlotCardRow): PlotCard {
+/**
+ * DB 행 → 관리 목록 모양.
+ *
+ * `area_m2` 가 `numeric` 이라 supabase-js 는 **문자열로** 준다. 정밀도를 잃지
+ * 않으려는 드라이버의 의도지만, 화면에서 `.toFixed()` 를 부르는 순간 터진다.
+ * 경계인 여기서 한 번만 숫자로 바꾼다.
+ */
+export function toPlotManageItem(row: PlotManageRow): PlotManageItem {
+  const area = row.area_m2 === null ? Number.NaN : Number(row.area_m2);
+
   return {
     id: row.id,
     nameKo: row.name,
-    regionKo: row.region_ko,
-    areaM2: row.area_m2,
-    // 마커는 대표 작물 하나만 쓰지만, 카드는 심은 작물을 전부 보여준다.
-    cropIds: row.crops,
+    addressKo: row.address_ko,
+    areaM2: Number.isFinite(area) ? area : null,
+    crops: row.crops,
     sowingDate: row.sowing_date,
     sowingUnknown: row.sowing_unknown,
     createdAt: row.created_at,

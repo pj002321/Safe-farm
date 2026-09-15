@@ -38,6 +38,14 @@ export interface Consent {
   terms: boolean;
   /** 개인정보 수집·이용 (필수) */
   privacy: boolean;
+  /**
+   * 위치정보 이용 (필수)
+   *
+   * 개인정보 동의와 **따로 받는다.** 위치정보는 수집 주체와 이용 목적이 달라
+   * 별도 고지·동의를 요구받고, 한 묶음으로 받으면 사용자가 무엇에 동의했는지
+   * 구분할 수 없다. 이 서비스는 밭 좌표가 없으면 리포트를 만들 수 없어 필수다.
+   */
+  location: boolean;
   /** 관측 리포트 외 마케팅 정보 수신 (선택) */
   marketing: boolean;
 }
@@ -65,6 +73,16 @@ export const CONSENT_ITEMS = [
       "수집 항목: 이메일, 이름, (구글 로그인 시) 프로필 사진 주소, 등록한 농지의 위치와 작물 정보. 이용 목적: 계정 식별, 농지별 생육·재해 리포트 생성과 발송. 보유 기간: 회원 탈퇴 시까지이며, 탈퇴 요청 시 지체 없이 파기합니다. 동의를 거부하실 수 있으나, 그 경우 계정 생성과 리포트 제공이 불가능합니다.",
   },
   {
+    key: "location",
+    label: "위치정보 이용에 동의합니다",
+    required: true,
+    href: "/location",
+    summary:
+      "밭 좌표로 그 자리의 기상을 조회합니다. 현재 위치는 저장하지 않습니다.",
+    detail:
+      "수집 항목: 이용자가 지도에서 지정한 밭의 좌표(위도·경도), 그리고 “현재 위치” 버튼을 누른 경우에 한해 단말의 현재 위치 1회. 이용 목적: 좌표를 기상청 동네예보 격자와 행정구역 코드로 변환해 해당 지점의 관측·예보를 조회하고, 그 지점 기준의 생육·재해 정보를 계산합니다. 보유 기간: 밭 좌표는 해당 밭을 삭제하거나 탈퇴할 때까지 보관하며, 단말의 현재 위치는 지도를 옮기는 데만 쓰고 저장하지 않습니다. 이동 경로를 추적하거나 백그라운드에서 위치를 수집하지 않습니다. 동의를 거부하실 수 있으나, 좌표 없이는 리포트를 만들 수 없어 서비스 이용이 불가능합니다.",
+  },
+  {
     key: "marketing",
     label: "마케팅 정보 수신에 동의합니다",
     required: false,
@@ -83,9 +101,15 @@ export const CONSENT_ITEMS = [
   detail: string;
 }[];
 
-/** 필수 항목이 모두 체크됐는가. 화면과 서버가 같은 판정을 쓴다. */
+/**
+ * 필수 항목이 모두 체크됐는가. 화면과 서버가 같은 판정을 쓴다.
+ *
+ * ⚠️ 여기에 항목을 더하면 **이미 가입한 사용자가 전부 온보딩 게이트에 걸린다.**
+ * 그들은 새 항목에 동의한 적이 없으니 맞는 동작이고, 게이트가 있는 이유이기도
+ * 하다. 다만 배포 시점에 그 일이 일어난다는 것을 알고 올려야 한다.
+ */
 export function isConsentComplete(consent: Consent): boolean {
-  return consent.terms && consent.privacy;
+  return consent.terms && consent.privacy && consent.location;
 }
 
 /**
@@ -106,6 +130,7 @@ export function parseConsent(value: unknown): Consent {
   return {
     terms: source.terms === true,
     privacy: source.privacy === true,
+    location: source.location === true,
     marketing: source.marketing === true,
   };
 }
@@ -120,6 +145,7 @@ export function toConsentMetadata(consent: Consent, agreedAt: string) {
   return {
     terms_agreed_at: agreedAt,
     privacy_agreed_at: agreedAt,
+    location_agreed_at: agreedAt,
     marketing_opt_in: consent.marketing,
   };
 }
@@ -142,6 +168,7 @@ export function serializeConsent(consent: Consent): string {
   return JSON.stringify({
     terms: consent.terms,
     privacy: consent.privacy,
+    location: consent.location,
     marketing: consent.marketing,
   });
 }
