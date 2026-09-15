@@ -48,3 +48,24 @@ export async function insertPlot(
 
   if (error) throw new Error(error.message);
 }
+
+/**
+ * 이 사용자가 등록한 밭 수.
+ *
+ * 로그인 직후 "온보딩으로 보낼지 홈으로 보낼지"를 정하는 데 쓴다. 행을 받아오지
+ * 않고 개수만 센다(`head: true`) — 판단에 필요한 것은 0 인지 아닌지뿐이다.
+ *
+ * RLS 가 자기 행만 보이게 하지만 where 를 명시한다. 정책이 한 번 헐거워졌을 때
+ * 쿼리가 조용히 남의 행을 세지 않게 하려는 것이다(getCurrentProfile 과 같은 방침).
+ */
+export async function countPlots(userId: string): Promise<number> {
+  const supabase = await getSupabaseServer();
+
+  const { count, error } = await supabase
+    .from("plots")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", userId);
+
+  if (error) throw new Error(error.message);
+  return count ?? 0;
+}
