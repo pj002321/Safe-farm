@@ -93,6 +93,7 @@ export async function GET(request: NextRequest) {
       await recordConsentForUser(supabase, data.user.id, {
         termsAgreed: pending.terms,
         privacyAgreed: pending.privacy,
+        locationAgreed: pending.location,
         marketingOptIn: pending.marketing,
       });
     } catch (consentError) {

@@ -38,6 +38,7 @@ export async function submitConsent(
     await recordConsent({
       termsAgreed: consent.terms,
       privacyAgreed: consent.privacy,
+      locationAgreed: consent.location,
       marketingOptIn: consent.marketing,
     });
   } catch (error) {
