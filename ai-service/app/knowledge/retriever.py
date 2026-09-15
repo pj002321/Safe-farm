@@ -4,13 +4,14 @@ from sqlalchemy.orm import Session
 
 from app.knowledge import vector_store
 from app.knowledge.embedder import embed_texts
+from app.models.chunk import Chunk
 
 
-def retrieve(db: Session, question: str, top_k: int = 10) -> list:
+def retrieve(db: Session, question: str, top_k: int = 10) -> list[Chunk]:
     """
     # summary
-    질문을 임베딩해 가까운 조각을 찾는다. 색인과 같은 embed_texts 를 쓰므로
-    질의와 문서가 같은 벡터 공간에 있다.
+    질문을 임베딩해 가까운 조각을 찾음. 색인과 같은 embed_texts 를 쓰므로
+    질의와 문서가 같은 벡터 공간에 있음.
 
     # params
     db: 세션<br>
@@ -18,11 +19,31 @@ def retrieve(db: Session, question: str, top_k: int = 10) -> list:
     top_k: 가져올 개수<br>
 
     # returns
-    가까운 순서의 Chunk 목록. 아직 임베딩된 조각이 하나도 없으면 빈 리스트
+    가까운 순서의 Chunk 목록. 임베딩된 조각이 하나도 없으면 빈 리스트
 
     # examples
         retrieve(db, "상추 발아기 물주기", top_k=3)  -> [Chunk(id=7), ...]
     """
+    return [chunk for chunk, _ in retrieve_with_score(db, question, top_k)]
+
+
+def retrieve_with_score(db: Session, question: str, top_k: int = 10) -> list[tuple[Chunk, float]]:
+    """
+    # summary
+    거리까지 같이. 검색이 제대로 되는지 눈으로 보려면 거리가 있어야 함 —
+    거리와 무관하게 top_k 개가 다 나오므로 결과가 나왔다고 관련 있는 게 아님.
+
+    # params
+    db: 세션<br>
+    question: 사용자 질문<br>
+    top_k: 가져올 개수<br>
+
+    # returns
+    (Chunk, 코사인 거리) 를 가까운 순으로. 임베딩된 조각이 없으면 빈 리스트
+
+    # examples
+        retrieve_with_score(db, "상추 발아기 물주기", top_k=3)  -> [(Chunk(id=7), 0.21), ...]
+    """
     [query_vector] = embed_texts([question])
-    return vector_store.search(db,query_vector,top_k)
+    return vector_store.search_with_score(db, query_vector, top_k)
 

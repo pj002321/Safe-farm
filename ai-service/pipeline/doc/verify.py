@@ -10,7 +10,7 @@ from sqlalchemy import func
 
 from app.core.config import DIMENSION, EMBED_MAX_TOKENS
 from app.core.db import new_session
-from app.knowledge.retriever import retrieve
+from app.knowledge.retriever import retrieve_with_score
 from app.models.chunk import Chunk
 from app.models.document import Document
 
@@ -92,9 +92,15 @@ def main() -> None:
         if sample is not None:
             for question in queries:
                 print(f"\n  Q. {question}")
-                for rank, chunk in enumerate(retrieve(db, question, top_k=3), 1):
+                hits = retrieve_with_score(db, question, top_k=3)
+                for rank, (chunk, distance) in enumerate(hits, 1):
+                    # 코사인 거리 -> 유사도. 눈으로 볼 때는 1에 가까울수록 좋은 쪽이 읽기 편함
+                    similarity = 1 - distance
                     body = chunk.body.replace("\n", " ")[:80]
-                    print(f"    {rank}. [doc {chunk.document_id}] {body}...")
+                    print(
+                        f"    {rank}. 유사도 {similarity:.3f} (거리 {distance:.3f}) "
+                        f"[doc {chunk.document_id}] {body}..."
+                    )
 
         banner("결과")
         if problems:
