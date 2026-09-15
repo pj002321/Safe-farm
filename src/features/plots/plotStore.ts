@@ -1,7 +1,12 @@
 import "server-only";
 
 import { getSupabaseServer } from "@/shared/supabase/server";
-import { type PlotMapPoint, toPlotMapPoint } from "./domain/plotSummary";
+import {
+  type PlotCard,
+  type PlotMapPoint,
+  toPlotCard,
+  toPlotMapPoint,
+} from "./domain/plotSummary";
 import type { PlotRegistrationInput } from "./domain/registerPlot";
 
 /**
@@ -82,4 +87,27 @@ export async function getPlot(
   if (error) throw new Error(error.message);
 
   return data ? toPlotMapPoint(data) : null;
+}
+
+/**
+ * 텃밭 목록(카드 화면용). 최근 등록이 앞에 온다.
+ *
+ * `listPlots()` 를 고치지 않고 따로 둔다 — 지도(map/page.tsx)가 그 반환 모양을
+ * 쓰고 있어, 열을 늘리면 같이 흔들린다.
+ * 개인 텃밭은 수가 적어 아직 페이징하지 않는다.
+ */
+export async function listPlotCards(userId: string): Promise<PlotCard[]> {
+  const supabase = await getSupabaseServer();
+
+  const { data, error } = await supabase
+    .from("plots")
+    .select(
+      "id, name, area_m2, region_ko, crops, sowing_date, sowing_unknown, created_at",
+    )
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false });
+
+  if (error) throw new Error(error.message);
+
+  return (data ?? []).map(toPlotCard);
 }
