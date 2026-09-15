@@ -100,7 +100,11 @@ export function LocationSummary({
       <input name="latitude" type="hidden" defaultValue={selected.latitude} />
       <input name="longitude" type="hidden" defaultValue={selected.longitude} />
       <input name="addressKo" type="hidden" defaultValue={selected.addressKo} />
-      <input name="regionCode" type="hidden" defaultValue={selected.regionCode} />
+      <input
+        name="regionCode"
+        type="hidden"
+        defaultValue={selected.regionCode}
+      />
       <input name="regionKo" type="hidden" defaultValue={selected.regionKo} />
     </div>
   );
