@@ -44,9 +44,9 @@ interface NavLink {
 const NAV_LINKS: readonly NavLink[] = [
   { href: "#eyes", label: "무엇으로 보나" },
   { href: "#plots", label: "논·밭·과수" },
-  { href: "#sat", label: "위성으로 본 상주" },
+  { href: "#sat", label: "위성 관측 기록" },
   { href: "#my", label: "내 밭" },
-  { href: "#today", label: "오늘 상주" },
+  { href: "#today", label: "오늘의 값" },
 ];
 
 const SHEET_ID = "landing-nav-sheet";
@@ -83,59 +83,66 @@ export function LandingNav() {
   }, [sheetOpen]);
 
   return (
-    <header
-      className={`fixed inset-x-0 top-0 z-50 w-full transition-[background-color,border-color] duration-300 ease-out-expo ${
-        scrolled
-          ? "border-border border-b bg-bg/80 text-fg backdrop-blur-xl"
-          : "border-transparent border-b text-space-fg"
-      }`}
-    >
-      <nav
-        aria-label="주요 메뉴"
-        className="mx-auto flex h-16 w-full max-w-6xl items-center justify-between gap-4 px-6"
+    // ⚠️ 시트를 **헤더 밖에** 둔다. 헤더는 스크롤하면 `backdrop-blur` 가 붙는데,
+    //    `backdrop-filter` 는 하위 `fixed` 요소의 **기준 블록**이 된다(transform·
+    //    filter 와 같다). 시트가 헤더 안에 있으면 `inset-0` 이 화면이 아니라 헤더
+    //    박스로 잡혀 64px 짜리 띠로 접히고, 배경이 사라진 것처럼 보인다.
+    //    실측: 스크롤 전 812px → 스크롤 후 64px(헤더 높이와 같음).
+    <>
+      <header
+        className={`fixed inset-x-0 top-0 z-50 w-full transition-[background-color,border-color] duration-300 ease-out-expo ${
+          scrolled
+            ? "border-border border-b bg-bg/80 text-fg backdrop-blur-xl"
+            : "border-transparent border-b text-space-fg"
+        }`}
       >
-        <a aria-label="Safe Farm AI 맨 위로" className="shrink-0" href="#top">
-          <LogoWordmark />
-        </a>
+        <nav
+          aria-label="주요 메뉴"
+          className="mx-auto flex h-16 w-full max-w-6xl items-center justify-between gap-4 px-6"
+        >
+          <a aria-label="Safe Farm AI 맨 위로" className="shrink-0" href="#top">
+            <LogoWordmark />
+          </a>
 
-        <ul className="hidden items-center gap-1 md:flex">
-          {NAV_LINKS.map((link) => (
-            <li key={link.href}>
-              <a
-                className={`rounded-md px-3 py-2 text-sm transition-colors duration-200 ease-out-expo ${
-                  scrolled
-                    ? "text-fg-muted hover:bg-surface-2 hover:text-fg"
-                    : "text-space-muted hover:text-space-fg"
-                }`}
-                href={link.href}
-              >
-                {link.label}
-              </a>
-            </li>
-          ))}
-        </ul>
+          <ul className="hidden items-center gap-1 md:flex">
+            {NAV_LINKS.map((link) => (
+              <li key={link.href}>
+                <a
+                  className={`rounded-md px-3 py-2 text-sm transition-colors duration-200 ease-out-expo ${
+                    scrolled
+                      ? "text-fg-muted hover:bg-surface-2 hover:text-fg"
+                      : "text-space-muted hover:text-space-fg"
+                  }`}
+                  href={link.href}
+                >
+                  {link.label}
+                </a>
+              </li>
+            ))}
+          </ul>
 
-        <div className="flex items-center gap-2">
-          <ThemeToggle />
-          <div className="hidden sm:block">
-            <ButtonLink href="/login" size="sm" variant="primary">
-              로그인
-            </ButtonLink>
+          <div className="flex items-center gap-2">
+            <ThemeToggle />
+            <div className="hidden sm:block">
+              <ButtonLink href="/login" size="sm" variant="primary">
+                로그인
+              </ButtonLink>
+            </div>
+            <button
+              aria-controls={SHEET_ID}
+              aria-expanded={sheetOpen}
+              aria-label="메뉴 열기"
+              className={`inline-flex size-9 items-center justify-center rounded-md border text-base md:hidden ${
+                scrolled ? "border-border" : "border-space-border"
+              }`}
+              onClick={() => setSheetOpen(true)}
+              type="button"
+            >
+              <MenuIcon />
+            </button>
           </div>
-          <button
-            aria-controls={SHEET_ID}
-            aria-expanded={sheetOpen}
-            aria-label="메뉴 열기"
-            className={`inline-flex size-9 items-center justify-center rounded-md border text-base md:hidden ${
-              scrolled ? "border-border" : "border-space-border"
-            }`}
-            onClick={() => setSheetOpen(true)}
-            type="button"
-          >
-            <MenuIcon />
-          </button>
-        </div>
-      </nav>
+        </nav>
+      </header>
 
       {sheetOpen && (
         <MobileSheet
@@ -143,7 +150,7 @@ export function LandingNav() {
           onClose={() => setSheetOpen(false)}
         />
       )}
-    </header>
+    </>
   );
 }
 
