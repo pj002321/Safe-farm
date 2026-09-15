@@ -50,8 +50,8 @@ def search(db: Session, query_vector: list[float], top_k: int = 10) -> list[Chun
     """
     # summary
     질의 벡터와 가까운 조각 top-k. 거리 연산(cosine)은 색인한 HNSW 와 맞춘다 —
-    어긋나면 인덱스를 타지 못하고 전수 비교가 된다.
-
+    어긋나면 인덱스를 타지 못하고 전수 비교가 된다.<br>
+    **질문 벡터를 받아, chunk테이블에서 가장 근접한 k개 찾기**
     # params
     db: 세션<br>
     query_vector: 질의 임베딩<br>

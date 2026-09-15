@@ -43,27 +43,30 @@ yarn-error.log*
 next-env.d.ts
 
 
-# firebase
+# Firebase 는 걷어냈지만 배포 캐시 디렉터리가 로컬에 남아 있다.
+# 규칙을 빼면 그 캐시가 커밋된다 — 실제로 한 번 그렇게 됐다.
 .firebase/
 firebase-debug.log*
 firestore-debug.log*
 
 # ⚠️ 서비스 계정 키 — 커밋되면 프로젝트 전체 권한이 유출된다.
-# Admin SDK 키는 보안 규칙을 통째로 우회하므로 유출 = 전 데이터 읽기·쓰기·삭제 가능.
+# 이런 키는 보안 규칙을 통째로 우회하므로 유출 = 전 데이터 읽기·쓰기·삭제 가능.
 # 값은 .env.local(로컬) 또는 배포 환경의 환경변수에만 둔다.
 *serviceAccount*.json
 *-firebase-adminsdk-*.json
 # 서비스 계정을 두는 유일한 자리. 파일명이 바뀌어도 새는 일이 없도록 디렉터리째 막는다.
-# 이 키 한 장이면 보안 규칙을 전부 우회해 프로젝트 데이터를 읽고 지울 수 있다.
+# 실제로 이 파일이 커밋돼 GitHub push protection 에 막힌 적이 있다. 지우지 말 것.
 secrets/
 
 # agent meta
+.claude/.headroom_wrap_marker.json
+.headroom_wrap_marker.json
+.serena
 ai-service/.env.local
-ai-service/.env
+ai-service/.env.*.local
 *.pyc
 
 # agent meta
-.claude/.headroom_wrap_marker.json
 .claude/.headroom_wrap_owners.json
 .claude/.headroom_wrap_settings.lock
 # Claude Code — 개인 설정 (내 PC 경로·로컬 프록시가 들어간다)
