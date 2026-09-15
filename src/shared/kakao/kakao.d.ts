@@ -53,7 +53,6 @@ declare namespace kakao.maps {
     constructor(container: HTMLElement, options: MapOptions);
     setCenter(position: LatLng): void;
     getCenter(): LatLng;
-    setLevel(level: number): void;
     /**
      * 컨테이너 크기가 바뀐 뒤 부른다. `display:none` 상태에서 만들어진 지도는
      * 크기를 0으로 잡아 회색 네모로 남는데, 보이게 한 직후 이걸 부르면 살아난다.
@@ -61,31 +60,7 @@ declare namespace kakao.maps {
     relayout(): void;
   }
 
-  interface MarkerOptions {
-    position: LatLng;
-    /** 생략하면 지도에 붙지 않은 마커가 만들어진다. 나중에 setMap 으로 붙인다. */
-    map?: Map;
-  }
-
-  class Marker {
-    constructor(options: MarkerOptions);
-    setPosition(position: LatLng): void;
-    /** null 을 넘기면 지도에서 뗀다. 마커를 지우는 공식 방법이다. */
-    setMap(map: Map | null): void;
-  }
-
-  /** 지도 클릭 시 핸들러가 받는 값. 우리가 쓰는 건 좌표 하나뿐이다. */
-  interface MouseEvent {
-    latLng: LatLng;
-  }
-
   namespace event {
-    /** 지도 클릭. `mouseEvent.latLng` 에 클릭 지점이 담긴다. */
-    function addListener(
-      target: Map,
-      type: "click",
-      handler: (mouseEvent: MouseEvent) => void,
-    ): void;
     /**
      * 지도의 이동·확대가 **멎었을 때** 한 번 온다. 드래그하는 내내 오지 않으므로
      * 중앙 핀 방식이 이걸 듣는다 — 손을 뗀 순간에만 좌표를 갱신하면 된다.
