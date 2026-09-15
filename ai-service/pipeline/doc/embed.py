@@ -16,6 +16,19 @@ from app.models.chunk import Chunk
 
 
 def main() -> None:
+    """
+    # summary
+    embedding 이 NULL 인 조각을 채운다. 그래서 기본이 증분이고, 끊겨도 남은 것부터
+    이어서 한다. 배치마다 commit 하므로 같은 값에 두 번 돈을 쓰지 않는다.
+    --full 이면 전부 NULL 로 지우고 다시 만든다 — 모델을 바꿨을 때만 쓴다.
+
+    # params
+    없다. 옵션은 argv 에서 읽는다 — --full<br>
+
+    # examples
+        py -3.12 -m pipeline.doc.embed
+        py -3.12 -m pipeline.doc.embed --full
+    """
     full = "--full" in sys.argv
     db = new_session()
     try:

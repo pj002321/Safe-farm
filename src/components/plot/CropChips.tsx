@@ -32,14 +32,14 @@ import {
  * ---------------------------------------------
  */
 
-interface CropOption {
+export interface CropOption {
   id: string;
   labelKo: string;
   icon: ReactNode;
 }
 
 /** 참고 시안이 제시한 세 작물. 연동 단계에서 조회 결과로 바뀔 자리다. */
-const CROPS: readonly CropOption[] = [
+export const CROPS: readonly CropOption[] = [
   { id: "rice", labelKo: "벼", icon: <SproutIcon /> },
   { id: "cabbage", labelKo: "배추", icon: <LeafIcon /> },
   { id: "persimmon", labelKo: "단감", icon: <HarvestIcon /> },
