@@ -79,10 +79,16 @@ export function Hero() {
         aria-hidden="true"
         className="pointer-events-none absolute top-1/3 right-[-10rem] size-[30rem] rounded-full bg-telemetry opacity-10 blur-3xl"
       />
-      {/* 다음(밝은) 섹션으로 넘어가는 페이드. 경계선이 생기지 않게 한다. */}
+      {/* 다음(밝은) 섹션으로 넘어가는 페이드. 경계선이 생기지 않게 한다.
+          ⚠️ `from-transparent` 을 쓰지 말 것. CSS 의 transparent 는 **투명한 검정**
+          (rgba(0,0,0,0))이라, 라이트 모드에서 밝은 --bg 로 보간하면 중간에 탁한
+          회색 띠가 생긴다. 실측하면 `linear-gradient(in oklab, rgba(0,0,0,0), rgb(248,248,251))`
+          이 나온다 — 알파가 오르는 동안 색은 아직 검정이다.
+          히어로 자신의 색을 알파 0 으로 시작하면 낯선 검정이 끼지 않는다.
+          높이도 h-40(160px)은 1200px 넘는 히어로에 비해 짧아 급하게 끊겼다. */}
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute inset-x-0 bottom-0 h-40 bg-gradient-to-b from-transparent to-bg"
+        className="pointer-events-none absolute inset-x-0 bottom-0 h-64 bg-gradient-to-b from-space/0 via-space/70 to-bg"
       />
 
       <div className="relative mx-auto flex min-h-[100svh] w-full max-w-6xl flex-col justify-center gap-12 px-6 pt-24 pb-28 lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(0,1.12fr)] lg:content-center lg:items-center lg:gap-16">
