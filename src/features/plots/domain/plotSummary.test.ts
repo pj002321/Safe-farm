@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { daysSincePlanting, type PlotCardRow, toPlotCard } from "./plotSummary";
+import { daysSincePlanting } from "./plotSummary";
 
 describe("daysSincePlanting", () => {
   it("심은 날로부터 지난 날수를 센다", () => {
