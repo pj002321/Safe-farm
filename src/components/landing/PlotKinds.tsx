@@ -4,6 +4,7 @@ import { Reveal } from "@/components/shared/Reveal";
 import { SectionHeading } from "@/components/shared/SectionHeading";
 import type { PlotKind } from "@/features/monitoring/domain/observation";
 import { PLOTS } from "@/features/monitoring/domain/plots";
+import { FieldGutter } from "./FieldGutter";
 
 /**
  * ---------------------------------------------
@@ -185,10 +186,16 @@ export function PlotKinds() {
       // 잎(라임) → 흙(점토) 방향의 옅은 물. 이 절이 "작물" 절인데 배경이 다른
       // 절과 똑같은 무채색이라, 화면 전체가 회백색 한 톤으로 읽혔다.
       // subtle 토큰은 테마별로 값이 갈려 있어 다크에서도 짙은 녹/갈로 따라온다.
-      className="w-full bg-gradient-to-b from-telemetry-subtle via-surface-2 to-earth-subtle"
+      className="relative w-full overflow-hidden bg-gradient-to-b from-telemetry-subtle via-surface-2 to-earth-subtle"
       id="plots"
     >
-      <section className="mx-auto w-full max-w-6xl px-6 py-24 md:py-32">
+      {/* 본문 양옆 빈 띠에 까는 장식. 폭이 여백을 그대로 따라가므로 좁은 화면에서는
+          저절로 0 이 된다. 왼쪽은 잎(라임), 오른쪽은 흙(점토)으로 이 절의 색 언어를
+          가장자리까지 잇는다. */}
+      <FieldGutter className="text-telemetry" side="left" />
+      <FieldGutter className="text-earth" side="right" />
+
+      <section className="relative mx-auto w-full max-w-6xl px-6 py-24 md:py-32">
         <SectionHeading
           description="논과 밭은 심은 날부터 열을 쌓아 세지만, 과수는 심은 지 몇 해 된 나무라 그 셈법이 통하지 않습니다. 그래서 화면도 계산도 따로 갑니다."
           eyebrow="세 가지 밭"
