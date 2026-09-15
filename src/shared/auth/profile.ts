@@ -43,12 +43,18 @@ export interface Profile {
   signupProvider: string;
   termsAgreedAt: string | null;
   privacyAgreedAt: string | null;
+  locationAgreedAt: string | null;
   marketingOptIn: boolean;
   createdAt: string;
 }
 
-/** DB 행 모양(스네이크 케이스). 이 타입이 스키마와의 유일한 계약이다. */
-interface ProfileRow {
+/**
+ * DB 행 모양(스네이크 케이스). 이 타입이 스키마와의 **유일한 계약**이다.
+ *
+ * `profileStore.ts` 가 같은 모양을 따로 선언해 두고 있었는데, 컬럼을 하나
+ * 더하자 두 벌이 어긋나 타입 검사가 터졌다. 한 벌만 두고 내보낸다.
+ */
+export interface ProfileRow {
   id: string;
   email: string;
   role: string;
@@ -57,6 +63,7 @@ interface ProfileRow {
   signup_provider: string;
   terms_agreed_at: string | null;
   privacy_agreed_at: string | null;
+  location_agreed_at: string | null;
   marketing_opt_in: boolean;
   created_at: string;
 }
@@ -85,6 +92,7 @@ export function toProfile(row: ProfileRow): Profile {
     signupProvider: row.signup_provider,
     termsAgreedAt: row.terms_agreed_at,
     privacyAgreedAt: row.privacy_agreed_at,
+    locationAgreedAt: row.location_agreed_at,
     marketingOptIn: row.marketing_opt_in,
     createdAt: row.created_at,
   };
@@ -100,10 +108,17 @@ export function displayNameOf(profile: Profile): string {
 /**
  * 약관·개인정보 동의를 마쳤는가.
  *
+ * `consent.ts` 의 `isConsentComplete` 와 **같은 항목을 본다.** 한쪽에만 항목을
+ * 더하면 "화면에서는 받았는데 게이트는 통과 못 하는" 상태가 된다.
+ *
  * ⚠️ 구글 로그인으로 **처음** 들어온 사용자는 동의 화면을 거치지 않아 이 값이
  * false 다. 온보딩 게이트가 필요하다는 뜻이고, 그 전까지는 이 함수가 그 사실을
  * 드러내는 유일한 자리다.
  */
 export function hasCompletedConsent(profile: Profile): boolean {
-  return profile.termsAgreedAt !== null && profile.privacyAgreedAt !== null;
+  return (
+    profile.termsAgreedAt !== null &&
+    profile.privacyAgreedAt !== null &&
+    profile.locationAgreedAt !== null
+  );
 }

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 import { SignOutButton } from "@/components/auth/SignOutButton";
 import {
   PLOT_ONBOARDING_PATH,
@@ -21,6 +22,7 @@ import { WeekendForecast } from "@/components/dashboard/WeekendForecast";
 import { MapPinIcon } from "@/components/icons";
 import { ButtonLink } from "@/components/shared/Button";
 import { SectionHeading } from "@/components/shared/SectionHeading";
+import { countPlots } from "@/features/plots/plotStore";
 import { displayNameOf } from "@/shared/auth/profile";
 import { getCurrentProfile } from "@/shared/auth/profileStore";
 
@@ -36,8 +38,12 @@ import { getCurrentProfile } from "@/shared/auth/profileStore";
  *   특보를 아래에 두면 스크롤하지 않은 사람이 못 본다.
  * - 할 일이 주인공이라 반반이 아니다. 오른쪽 예보는 "토·일에 나갈 수 있나"를
  *   판단하는 보조 정보다.
- * - 밭이 없으면 `PlotStrip` 이 **온보딩 유도**로 바뀐다. 이 서비스는 밭이 있어야
- *   아무것도 할 수 없으므로 빈 상태는 안내가 아니라 다음 행동 하나여야 한다.
+ * - **밭이 하나도 없으면 온보딩으로 보낸다.** 모든 로그인 경로(이메일·구글·동의
+ *   게이트)가 결국 여기로 오므로, 분기를 여기 한 곳에 두면 전부 커버된다.
+ *   각 로그인 화면에 흩뿌리면 한 곳을 빠뜨렸을 때 조용히 어긋난다.
+ *   `/plots/new` 는 이 화면으로 되돌리지 않으므로 순환하지 않는다.
+ * - 그래도 `PlotStrip` 의 빈 상태는 남겨 뒀다. 아래 조회가 실패하면 리다이렉트를
+ *   포기하고 화면을 그리는데, 그때 보여 줄 것이 필요하다.
  * - `"use client"` 가 없다. 완료 체크·더보기까지 CSS 로 처리해서 이 화면의
  *   상호작용은 JS 없이 동작한다.
  * ---------------------------------------------
@@ -51,6 +57,22 @@ const SAMPLE_DEVIATION =
 
 export default async function DashboardPage() {
   const profile = await getCurrentProfile();
+
+  // 등록한 밭이 없으면 온보딩으로. 판단에 필요한 것은 0 인지 아닌지뿐이다.
+  //
+  // ⚠️ 조회가 실패해도 **리다이렉트를 포기하고 화면을 그린다.** plots 테이블이
+  //    아직 없거나(마이그레이션 미적용) DB 가 잠깐 흔들릴 때, 홈 화면이 통째로
+  //    500 이 되는 것보다 낫다. 증상을 숨기는 것이 아니라 더 나쁜 결과를 피하는
+  //    것이므로 원인을 로그에 남긴다.
+  if (profile) {
+    let plotCount: number | null = null;
+    try {
+      plotCount = await countPlots(profile.id);
+    } catch (error) {
+      console.error("[dashboard] 밭 개수 조회 실패", error);
+    }
+    if (plotCount === 0) redirect(PLOT_ONBOARDING_PATH);
+  }
 
   return (
     <main className="mx-auto flex max-w-6xl flex-col gap-7 px-6 py-6 sm:py-8">

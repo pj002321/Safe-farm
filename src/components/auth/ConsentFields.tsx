@@ -39,7 +39,14 @@ export function ConsentFields({ consent, onChange }: ConsentFieldsProps) {
   const allChecked = CONSENT_ITEMS.every((item) => consent[item.key]);
 
   const toggleAll = (checked: boolean) => {
-    onChange({ terms: checked, privacy: checked, marketing: checked });
+    // 항목이 늘면 여기도 늘려야 한다. CONSENT_ITEMS 를 순회해 만들 수도 있지만,
+    // 그러면 Consent 의 키가 빠져도 타입 검사가 잡지 못한다.
+    onChange({
+      terms: checked,
+      privacy: checked,
+      location: checked,
+      marketing: checked,
+    });
   };
 
   return (
