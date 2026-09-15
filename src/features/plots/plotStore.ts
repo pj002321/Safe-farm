@@ -48,3 +48,31 @@ export async function insertPlot(
 
   if (error) throw new Error(error.message);
 }
+
+/** 지도에 점 하나로 찍을 최소 정보. */
+export interface PlotMapPoint {
+  id: string;
+  nameKo: string | null;
+  latitude: number;
+  longitude: number;
+}
+
+/** 로그인한 사용자가 등록한 텃밭 좌표 목록. */
+export async function listPlots(userId: string): Promise<PlotMapPoint[]> {
+  const supabase = await getSupabaseServer();
+
+  const { data, error } = await supabase
+    .from("plots")
+    .select("id, name, latitude, longitude")
+    // RLS가 자기 밭만 보이게 하지만, profileStore.ts처럼 where도 명시한다.
+    .eq("user_id", userId);
+
+  if (error) throw new Error(error.message);
+
+  return (data ?? []).map((row) => ({
+    id: row.id,
+    nameKo: row.name,
+    latitude: row.latitude,
+    longitude: row.longitude,
+  }));
+}
