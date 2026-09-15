@@ -129,14 +129,18 @@ export async function reverseGeocode(
     toRegion(geocoder, coord, okStatus),
   ]);
 
-  // 바다·비무장지대처럼 행정구역이 없는 곳이 있다. 하나라도 비면 표시할 수 없다.
-  // 행정구역은 필수다 — 기상·위성 조회의 키라서 없으면 등록해도 쓸 수 없다.
-  // 반면 상세 주소는 표시용이라, 못 얻으면 행정구역 이름으로 대신한다.
-  // 둘 다 요구하면 주소만 비는 지점에서 멀쩡한 밭이 등록을 못 한다.
-  if (!region) return null;
+  // ⚠️ 육지인지 가르는 신호는 행정구역이 아니라 **주소**다.
+  // 법정동 폴리곤은 해상 경계까지 뻗어 있어 바다 위에서도 coord2RegionCode 가
+  // 멀쩡한 코드를 돌려준다(남해 앞바다 → 남해군 상주면). 반면 지번은 필지에만
+  // 붙으므로 바다에서는 빈다.
+  //
+  // 한때 "도로명 없는 밭·산간이 막힌다"는 이유로 주소를 선택으로 돌렸는데,
+  // 그건 toAddress 가 이미 지번으로 떨어뜨려 해결돼 있다. 둘 다 요구해도
+  // 육지 필지는 막히지 않고, 대신 바다가 걸러진다.
+  if (!region || !addressKo) return null;
 
   return {
-    addressKo: addressKo ?? region.nameKo,
+    addressKo,
     regionCode: region.code,
     regionKo: region.nameKo,
   };
