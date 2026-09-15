@@ -2,7 +2,12 @@ import "server-only";
 
 import { cache } from "react";
 import { getSupabaseServer } from "@/shared/supabase/server";
-import { PROFILES_TABLE, type Profile, toProfile } from "./profile";
+import {
+  PROFILES_TABLE,
+  type Profile,
+  type ProfileRow,
+  toProfile,
+} from "./profile";
 
 /**
  * ---------------------------------------------
@@ -17,20 +22,6 @@ import { PROFILES_TABLE, type Profile, toProfile } from "./profile";
  *   않는 경로에서 프로필이 비는 일이 생긴다.
  * ---------------------------------------------
  */
-
-/** DB 가 돌려주는 행 모양. profile.ts 의 toProfile 이 받는 것과 같다. */
-interface ProfileRow {
-  id: string;
-  email: string;
-  role: string;
-  full_name: string | null;
-  avatar_url: string | null;
-  signup_provider: string;
-  terms_agreed_at: string | null;
-  privacy_agreed_at: string | null;
-  marketing_opt_in: boolean;
-  created_at: string;
-}
 
 /**
  * 지금 로그인한 사용자의 프로필. 로그인 안 했으면 null.
@@ -81,6 +72,7 @@ export async function recordConsentForUser(
   input: {
     termsAgreed: boolean;
     privacyAgreed: boolean;
+    locationAgreed: boolean;
     marketingOptIn: boolean;
     fullName?: string;
   },
@@ -93,6 +85,7 @@ export async function recordConsentForUser(
       // 최초 동의 시각이 유지된다(스키마의 keep_consent_timestamps).
       terms_agreed_at: input.termsAgreed ? now : null,
       privacy_agreed_at: input.privacyAgreed ? now : null,
+      location_agreed_at: input.locationAgreed ? now : null,
       marketing_opt_in: input.marketingOptIn,
       ...(input.fullName?.trim() ? { full_name: input.fullName.trim() } : {}),
     })
@@ -118,6 +111,7 @@ export async function recordConsentForUser(
 export async function recordConsent(input: {
   termsAgreed: boolean;
   privacyAgreed: boolean;
+  locationAgreed: boolean;
   marketingOptIn: boolean;
   fullName?: string;
 }): Promise<void> {

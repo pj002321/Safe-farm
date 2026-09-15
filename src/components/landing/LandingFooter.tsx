@@ -53,6 +53,7 @@ const COLUMNS: readonly FooterColumn[] = [
       { label: "밭 등록하기", href: "/signup" },
       { label: "서비스 이용약관", href: "/terms" },
       { label: "개인정보처리방침", href: "/privacy" },
+      { label: "위치기반서비스 이용약관", href: "/location" },
     ],
   },
 ];
