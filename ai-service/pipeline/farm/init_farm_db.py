@@ -29,7 +29,7 @@ def main() -> None:
     --drop 이면 만들기 전에 같은 이름의 테이블을 지운다. 들어 있던 데이터도 같이 없어진다.
 
     # params
-    없다. 옵션은 argv 에서 읽는다 — --sql, --drop
+    없다. 옵션은 argv 에서 읽는다 — --sql, --drop<br>
 
     # examples
         py -3.12 -m pipeline.farm.init_farm_db --sql

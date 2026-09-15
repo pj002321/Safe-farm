@@ -42,7 +42,10 @@ def refs(data: dict[str, list[dict]]) -> list[Ref]:
     grids·stations·terms 는 가리키는 대상이 없다.
 
     # params
-    data: read_all 결과
+    data: read_all 결과<br>
+
+    # returns
+    Ref 목록 2개. 작물 계층뿐이라 grids·stations·terms 는 빠진다
 
     # examples
         check_refs(refs(data))  -> 자연키 전부 해석됨
@@ -68,8 +71,12 @@ def load(db, data: dict[str, list[dict]]) -> dict[str, int]:
     identity id 를 key_dict 로 찾아 자식 행에 채운다. 끝에 commit 한다.
 
     # params
-    db: 세션
-    data: read_all 결과
+    db: 세션<br>
+    data: read_all 결과<br>
+
+    # returns
+    테이블 이름 -> 반영된 행 수. TABLES 의 키가 전부 들어 있다.
+    upsert 라 "반영" 은 새로 넣은 것과 갱신한 것을 합친 수다
 
     # examples
         load(db, data)  -> {'crops': 8, 'crop_variants': 12, ...}
@@ -131,7 +138,7 @@ def main() -> None:
     테이블이 아직 없으면 이름을 찍고 멈춘다.
 
     # params
-    없다. 옵션은 argv 에서 읽는다 — --check
+    없다. 옵션은 argv 에서 읽는다 — --check<br>
 
     # examples
         py -3.12 -m pipeline.farm.master_seed_farm_db --check

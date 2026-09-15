@@ -91,11 +91,22 @@ def _round_half_up(value: float) -> int:
 
 def score_suitability(crop: CropProfile, weather: WeatherWindow) -> SuitabilityResult:
     """
-    작물 하나에 대한 적합도를 계산한다.
-
-    감점은 세 축(기온·강수·일조)의 이탈도를 가중 합산한다. 기온 이탈이 가장
-    치명적이라 가중치가 높다 — 냉해/고온장해는 회복이 안 되지만 물은 관수로,
+    # summary
+    작물 하나의 적합도를 계산한다. 감점은 세 축(기온·강수·일조)의 이탈도를 가중
+    합산한다. 기온 가중치가 가장 높다 — 냉해·고온장해는 회복이 안 되지만 물은 관수로,
     빛은 시설로 어느 정도 보정할 수 있기 때문이다.
+
+    # params
+    crop: 작물이 요구하는 생육 조건<br>
+    weather: 한 재배 구간의 기상 요약<br>
+
+    # returns
+    점수(0~100)와 등급, 걸린 위험 목록. risks 는 이탈한 축만 담으므로 전부 범위
+    안이면 빈 리스트다. 순서는 기온 → 강수 → 일조로 고정
+
+    # examples
+        score_suitability(tomato, WeatherWindow(22, 80, 8))
+        -> SuitabilityResult(crop_id='tomato', score=100, grade='good', risks=[])
     """
     risks: list[Risk] = []
 
@@ -133,9 +144,21 @@ def _to_grade(score: int) -> Grade:
 
 def rank_crops(crops: list[CropProfile], weather: WeatherWindow) -> list[SuitabilityResult]:
     """
-    여러 후보 작물을 점수 내림차순으로 정렬한다. 동점이면 crop_id 사전순으로 안정화.
+    # summary
+    여러 후보 작물을 점수 내림차순으로 정렬한다. 동점이면 crop_id 사전순으로 안정화한다.
+    TS 는 localeCompare 지만 여기는 코드포인트 비교다 — id 가 ASCII 인 동안은 결과가 같다.
 
-    TS 는 localeCompare 지만 여기는 코드포인트 비교다. id 가 ASCII 인 동안은 결과가 같다.
+    # params
+    crops: 평가할 후보 작물<br>
+    weather: 모든 후보에 똑같이 적용할 기상 요약<br>
+
+    # returns
+    점수 내림차순 결과. 길이는 crops 와 같다 — 점수가 낮다고 빠지지 않는다.
+    crops 가 비면 빈 리스트
+
+    # examples
+        rank_crops([tomato, lettuce], weather)
+        -> [SuitabilityResult(crop_id='lettuce', score=92, ...), ...]
     """
     results = [score_suitability(crop, weather) for crop in crops]
     return sorted(results, key=lambda r: (-r.score, r.crop_id))

@@ -1,67 +1,103 @@
 import { createServerClient } from "@supabase/ssr";
 import { type NextRequest, NextResponse } from "next/server";
+import { publicConfig } from "./config";
 
 /**
  * ---------------------------------------------
- * [Feature]: 요청마다 Supabase 세션 갱신
+ * [Feature]: proxy 에서의 세션 갱신
  *
  * [Description]
- * - Server Component는 쿠키를 쓸 수 없다. 그래서 만료된 토큰을 갱신할 곳이
- *   proxy밖에 없다. 이게 없으면 사용자가 무작위로 로그아웃된다.
- * - ⚠️ `setAll`의 **두 번째 인자 `headers`를 반드시 응답에 얹어야 한다.**
- *   라이브러리가 `Cache-Control: private, no-store` 등을 여기로 넘기는데,
- *   빠뜨리면 인증된 응답이 CDN에 캐시되어 **다른 사용자에게 세션이 샌다.**
- *   (Vercel 공식 템플릿이 이 인자를 누락하고 있다.)
- * - `createServerClient`와 `getClaims()` 사이에 코드를 넣지 말 것.
- *   Supabase가 명시적으로 경고하는 지점이다.
+ * - **Server Component 는 쿠키를 쓸 수 없다.** 그래서 만료가 다가온 액세스 토큰을
+ *   갱신하고 새 쿠키를 내려보낼 수 있는 곳은 `proxy.ts` 하나뿐이다. 이 파일을
+ *   지우면 사용자가 무작위로 로그아웃된다.
+ * - `setAll` 은 **요청과 응답 양쪽에** 쓴다. 요청에만 쓰면 이번 렌더는 새 토큰을
+ *   보지만 브라우저는 옛 쿠키를 그대로 들고 있어 다음 요청에 또 갱신이 돈다.
+ *   응답에만 쓰면 이번 요청의 Server Component 가 옛 토큰을 본다.
+ * - **리다이렉트에도 쿠키를 실어야 한다**(`redirectKeepingCookies`).
+ *   `NextResponse.redirect()` 는 새 응답이라 방금 심은 쿠키를 버린다. 그러면
+ *   "로그인했는데 계속 로그인 화면으로 튕기는" 무한 루프가 된다.
+ *   Firebase 세션 쿠키는 서버가 갱신하지 않아 이 코드가 필요 없었지만,
+ *   Supabase 는 refresh token 을 돌리므로 다시 필요하다. **지우지 말 것.**
+ * - `getUser()` 를 쓴다. `getSession()` 은 쿠키 내용을 그대로 믿으므로 인가
+ *   판단의 근거가 못 된다.
+ *
+ * [Usage]
+ * ```ts
+ * const { response, user } = await updateSupabaseSession(request);
+ * return redirectKeepingCookies(request, "/login", response);
+ * ```
  * ---------------------------------------------
  */
 
-/** 로그인 없이 접근 가능한 경로. 여기에 없으면 /login 으로 보낸다. */
-const PUBLIC_PATHS = ["/login", "/auth"];
+export interface ProxySessionResult {
+  /** 갱신된 쿠키가 실린 응답. 이걸 그대로 돌려주거나 리다이렉트에 옮긴다. */
+  response: NextResponse;
+  /** 로그인하지 않았으면 null. */
+  user: { id: string; email: string | null; role: string | null } | null;
+}
 
-export async function updateSession(request: NextRequest) {
-  let supabaseResponse = NextResponse.next({ request });
+export async function updateSupabaseSession(
+  request: NextRequest,
+): Promise<ProxySessionResult> {
+  let response = NextResponse.next({ request });
+  const { url, anonKey } = publicConfig();
 
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
-    {
-      cookies: {
-        getAll() {
-          return request.cookies.getAll();
-        },
-        setAll(cookiesToSet, headers) {
-          for (const { name, value } of cookiesToSet) {
-            request.cookies.set(name, value);
-          }
-          supabaseResponse = NextResponse.next({ request });
-          for (const { name, value, options } of cookiesToSet) {
-            supabaseResponse.cookies.set(name, value, options);
-          }
-          // 이 루프가 CDN 세션 유출을 막는다. 지우지 말 것.
-          for (const [key, value] of Object.entries(headers)) {
-            supabaseResponse.headers.set(key, value);
-          }
-        },
+  const supabase = createServerClient(url, anonKey, {
+    cookies: {
+      getAll() {
+        return request.cookies.getAll();
+      },
+      setAll(cookiesToSet) {
+        // ① 요청에 반영 — 이번 요청의 Server Component 가 새 토큰을 본다.
+        for (const { name, value } of cookiesToSet) {
+          request.cookies.set(name, value);
+        }
+        // ② 응답을 다시 만들고 거기에도 심는다 — 브라우저가 새 쿠키를 받는다.
+        response = NextResponse.next({ request });
+        for (const { name, value, options } of cookiesToSet) {
+          response.cookies.set(name, value, options);
+        }
       },
     },
-  );
+  });
 
-  // createServerClient 와 getClaims() 사이에 아무것도 넣지 않는다.
-  const { data } = await supabase.auth.getClaims();
-  const claims = data?.claims;
+  // 이 호출이 토큰 갱신을 일으킨다. 지우면 세션이 만료된 채로 흘러간다.
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
-  const { pathname } = request.nextUrl;
-  const isPublic = PUBLIC_PATHS.some((p) => pathname.startsWith(p));
+  if (!user) return { response, user: null };
 
-  if (!claims && !isPublic) {
-    const url = request.nextUrl.clone();
-    url.pathname = "/login";
-    return NextResponse.redirect(url);
+  // 역할은 **app_metadata** 에서 읽는다. user_metadata 는 사용자가 직접
+  // 고칠 수 있어 권한 판단에 쓰면 그대로 권한 상승 경로가 된다.
+  const role =
+    typeof user.app_metadata?.role === "string" ? user.app_metadata.role : null;
+
+  return {
+    response,
+    user: { id: user.id, email: user.email ?? null, role },
+  };
+}
+
+/**
+ * 갱신된 쿠키를 유지한 채 리다이렉트한다.
+ *
+ * `NextResponse.redirect()` 로 새 응답을 만들면 `carrier` 에 심긴 쿠키가 사라진다.
+ * 그 상태로 로그인 화면에 보내면, 브라우저는 갱신 전 토큰을 계속 들고 있어
+ * 다음 요청도 똑같이 튕긴다 — 무한 루프다.
+ */
+export function redirectKeepingCookies(
+  request: NextRequest,
+  pathname: string,
+  carrier: NextResponse,
+  search = "",
+): NextResponse {
+  const target = new URL(pathname, request.url);
+  if (search) target.search = search;
+
+  const redirect = NextResponse.redirect(target);
+  for (const cookie of carrier.cookies.getAll()) {
+    redirect.cookies.set(cookie);
   }
-
-  // supabaseResponse를 그대로 반환해야 한다. 새 응답을 만들면 쿠키가 유실되어
-  // 브라우저와 서버의 세션이 어긋난다.
-  return supabaseResponse;
+  return redirect;
 }

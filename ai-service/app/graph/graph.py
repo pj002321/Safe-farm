@@ -59,6 +59,21 @@ class GraphDeps:
 
 
 def build_graph(deps: GraphDeps) -> StateGraph:
+    """
+    # summary
+    작물 추천 그래프를 조립한다. collect_weather → load_candidates → rank → explain
+    선형 흐름이고, 기상 수집과 점수 계산 뒤에 조기 종료용 조건부 엣지가 하나씩 붙는다.
+    컴파일하지 않은 채로 돌려주므로 노드를 갈아끼울 수 있다.
+
+    # params
+    deps: 외부 의존. 이 파일이 환경변수를 읽지 않도록 주입받는다<br>
+
+    # returns
+    미컴파일 StateGraph. 바로 실행하려면 create_graph 를 쓰거나 .compile() 을 부른다
+
+    # examples
+        build_graph(deps).compile()
+    """
     builder = StateGraph(RecommendationState)
 
     builder.add_node("collect_weather", make_collect_weather_node(deps.fetch_weather))
@@ -89,6 +104,22 @@ def build_graph(deps: GraphDeps) -> StateGraph:
 def create_graph(
     deps: GraphDeps, checkpointer: BaseCheckpointSaver | None = None
 ) -> CompiledStateGraph:
+    """
+    # summary
+    build_graph 결과를 컴파일한다. checkpointer 를 붙일 때는 그것을 만들 때
+    serde 로 create_checkpoint_serde() 를 같이 넘긴다.
+
+    # params
+    deps: 외부 의존<br>
+    checkpointer: 멀티턴이나 중단-재개가 필요할 때만. 추천은 단발성이라 보통 None<br>
+
+    # returns
+    실행 가능한 CompiledStateGraph
+
+    # examples
+        create_graph(deps)
+        create_graph(deps, checkpointer=saver)
+    """
     return build_graph(deps).compile(checkpointer=checkpointer)
 
 
@@ -97,6 +128,21 @@ CHECKPOINT_TYPES: tuple[type, ...] = (WeatherWindow, CropProfile, Risk, Suitabil
 
 
 def create_checkpoint_serde() -> JsonPlusSerializer:
+    """
+    # summary
+    checkpoint 복원 허용 목록을 박은 직렬화기. 안 넘기면 state 의 dataclass 가
+    복원될 때 dict 가 된다. state 에 새 dataclass 를 넣으면 CHECKPOINT_TYPES 에도 추가한다.
+
+    # params
+    없다. 허용 목록은 이 모듈의 CHECKPOINT_TYPES<br>
+
+    # returns
+    JsonPlusSerializer. 허용 목록은 생성자로 넘긴다 — 기본값이 "전부 허용" 이라
+    with_msgpack_allowlist() 는 무동작이다
+
+    # examples
+        saver = InMemorySaver(serde=create_checkpoint_serde())
+    """
     # 기본값이 "전부 허용"이라 with_msgpack_allowlist() 는 무동작. 생성자에 직접 넘긴다.
     return JsonPlusSerializer(
         allowed_msgpack_modules=[(t.__module__, t.__name__) for t in CHECKPOINT_TYPES]

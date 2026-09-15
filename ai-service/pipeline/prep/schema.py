@@ -20,8 +20,11 @@ def own_tables(metadata: MetaData, skip_schemas: Iterable[str] = ()) -> list[Tab
     스키마는 남이 소유한 것으로 보고 뺀다.
 
     # params
-    metadata: 대상 MetaData
-    skip_schemas: 건드리지 않을 스키마 이름 — Supabase 가 만드는 "auth" 같은 것
+    metadata: 대상 MetaData<br>
+    skip_schemas: 건드리지 않을 스키마 이름 — Supabase 가 만드는 "auth" 같은 것<br>
+
+    # returns
+    의존 순서대로 정렬된 테이블. 부모가 자식보다 앞에 온다 — 그대로 CREATE 해도 된다
 
     # examples
         own_tables(FarmBase.metadata, ["auth"])
@@ -38,7 +41,11 @@ def ddl(tables: Iterable[Table]) -> str:
     눈으로 보거나 .sql 로 넘길 때 쓴다.
 
     # params
-    tables: own_tables 가 돌려준 것처럼 이미 순서가 잡힌 테이블들
+    tables: own_tables 가 돌려준 것처럼 이미 순서가 잡힌 테이블들<br>
+
+    # returns
+    CREATE TABLE 문을 빈 줄 하나로 이어 붙인 문자열. 각 문장은 ';' 로 끝난다.
+    tables 가 비면 빈 문자열
 
     # examples
         print(ddl(tables))
@@ -63,11 +70,15 @@ def create(
     이미 있는 테이블의 컬럼이 ORM 과 달라도 고치지 않는다 — 그건 마이그레이션 일이다.
 
     # params
-    engine: 만들 대상 DB
-    metadata: tables 가 속한 MetaData
-    tables: 만들 테이블. 부모가 앞에 와야 한다
+    engine: 만들 대상 DB<br>
+    metadata: tables 가 속한 MetaData<br>
+    tables: 만들 테이블. 부모가 앞에 와야 한다<br>
     drop_existing: True 면 같은 이름의 기존 테이블을 먼저 DROP 한다. 들어 있던
-        데이터도 같이 없어진다. 컬럼을 바꾼 뒤 개발 DB 를 맞출 때만 쓴다
+        데이터도 같이 없어진다. 컬럼을 바꾼 뒤 개발 DB 를 맞출 때만 쓴다<br>
+
+    # returns
+    이번에 새로 만들어진 테이블 이름, 정렬된 상태. 이미 있던 것은 빠지므로
+    두 번째 실행부터는 빈 리스트다
 
     # examples
         create(engine, FarmBase.metadata, tables)  -> ['crops', 'grids', ...]

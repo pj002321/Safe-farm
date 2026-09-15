@@ -20,7 +20,10 @@ def read_csv(path: Path) -> list[dict]:
     CSV 는 NULL 과 빈 문자열을 구분하지 못한다.
 
     # params
-    path: 읽을 파일. 첫 줄이 헤더여야 한다.
+    path: 읽을 파일. 첫 줄이 헤더여야 한다.<br>
+
+    # returns
+    행 목록. 파일 순서를 지킨다. 키는 헤더 이름이고, 빈 칸의 값은 None
 
     # examples
         read_csv(Path("data/dummy/crops.csv"))
@@ -47,12 +50,15 @@ def upsert(
     (자연키가 컬럼 전부인 테이블) 갱신할 게 없으므로 건너뛴다.
 
     # params
-    db: 세션
-    model: 넣을 테이블의 ORM 클래스
-    rows: 컬럼 이름이 키인 dict 목록. 전부 같은 컬럼이어야 한다
+    db: 세션<br>
+    model: 넣을 테이블의 ORM 클래스<br>
+    rows: 컬럼 이름이 키인 dict 목록. 전부 같은 컬럼이어야 한다<br>
     conflict: UNIQUE 제약이나 PK 를 이루는 컬럼 이름. 이게 있어야
-        같은 CSV 를 두 번 돌려도 결과가 같다
-    override_update: CSV 에 없는 값을 덮어쓸 때 쓴다 — fetched_at=func.now() 같은 것
+        같은 CSV 를 두 번 돌려도 결과가 같다<br>
+    override_update: CSV 에 없는 값을 덮어쓸 때 쓴다 — fetched_at=func.now() 같은 것<br>
+
+    # returns
+    영향받은 행 수. 새로 넣은 것과 갱신한 것의 합이다. rows 가 비면 0
 
     # examples
         upsert(db, Crop, [{"name": "상추", "base_temp": 4.0}], ["name"])
@@ -83,9 +89,13 @@ def key_dict(db: Session, stmt: Select, cast: Callable[[Any], Any] | None = None
     identity 로 발급된 id 를 자연키로 찾을 때 쓴다. 컬럼이 셋 이상이면 키가 튜플이다.
 
     # params
-    db: 세션
-    stmt: 마지막 컬럼이 값, 나머지가 키인 SELECT
-    cast: 키 각 조각에 거는 변환 — CSV 는 문자열인데 DB 는 정수로 주는 경우가 있다
+    db: 세션<br>
+    stmt: 마지막 컬럼이 값, 나머지가 키인 SELECT<br>
+    cast: 키 각 조각에 거는 변환 — CSV 는 문자열인데 DB 는 정수로 주는 경우가 있다<br>
+
+    # returns
+    키 -> 마지막 컬럼 값. 키 컬럼이 하나면 값 그대로, 둘 이상이면 튜플이다.
+    같은 키가 두 번 나오면 뒤엣것이 이긴다
 
     # examples
         key_dict(db, select(Crop.name, Crop.crop_id))              -> {'상추': 1}
@@ -106,8 +116,11 @@ def missing_tables(engine: Engine, names: Iterable[str]) -> list[str]:
     아직 DB 에 없는 테이블 이름. 적재 전에 확인해 엉뚱한 에러 대신 알려주려고 쓴다.
 
     # params
-    engine: 검사할 DB 엔진
-    names: 있어야 하는 테이블 이름들
+    engine: 검사할 DB 엔진<br>
+    names: 있어야 하는 테이블 이름들<br>
+
+    # returns
+    없는 테이블 이름, names 순서 그대로. 전부 있으면 빈 리스트
 
     # examples
         missing_tables(engine, ["crops", "plots"])  -> ['plots']
@@ -122,10 +135,14 @@ def missing_refs(rows: Iterable[dict], key_of: Callable[[dict], Any], known: set
     known 에 없는 값을 가리키는 행의 키만 모은다. DB 없이 CSV 끼리 검사할 때 쓴다.
 
     # params
-    rows: 검사할 행들
+    rows: 검사할 행들<br>
     key_of: 행에서 참조 키를 꺼내는 함수. 어느 컬럼이 키인지가 테이블마다 달라
-        호출하는 쪽에서 준다
-    known: 존재한다고 확인된 키 집합
+        호출하는 쪽에서 준다<br>
+    known: 존재한다고 확인된 키 집합<br>
+
+    # returns
+    known 에 없는 키. 중복을 지우지 않으므로 같은 값이 여러 번 나올 수 있다.
+    어긋난 것이 없으면 빈 리스트
 
     # examples
         missing_refs(variants, lambda r: r["crop_name"], {"감자"})

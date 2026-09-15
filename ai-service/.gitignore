@@ -9,4 +9,3 @@ __pycache__/
 sandbox/
 
 .env*.local
-.env

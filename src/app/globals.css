@@ -6,75 +6,220 @@
  * [Description]
  * - 이 파일이 디자인 시스템 전부다. 생성 파일도, codegen 스텝도 없다.
  * - 3층 구조:
- *   1) 원시 팔레트  --leaf-*, --soil-*, --neutral-*  : 값의 출처
- *   2) 시맨틱 변수  --fg, --bg, --accent            : 라이트/다크로 바뀌는 층
- *   3) @theme inline                                : 위를 유틸리티 클래스로 노출
+ *   1) 원시 팔레트  --orbit-*, --ndvi-*, --terra-*, --slate-*  : 값의 출처
+ *   2) 시맨틱 변수  --fg, --bg, --accent, --telemetry          : 라이트/다크로 바뀌는 층
+ *   3) @theme inline                                           : 위를 유틸리티 클래스로 노출
  * - 컴포넌트는 **2층에서 나온 유틸리티만** 쓴다 (text-fg, bg-surface, text-accent).
  *   원시 팔레트를 직접 쓰면 다크모드가 깨진다.
  *
+ * [색 언어 — 키워드에서 뽑았다]
+ *   인공위성 -> orbit    : 심우주 인디고~페리윙클. 궤도·데이터 링크·브랜드.
+ *   토지     -> terra    : 점토·황토. 노출 지표(bare soil).
+ *   자연재해 -> ember/flare : 호박색 경고 -> 크림슨 경보. 2단계로 쓴다.
+ *   (보조) 작물 -> ndvi  : 식생지수(NDVI) false-color 의 애시드 라임.
+ *          위성 영상에서 식생이 건강할수록 이 색으로 나온다. 그래서
+ *          "관측 신호"와 "생육 양호"가 같은 색인 것이 의미상 맞다.
+ *
+ *   조합의 핵심은 **인디고 x 애시드 라임**이다. 농업 앱의 관행색(초록)을
+ *   버리고, 지구관측(EO) 인터페이스의 언어를 쓴다.
+ *
  * [Usage]
- * <div className="bg-surface text-fg border border-border rounded-md p-4">
+ * <div className="bg-surface text-fg border border-border rounded-lg p-4 shadow-e1">
+ *
+ * [주의] 이 파일은 biome.json 의 files.includes 에서 제외돼 있다.
+ *   biome 2.4 의 CSS 파서가 Tailwind v4 의 `@custom-variant` / `@theme inline` /
+ *   `@source` 를 모르기 때문에 파일 전체를 파싱 에러로 떨군다(설정 문제가 아니라
+ *   파서 미지원). 검사가 의미 없는 상태로 노이즈만 내므로 제외했다.
+ *   biome 이 Tailwind v4 문법을 지원하면 그 줄을 지우면 된다.
  * --------------------------------------------- */
 
 /* 다크모드는 data-theme 속성으로 제어한다. OS 설정은 아래 media 쿼리가 받는다. */
 @custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
 
-/* ── 1층: 원시 팔레트 ───────────────────────────────────────── */
+/* ── 1층: 원시 팔레트 ─────────────────────────────────────────
+ * 여기 값은 화면에서 직접 쓰지 않는다. 2층이 유일한 소비자다. */
 :root {
-  --leaf-50: #f0f9f1;
-  --leaf-200: #b8e0bf;
-  --leaf-500: #2f9e44;
-  --leaf-600: #268a39;
-  --leaf-800: #14532d;
+  /* 인공위성 — 궤도·심우주·데이터 링크 (브랜드 주색) */
+  --orbit-50: #f0efff;
+  --orbit-100: #e2dfff;
+  --orbit-200: #c8c2ff;
+  --orbit-300: #a79dff;
+  --orbit-400: #8878ff;
+  --orbit-500: #6b55f5;
+  --orbit-600: #5a41e0;
+  --orbit-700: #4a33b8;
+  --orbit-800: #3a2a8c;
+  --orbit-900: #251c5c;
+  --orbit-950: #1c1840;
 
-  --soil-200: #e5dbc9;
-  --soil-500: #a1804a;
+  /* 작물 — 식생지수(NDVI) false-color 의 애시드 라임 */
+  --ndvi-50: #f5fde3;
+  --ndvi-100: #e9fbc0;
+  --ndvi-200: #d6f78d;
+  --ndvi-300: #bff053;
+  --ndvi-400: #a6e226;
+  --ndvi-500: #8bc80f;
+  --ndvi-600: #6d9f0a;
+  --ndvi-700: #4f7508;
+  --ndvi-800: #3a5507;
+  --ndvi-950: #1f2a06;
 
-  --neutral-0: #ffffff;
-  --neutral-50: #f8f9fa;
-  --neutral-200: #e9ecef;
-  --neutral-500: #868e96;
-  --neutral-800: #343a40;
-  --neutral-900: #1a1d20;
-  --neutral-950: #0d0f11;
+  /* 토지 — 점토·황토·노출 지표 */
+  --terra-100: #f7ece0;
+  --terra-200: #ecd8c2;
+  --terra-300: #ddbc97;
+  --terra-400: #c9976a;
+  --terra-500: #b3794a;
+  --terra-600: #94603a;
+  --terra-700: #74492d;
+  --terra-950: #2a1f14;
 
-  /* ── 2층: 시맨틱 (라이트) ── */
-  --bg: var(--neutral-50);
-  --surface: var(--neutral-0);
-  --border-c: var(--neutral-200);
-  --fg: var(--neutral-900);
-  --fg-muted: var(--neutral-500);
-  --accent: var(--leaf-600);
-  --accent-subtle: var(--leaf-50);
-  --earth: var(--soil-500);
+  /* 자연재해 1단계 — 폭염·가뭄 (호박색) */
+  --ember-500: #d97a0b;
+  --ember-600: #b45309;
+  --ember-300: #fbaa4a;
 
-  /* 추천 등급 — 도메인 색상 */
-  --grade-good: #2f9e44;
-  --grade-caution: #f08c00;
-  --grade-unsuitable: #e03131;
+  /* 자연재해 2단계 — 경보 (크림슨) */
+  --flare-600: #cc2b4e;
+  --flare-300: #ff7a90;
+
+  /* 관심·정보 — 빙하색. 인디고와 헷갈리지 않게 청록 쪽으로 민다. */
+  --glacier-600: #2b6ea8;
+  --glacier-300: #79c0ff;
+
+  /* 무채색 — 야간 관측에 맞춰 아주 옅은 보랏빛 기운을 넣었다.
+   * 순수 회색보다 인디고와 함께 놓았을 때 탁해 보이지 않는다. */
+  --slate-0: #ffffff;
+  --slate-50: #f8f8fb;
+  --slate-100: #f0f0f6;
+  --slate-200: #e4e4ee;
+  --slate-300: #cdcdde;
+  --slate-400: #9998b3;
+  --slate-500: #6a6986;
+  --slate-600: #4e4d67;
+  --slate-700: #383749;
+  --slate-800: #24232f;
+  --slate-850: #2b2a38;
+  --slate-900: #16161e;
+  --slate-950: #0b0a12;
+
+  /* ── 2층: 시맨틱 (라이트) ──
+   * 명암비는 bg(#f8f8fb) 기준으로 전부 4.5:1 이상을 맞췄다.
+   * 예외는 --fg-subtle(2.8:1) 하나뿐이고, 이건 placeholder·disabled 같은
+   * 비필수 텍스트에만 쓴다. 본문에 쓰면 접근성 위반이다. */
+  /* 브라우저가 그리는 UI(스크롤바·폼 컨트롤·날짜 선택기)의 명암.
+   * 이게 없으면 기본값 다크에서 스크롤바만 하얗게 뜬다. */
+  color-scheme: light;
+
+  --bg: var(--slate-50);
+  --surface: var(--slate-0);
+  --surface-2: var(--slate-100);
+  --border-c: var(--slate-200);
+  --border-strong: var(--slate-300);
+
+  --fg: var(--slate-900);
+  --fg-muted: var(--slate-500);
+  --fg-subtle: var(--slate-400);
+
+  --accent: var(--orbit-600);
+  --accent-hover: var(--orbit-700);
+  --accent-subtle: var(--orbit-50);
+  /* 강조색 위에 올리는 글자색. accent 가 밝아지는 다크에서 값이 뒤집힌다. */
+  --accent-on: var(--slate-0);
+
+  /* 라임은 흰 배경 위 텍스트로 쓸 수 없다(명암비 3:1 미만).
+   * 그래서 라이트에서는 짙은 올리브-라임, 다크에서는 애시드 라임을 쓴다.
+   * 칩·배지처럼 **면으로** 쓸 때는 양쪽 다 --telemetry-subtle 이 라임 기운을 낸다. */
+  --telemetry: var(--ndvi-700);
+  --telemetry-subtle: var(--ndvi-50);
+
+  --earth: var(--terra-600);
+  --earth-subtle: var(--terra-100);
+
+  /* 추천 등급 — 도메인 색상.
+   * good 이 telemetry 와 같은 라임 계열인 건 의도다. 식생지수가 높다 = 생육이 좋다. */
+  --grade-good: var(--ndvi-700);
+  --grade-caution: var(--ember-600);
+  --grade-unsuitable: var(--flare-600);
+  --grade-info: var(--glacier-600);
+
+  --ring: var(--orbit-500);
+  --scrim: rgb(11 10 18 / 0.5);
+
+  /* 히어로의 우주 배경. 라이트 모드에서도 어둡게 유지한다 —
+   * 위성 씬은 밤하늘이어야 읽히기 때문이다. */
+  --space: var(--slate-950);
+  --space-fg: var(--slate-100);
+  --space-muted: var(--slate-400);
+  --space-border: rgb(255 255 255 / 0.12);
 }
 
-/* ── 2층: 시맨틱 (다크) — 값만 갈아끼운다 ───────────────────── */
+/* ── 2층: 시맨틱 (다크) — 값만 갈아끼운다 ─────────────────────
+ * 아래 두 블록은 내용이 같아야 한다. 하나만 고치면 토글과 OS 설정이 어긋난다. */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: var(--neutral-950);
-    --surface: var(--neutral-900);
-    --border-c: var(--neutral-800);
-    --fg: var(--neutral-50);
-    --accent: var(--leaf-500);
-    --accent-subtle: var(--leaf-800);
-    --earth: var(--soil-200);
+    color-scheme: dark;
+    --bg: var(--slate-950);
+    --surface: var(--slate-900);
+    --surface-2: var(--slate-800);
+    --border-c: var(--slate-850);
+    --border-strong: var(--slate-700);
+
+    --fg: var(--slate-100);
+    --fg-muted: var(--slate-400);
+    --fg-subtle: var(--slate-500);
+
+    --accent: var(--orbit-300);
+    --accent-hover: var(--orbit-200);
+    --accent-subtle: var(--orbit-950);
+    --accent-on: var(--slate-950);
+
+    --telemetry: var(--ndvi-300);
+    --telemetry-subtle: var(--ndvi-950);
+
+    --earth: var(--terra-300);
+    --earth-subtle: var(--terra-950);
+
+    --grade-good: var(--ndvi-300);
+    --grade-caution: var(--ember-300);
+    --grade-unsuitable: var(--flare-300);
+    --grade-info: var(--glacier-300);
+
+    --ring: var(--orbit-400);
+    --scrim: rgb(0 0 0 / 0.65);
   }
 }
 
 :root[data-theme="dark"] {
-  --bg: var(--neutral-950);
-  --surface: var(--neutral-900);
-  --border-c: var(--neutral-800);
-  --fg: var(--neutral-50);
-  --accent: var(--leaf-500);
-  --accent-subtle: var(--leaf-800);
-  --earth: var(--soil-200);
+  color-scheme: dark;
+  --bg: var(--slate-950);
+  --surface: var(--slate-900);
+  --surface-2: var(--slate-800);
+  --border-c: var(--slate-850);
+  --border-strong: var(--slate-700);
+
+  --fg: var(--slate-100);
+  --fg-muted: var(--slate-400);
+  --fg-subtle: var(--slate-500);
+
+  --accent: var(--orbit-300);
+  --accent-hover: var(--orbit-200);
+  --accent-subtle: var(--orbit-950);
+  --accent-on: var(--slate-950);
+
+  --telemetry: var(--ndvi-300);
+  --telemetry-subtle: var(--ndvi-950);
+
+  --earth: var(--terra-300);
+  --earth-subtle: var(--terra-950);
+
+  --grade-good: var(--ndvi-300);
+  --grade-caution: var(--ember-300);
+  --grade-unsuitable: var(--flare-300);
+  --grade-info: var(--glacier-300);
+
+  --ring: var(--orbit-400);
+  --scrim: rgb(0 0 0 / 0.65);
 }
 
 /* ── 3층: 유틸리티로 노출 ───────────────────────────────────
@@ -84,23 +229,178 @@
 @theme inline {
   --color-bg: var(--bg);
   --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
   --color-border: var(--border-c);
+  --color-border-strong: var(--border-strong);
+
   --color-fg: var(--fg);
   --color-fg-muted: var(--fg-muted);
+  --color-fg-subtle: var(--fg-subtle);
+
   --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
   --color-accent-subtle: var(--accent-subtle);
+  --color-accent-on: var(--accent-on);
+
+  --color-telemetry: var(--telemetry);
+  --color-telemetry-subtle: var(--telemetry-subtle);
+
   --color-earth: var(--earth);
+  --color-earth-subtle: var(--earth-subtle);
 
   --color-good: var(--grade-good);
   --color-caution: var(--grade-caution);
   --color-unsuitable: var(--grade-unsuitable);
+  --color-info: var(--grade-info);
 
+  --color-ring: var(--ring);
+  --color-scrim: var(--scrim);
+
+  --color-space: var(--space);
+  --color-space-fg: var(--space-fg);
+  --color-space-muted: var(--space-muted);
+  --color-space-border: var(--space-border);
+
+  /* 타이포 — 본문은 Pretendard(한글), 계측값은 Geist Mono(라틴). */
   --font-sans:
-    var(--font-pretendard), -apple-system, BlinkMacSystemFont, "Segoe UI",
-    sans-serif;
+    "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont,
+    "Segoe UI", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, "SFMono-Regular", monospace;
+
+  /* 디스플레이 크기는 자간을 좁혀야 덩어리로 읽힌다. */
+  --text-display: 3.5rem;
+  --text-display--line-height: 1.04;
+  --text-display--letter-spacing: -0.035em;
+  --text-hero: 4.75rem;
+  --text-hero--line-height: 1;
+  --text-hero--letter-spacing: -0.04em;
+
+  --radius-sm: 0.375rem;
+  --radius-md: 0.625rem;
+  --radius-lg: 1rem;
+  --radius-xl: 1.5rem;
+  --radius-2xl: 2rem;
+
+  /* 고도(elevation). 그림자 색을 순수 검정이 아니라 slate-950 으로 깔아야
+   * 보랏빛 중성색 위에서 탁해 보이지 않는다. */
+  --shadow-e1: 0 1px 2px rgb(11 10 18 / 0.06), 0 1px 3px rgb(11 10 18 / 0.04);
+  --shadow-e2: 0 4px 12px rgb(11 10 18 / 0.08), 0 2px 4px rgb(11 10 18 / 0.05);
+  --shadow-e3: 0 16px 48px rgb(11 10 18 / 0.16), 0 4px 12px rgb(11 10 18 / 0.07);
+  --shadow-glow: 0 0 0 1px var(--accent-subtle), 0 0 32px -8px var(--accent);
+
+  /* 모션 — expo-out 하나로 통일한다. 종류가 늘면 화면이 산만해진다. */
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-out-back: cubic-bezier(0.34, 1.4, 0.64, 1);
+
+  --animate-pulse-ring: pulse-ring 2.4s var(--ease-out-expo) infinite;
+  --animate-drift: drift 9s ease-in-out infinite;
+  --animate-sweep: sweep 3.6s linear infinite;
+  --animate-marquee: marquee 38s linear infinite;
+  /* 일회성 등장. 위 네 개는 전부 무한 반복이라 "나타났다가 멈추는" 연출이 없었다.
+   * `both` 로 끝 상태를 물고 있어야 한다 — 안 그러면 애니메이션이 끝나는 순간
+   * opacity 가 초기값으로 돌아가 항목이 깜빡이며 사라진다.
+   * prefers-reduced-motion 은 아래 전역 블록이 0.01ms 로 눌러 즉시 완료시킨다. */
+  --animate-rise: rise 0.42s var(--ease-out-expo) both;
 }
 
+@keyframes pulse-ring {
+  0% {
+    opacity: 0.7;
+    transform: scale(0.7);
+  }
+  70%,
+  100% {
+    opacity: 0;
+    transform: scale(2.1);
+  }
+}
+
+@keyframes drift {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+@keyframes sweep {
+  from {
+    transform: translateY(-100%);
+  }
+  to {
+    transform: translateY(100%);
+  }
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes marquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+/* ── 베이스 ─────────────────────────────────────────────────── */
 body {
   background-color: var(--color-bg);
   color: var(--color-fg);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+
+  /* 한글 줄바꿈. 브라우저 기본값은 한글을 **아무 글자에서나** 끊어서
+   * "관측하고 있습니 / 다" 처럼 단어 한가운데가 갈라진다. `keep-all` 은
+   * 띄어쓰기(어절 경계)에서만 끊게 만든다 — 한국어 본문의 사실상 표준이다.
+   *
+   * 대신 끊을 곳이 없는 아주 긴 문자열(URL·영문 단어·좌표)이 상자를 넘칠 수
+   * 있어서 `overflow-wrap: break-word` 를 함께 건다. 둘을 같이 써야
+   * "단어는 지키되 넘치지는 않는" 상태가 된다. 하나만 쓰면 한쪽이 깨진다. */
+  word-break: keep-all;
+  overflow-wrap: break-word;
+}
+
+/* 포커스 링은 전역에서 한 번만 정의한다. 컴포넌트마다 다시 쓰면 어긋난다. */
+:where(a, button, input, textarea, select, summary, [tabindex]):focus-visible {
+  outline: 2px solid var(--color-ring);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+::selection {
+  background-color: var(--color-accent);
+  color: var(--color-accent-on);
+}
+
+/* 앵커로 이동했을 때 sticky 헤더가 섹션 제목을 덮지 않게 한다.
+ * 섹션마다 scroll-mt-* 를 붙이면 헤더 높이가 바뀔 때 전부 어긋나므로
+ * 여기 한 곳에서만 정한다. */
+/* `div[id]` 까지 넣는 이유: 전폭 배경이 필요한 섹션은 배경을 입힌 div 가 앵커를
+ * 달고 있어서 section 만 잡으면 그 섹션만 헤더 뒤로 숨는다. */
+:where(section[id], main > div[id], [id][data-anchor]) {
+  scroll-margin-top: 6rem;
+}
+
+/* 접근성: 모션 최소화 설정을 존중한다. 3D 씬은 JS 쪽에서도 이 값을 읽는다. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

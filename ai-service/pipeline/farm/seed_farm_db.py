@@ -41,7 +41,10 @@ def refs(data: dict[str, list[dict]]) -> list[Ref]:
     런타임 테이블이 마스터와 자기들끼리 무엇을 가리키는지 모은다.
 
     # params
-    data: read_all 결과. MASTER_TABLES 도 들어 있어야 한다
+    data: read_all 결과. MASTER_TABLES 도 들어 있어야 한다<br>
+
+    # returns
+    Ref 목록 4개. 검사 순서대로 들어 있고, 가리키는 대상이 없는 테이블은 빠진다
 
     # examples
         check_refs(refs(data))  -> 자연키 전부 해석됨
@@ -81,8 +84,12 @@ def load(db, data: dict[str, list[dict]]) -> dict[str, int]:
     조회해 채운다. 마스터가 비어 있으면 무엇을 먼저 돌려야 하는지 알리고 멈춘다.
 
     # params
-    db: 세션
-    data: read_all 결과
+    db: 세션<br>
+    data: read_all 결과<br>
+
+    # returns
+    테이블 이름 -> 반영된 행 수. TABLES 의 키가 전부 들어 있다.
+    upsert 라 "반영" 은 새로 넣은 것과 갱신한 것을 합친 수다
 
     # examples
         load(db, data)  -> {'weather_forecast': 12, 'profiles': 3, ...}
@@ -141,7 +148,7 @@ def main() -> None:
     마스터 CSV 는 자연키 검사에만 쓰고 넣지 않는다.
 
     # params
-    없다. 옵션은 argv 에서 읽는다 — --check
+    없다. 옵션은 argv 에서 읽는다 — --check<br>
 
     # examples
         py -3.12 -m pipeline.farm.seed_farm_db --check
