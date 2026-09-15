@@ -11,9 +11,15 @@ import { APP_TABS, isTabActive } from "@/components/shared/appTabs";
  * [Description]
  * - 목록은 `appTabs.tsx` 한 곳에서 온다. 데스크톱 헤더 탭과 같은 배열을 봐야
  *   화면 크기에 따라 메뉴가 달라지지 않는다.
- * - 가장자리에 붙은 막대에서 **떠 있는 독**으로 바꿨다. 양옆을 띄우고 모서리를
+ * - 가장자리에 붙은 막대에서 **떠 있는 유리판**으로 바꿨다. 양옆을 띄우고 모서리를
  *   둥글리면 본문 위에 얹힌 층이라는 것이 분명해지고, 화면 맨 아래 한 줄을
  *   통째로 먹는 인상이 줄어든다.
+ * - 테두리(border) 대신 **안쪽 링**(`ring-inset`)으로 가장자리를 잡는다. 선을
+ *   그으면 판이 되고, 안쪽에 옅은 빛을 넣으면 유리 층으로 읽힌다.
+ * - **라벨을 지우지 않았다.** 아이콘만 남기면 더 가벼워 보이지만, 이 서비스의
+ *   사용자는 농민이고 아이콘만으로 "질문"과 "내 정보"를 가려내게 하는 것은
+ *   트렌디한 대신 못 쓰는 화면이 된다. 375px 에서 탭 하나가 68px 라 라벨이
+ *   들어가는 것을 재고 유지했다.
  * - **모바일에만 띄운다**(`lg:hidden`). 넓은 화면은 헤더 탭이 같은 일을 한다.
  *   둘을 같이 두면 같은 이동을 두 군데서 제공해 현재 위치가 흐려진다.
  * - 활성 여부를 **색으로만** 알리지 않는다. 아이콘 뒤의 알약이 형태로 말하고
@@ -41,7 +47,9 @@ export function BottomTabs() {
       aria-label="주요 메뉴"
       className="fixed inset-x-0 bottom-0 z-40 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] lg:hidden"
     >
-      <ul className="mx-auto flex max-w-md items-center rounded-2xl border border-border bg-bg/85 p-1.5 shadow-e3 backdrop-blur-xl">
+      {/* 유리판 하나. 테두리 대신 안쪽 위 하이라이트(ring-inset)로 가장자리를
+          잡는다 — 선을 그으면 판이 되고, 빛을 넣으면 층이 된다. */}
+      <ul className="mx-auto flex max-w-md items-center gap-1 rounded-[1.75rem] bg-bg/70 p-2 shadow-e3 ring-1 ring-fg/10 ring-inset backdrop-blur-2xl">
         {APP_TABS.map((tab) => {
           const active = isTabActive(pathname, tab.href);
 
@@ -49,14 +57,22 @@ export function BottomTabs() {
             <li className="flex-1" key={tab.href}>
               <Link
                 aria-current={active ? "page" : undefined}
-                className={`flex flex-col items-center gap-1 rounded-xl py-1.5 text-[0.66rem] transition-[background-color,color] duration-200 ease-out-expo ${
+                className={`relative flex flex-col items-center gap-1 rounded-[1.25rem] py-2 text-[0.66rem] transition-[background-color,color,transform] duration-300 ease-out-expo ${
                   active
-                    ? "bg-accent-subtle text-accent"
-                    : "text-fg-subtle hover:text-fg-muted"
+                    ? "bg-accent font-medium text-accent-on"
+                    : "text-fg-subtle active:scale-95"
                 }`}
                 href={tab.href}
               >
-                <span className="text-lg leading-none">{tab.icon}</span>
+                {/* 아이콘이 살짝 떠오른다. 색 말고 움직임으로도 현재 위치를 말한다.
+                    prefers-reduced-motion 은 globals.css 가 전역에서 눌러 준다. */}
+                <span
+                  className={`text-lg leading-none transition-transform duration-300 ease-out-back ${
+                    active ? "-translate-y-px scale-110" : ""
+                  }`}
+                >
+                  {tab.icon}
+                </span>
                 {tab.labelKo}
               </Link>
             </li>
