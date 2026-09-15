@@ -114,7 +114,7 @@ export function PlotsMap({ points }: PlotsMapProps) {
       const summary = new sdk.maps.CustomOverlay({
         position,
         content: summaryHtml(point, now),
-        yAnchor: 2.2,
+        yAnchor: 1.3,
       });
 
       const marker = markerElement(point, now);
@@ -122,6 +122,7 @@ export function PlotsMap({ points }: PlotsMapProps) {
       marker.addEventListener("click", () => {
         isOpen = !isOpen;
         summary.setMap(isOpen ? map : null);
+        if (isOpen) map.panTo(position);
       });
 
       new sdk.maps.CustomOverlay({
@@ -136,7 +137,7 @@ export function PlotsMap({ points }: PlotsMapProps) {
     <>
       <KakaoSdkScript onStatusChange={setStatus} />
       <div
-        className="h-[24rem] w-full overflow-hidden rounded-lg border border-border sm:h-[28rem]"
+        className="h-[24rem] w-full rounded-lg border border-border sm:h-[28rem]"
         id={FARM_MAP_CONTAINER_ID}
       />
     </>
