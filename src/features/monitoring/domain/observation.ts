@@ -128,18 +128,11 @@ export function latestPoint(series: ObservationSeries): ObservationPoint {
  */
 export const SATELLITE_NOTES: {
   readonly canDoKo: readonly string[];
-  readonly honestlyKo: readonly string[];
 } = {
   canDoKo: [
     "적산온도가 말하는 단계와 실제 잎 상태를 맞대보기",
     "비가 없는데 잎 수분이 버티면 — 물을 주셨구나",
     "비도 없고 잎 수분도 떨어지면 — 정말 마르는 중",
     "과수원 잎이 언제 나고 언제 지는지 해마다 비교",
-  ],
-  honestlyKo: [
-    "75번 시도해 42번이 구름으로 날아갔습니다",
-    "통과한 날 중에도 튀는 값이 있습니다 (9/5 과수원 0.43)",
-    "논 좌표에서 모내기 신호가 안 잡혔습니다",
-    "→ 실제 논이 아니거나 위치를 다시 찍어야 합니다",
   ],
 };
