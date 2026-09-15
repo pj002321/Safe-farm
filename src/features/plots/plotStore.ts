@@ -1,6 +1,7 @@
 import "server-only";
 
 import { getSupabaseServer } from "@/shared/supabase/server";
+import { type PlotMapPoint, toPlotMapPoint } from "./domain/plotSummary";
 import type { PlotRegistrationInput } from "./domain/registerPlot";
 
 /**
@@ -47,4 +48,38 @@ export async function insertPlot(
   });
 
   if (error) throw new Error(error.message);
+}
+
+/** 로그인한 사용자가 등록한 텃밭 좌표 목록. */
+export async function listPlots(userId: string): Promise<PlotMapPoint[]> {
+  const supabase = await getSupabaseServer();
+
+  const { data, error } = await supabase
+    .from("plots")
+    .select("id, name, latitude, longitude, crops, sowing_date, sowing_unknown")
+    // RLS가 자기 밭만 보이게 하지만, profileStore.ts처럼 where도 명시한다.
+    .eq("user_id", userId);
+
+  if (error) throw new Error(error.message);
+
+  return (data ?? []).map(toPlotMapPoint);
+}
+
+/** 텃밭 하나(상세 화면용). 없거나 남의 밭이면 null. */
+export async function getPlot(
+  userId: string,
+  plotId: string,
+): Promise<PlotMapPoint | null> {
+  const supabase = await getSupabaseServer();
+
+  const { data, error } = await supabase
+    .from("plots")
+    .select("id, name, latitude, longitude, crops, sowing_date, sowing_unknown")
+    .eq("user_id", userId)
+    .eq("id", plotId)
+    .maybeSingle();
+
+  if (error) throw new Error(error.message);
+
+  return data ? toPlotMapPoint(data) : null;
 }
