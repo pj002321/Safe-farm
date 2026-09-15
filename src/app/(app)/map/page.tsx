@@ -1,7 +1,10 @@
 import type { Metadata } from "next";
 import { MapIcon } from "@/components/icons";
+import { PlotsMap } from "@/components/map/PlotsMap";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { SectionHeading } from "@/components/shared/SectionHeading";
+import { listPlots } from "@/features/plots/plotStore";
+import { getCurrentProfile } from "@/shared/auth/profileStore";
 
 /**
  * ---------------------------------------------
@@ -18,20 +21,27 @@ import { SectionHeading } from "@/components/shared/SectionHeading";
 
 export const metadata: Metadata = { title: "지도" };
 
-export default function Page() {
+export default async function Page() {
+  const profile = await getCurrentProfile();
+  const plots = profile ? await listPlots(profile.id) : [];
+
   return (
     <main className="mx-auto flex max-w-4xl flex-col gap-6 px-6 py-6 sm:py-8">
       <SectionHeading
         description="등록한 밭을 위성 관측과 겹쳐 봅니다."
         title="지도"
       />
-      <EmptyState
-        actionHref="/plots/new"
-        actionKo="텃밭 등록하기"
-        bodyKo="텃밭을 등록하시면 위성이 본 밭 상태를 지도 위에 겹쳐 보여 드립니다."
-        icon={<MapIcon />}
-        titleKo="아직 보여 드릴 밭이 없습니다"
-      />
+      {plots.length === 0 ? (
+        <EmptyState
+          actionHref="/plots/new"
+          actionKo="텃밭 등록하기"
+          bodyKo="텃밭을 등록하시면 위성이 본 밭 상태를 지도 위에 겹쳐 보여 드립니다."
+          icon={<MapIcon />}
+          titleKo="아직 보여 드릴 밭이 없습니다"
+        />
+      ) : (
+        <PlotsMap points={plots} />
+      )}
     </main>
   );
 }

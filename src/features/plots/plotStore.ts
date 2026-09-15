@@ -1,6 +1,13 @@
 import "server-only";
 
 import { getSupabaseServer } from "@/shared/supabase/server";
+import type { PlotEditInput } from "./domain/editPlot";
+import {
+  type PlotManageItem,
+  type PlotMapPoint,
+  toPlotManageItem,
+  toPlotMapPoint,
+} from "./domain/plotSummary";
 import type { PlotRegistrationInput } from "./domain/registerPlot";
 
 /**
@@ -68,4 +75,122 @@ export async function countPlots(userId: string): Promise<number> {
 
   if (error) throw new Error(error.message);
   return count ?? 0;
+}
+
+/** 로그인한 사용자가 등록한 텃밭 좌표 목록. */
+export async function listPlots(userId: string): Promise<PlotMapPoint[]> {
+  const supabase = await getSupabaseServer();
+
+  const { data, error } = await supabase
+    .from("plots")
+    .select("id, name, latitude, longitude, crops, sowing_date, sowing_unknown")
+    // RLS가 자기 밭만 보이게 하지만, profileStore.ts처럼 where도 명시한다.
+    .eq("user_id", userId);
+
+  if (error) throw new Error(error.message);
+
+  return (data ?? []).map(toPlotMapPoint);
+}
+
+/** 텃밭 하나(상세 화면용). 없거나 남의 밭이면 null. */
+export async function getPlot(
+  userId: string,
+  plotId: string,
+): Promise<PlotMapPoint | null> {
+  const supabase = await getSupabaseServer();
+
+  const { data, error } = await supabase
+    .from("plots")
+    .select("id, name, latitude, longitude, crops, sowing_date, sowing_unknown")
+    .eq("user_id", userId)
+    .eq("id", plotId)
+    .maybeSingle();
+
+  if (error) throw new Error(error.message);
+
+  return data ? toPlotMapPoint(data) : null;
+}
+
+/** 관리 목록이 읽는 컬럼. 지도용 select 와 달라 따로 적는다. */
+const MANAGE_COLUMNS =
+  "id, name, address_ko, area_m2, crops, sowing_date, sowing_unknown, created_at";
+
+/**
+ * 마이페이지 텃밭 관리 목록.
+ *
+ * `listPlots` 를 재사용하지 않는다 — 그쪽은 지도 전용 모양이라 주소·면적을 일부러
+ * 버렸다(`PlotManageItem` 주석 참고). 최근에 등록한 밭이 위로 온다.
+ */
+export async function listManagedPlots(
+  userId: string,
+): Promise<PlotManageItem[]> {
+  const supabase = await getSupabaseServer();
+
+  const { data, error } = await supabase
+    .from("plots")
+    .select(MANAGE_COLUMNS)
+    // RLS 가 자기 밭만 보이게 하지만 where 를 명시한다(countPlots 와 같은 방침).
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false });
+
+  if (error) throw new Error(error.message);
+  return (data ?? []).map(toPlotManageItem);
+}
+
+/**
+ * 텃밭의 **이름과 넓이만** 고친다.
+ *
+ * ⚠️ 위경도를 받지 않는다. `grid_x`·`grid_y` 는 위경도에서 계산되는 값이라
+ *    좌표만 바뀌면 엉뚱한 동네의 예보를 받는다(`editPlot.ts` 와
+ *    `20260915120000_plots_manage.sql` 이 같은 경고를 적어 두었다).
+ *
+ * `.select("id")` 로 고친 행을 돌려받아 0건이면 던진다. update 는 조건에 맞는 행이
+ * 없어도 **오류가 아니라 0건으로 조용히 끝나기** 때문이다 — 그대로 성공으로
+ * 넘기면 화면은 저장됐다고 말하고 값은 그대로인 상태가 된다
+ * (`recordConsentForUser` 에서 실제로 겪은 함정).
+ */
+export async function updatePlotBasics(
+  userId: string,
+  input: PlotEditInput,
+): Promise<void> {
+  const supabase = await getSupabaseServer();
+
+  const { data, error } = await supabase
+    .from("plots")
+    .update({ name: input.name, area_m2: input.areaM2 })
+    .eq("id", input.plotId)
+    .eq("user_id", userId)
+    .select("id");
+
+  if (error) throw new Error(error.message);
+  if (!data || data.length === 0) throw new Error("PLOT_NOT_FOUND");
+}
+
+/**
+ * 텃밭을 지운다. 되돌릴 수 없다.
+ *
+ * 딸려 지울 것은 아직 없다 — `plots.id` 를 참조하는 테이블이 하나도 없다.
+ * // ponytail: 하드 삭제. 되살리기가 필요해지면 deleted_at 컬럼 + 모든 읽기
+ * //           경로의 필터로 올린다(정책 수정이 같이 따라온다).
+ *
+ * 0건이면 던지는 이유는 `updatePlotBasics` 와 같다. 남의 밭 id 를 보냈거나 이미
+ * 지워진 뒤인데, 조용히 성공으로 넘기면 화면만 지워진 것처럼 보인다.
+ */
+export async function deletePlot(
+  userId: string,
+  plotId: string,
+): Promise<void> {
+  if (!plotId) throw new Error("PLOT_NOT_FOUND");
+
+  const supabase = await getSupabaseServer();
+
+  const { data, error } = await supabase
+    .from("plots")
+    .delete()
+    .eq("id", plotId)
+    .eq("user_id", userId)
+    .select("id");
+
+  if (error) throw new Error(error.message);
+  if (!data || data.length === 0) throw new Error("PLOT_NOT_FOUND");
 }

@@ -179,6 +179,88 @@ export const CROP_CALENDARS: Record<string, CropCalendar> = {
     frostRiskBelowC: 2,
     heatRiskAboveC: 28,
   },
+
+  // 벼: 이앙재배 기준(농촌진흥청 농사로). 이앙 후 7~10일은 얕은 물 관리,
+  // 출수 30~40일 전 중간물떼기, 출수 후 40~45일이 수확 적기다.
+  // idealTempC·idealWeeklyRainMm 는 논물 관리로 대체되는 특성상 참고용 추정치다.
+  rice: {
+    cropId: "rice",
+    nameKo: "벼",
+    totalDays: 130,
+    stages: [
+      {
+        id: "germination",
+        nameKo: "모내기(이앙)",
+        startDay: 0,
+        adviceKo:
+          "이앙 후 7~10일은 물 깊이를 5~7cm 로 유지해 뿌리를 자리 잡혀 주세요.",
+      },
+      {
+        id: "seedling",
+        nameKo: "분얼기",
+        startDay: 10,
+        adviceKo:
+          "잡초 방제를 하고 포기 수가 늘도록 얕은 물 관리를 이어가세요.",
+      },
+      {
+        id: "leafGrowth",
+        nameKo: "생식생장기",
+        startDay: 70,
+        adviceKo: "출수 30~40일 전, 중간물떼기로 무효분얼을 억제하세요.",
+      },
+      {
+        id: "harvest",
+        nameKo: "수확기",
+        startDay: 120,
+        adviceKo: "이삭이 팬 후 40~45일이 지나 논바닥이 굳으면 수확하세요.",
+      },
+    ],
+    idealTempC: [20, 30],
+    idealWeeklyRainMm: [10, 50],
+    frostRiskBelowC: 13,
+    heatRiskAboveC: 35,
+  },
+
+  // 배추: 가을(김장)배추 기준(농촌진흥청 농사로). 발아적온 15~34도, 생육적온
+  // 18~20도, 결구적온 15~18도. 서리는 -3도부터 겉잎이 언다. 파종 후 110~120일이
+  // 수확기다. idealWeeklyRainMm 는 출처를 못 찾아 상추 수치를 준용한 추정치다.
+  cabbage: {
+    cropId: "cabbage",
+    nameKo: "배추",
+    totalDays: 115,
+    stages: [
+      {
+        id: "germination",
+        nameKo: "발아기",
+        startDay: 0,
+        adviceKo:
+          "발아적온은 15~34도로 넓은 편이니, 한여름 파종이면 그늘로 온도를 낮춰 주세요.",
+      },
+      {
+        id: "seedling",
+        nameKo: "육묘기",
+        startDay: 3,
+        adviceKo: "포트당 튼튼한 묘 1개만 남기고 솎아 주세요.",
+      },
+      {
+        id: "leafGrowth",
+        nameKo: "정식·생육기",
+        startDay: 25,
+        adviceKo: "정식 후 뿌리가 자리 잡을 때까지 물을 충분히 주세요.",
+      },
+      {
+        id: "harvest",
+        nameKo: "결구·수확기",
+        startDay: 85,
+        adviceKo:
+          "손으로 눌러 80% 정도 단단하게 찼으면 겉잎을 살려 밑동을 잘라 수확하세요.",
+      },
+    ],
+    idealTempC: [15, 20],
+    idealWeeklyRainMm: [15, 35],
+    frostRiskBelowC: -3,
+    heatRiskAboveC: 40,
+  },
 };
 
 /** 0~1 구간으로 자른다. 진행률이 화면 밖으로 나가면 게이지가 깨진다. */
