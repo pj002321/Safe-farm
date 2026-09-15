@@ -46,6 +46,8 @@ export interface AiServiceStatus {
 /** 시군구 경계 + 올해 누적 GDD·평년 대비 편차·색상. `/map` 색칠 지도(V1-37)가 그대로 그린다. */
 export interface SigunguGddFeatureCollection {
   type: "FeatureCollection";
+  /** 누적 구간의 마지막 날짜(YYYY-MM-DD, 서버가 응답을 만든 날). */
+  asOf?: string | null;
   features: Array<{
     type: "Feature";
     properties: {
@@ -67,6 +69,8 @@ export interface SigunguGddFeatureCollection {
 /** 시군구 경계 + 발효 중인 기상특보. `/map` 특보 레이어(V1-39)가 그대로 그린다. */
 export interface SigunguWarnFeatureCollection {
   type: "FeatureCollection";
+  /** 특보 스냅샷을 가져온 시각(ISO). 스냅샷이 아예 없으면 null. */
+  asOf?: string | null;
   features: Array<{
     type: "Feature";
     properties: {

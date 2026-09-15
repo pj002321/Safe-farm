@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import csv
 import json
+from datetime import date
 from functools import lru_cache
 
 from fastapi import APIRouter, Depends
@@ -50,20 +51,21 @@ def _warn_region_up_by_id() -> dict[str, str]:
         return {row["reg_id"]: row["reg_up"] for row in csv.DictReader(f)}
 
 
-def _with_properties(properties_by_code: dict[str, dict]) -> dict:
+def _with_properties(properties_by_code: dict[str, dict], as_of: str | None) -> dict:
     features = []
     for feature in _sigungu_geojson()["features"]:
         code = feature["properties"]["code"]
         properties = {**feature["properties"], **properties_by_code.get(code, {})}
         features.append({**feature, "properties": properties})
-    return {"type": "FeatureCollection", "features": features}
+    return {"type": "FeatureCollection", "asOf": as_of, "features": features}
 
 
 @router.get("/sigungu-gdd", dependencies=[Depends(require_service_token)])
 def sigungu_gdd(db: Session = Depends(get_db)) -> dict:
     """시군구 250개 폴리곤 각각에 올해 누적 GDD·평년 대비 편차·색상을 얹어 GeoJSON으로 돌려준다."""
-    deviation_by_code = sigungu_gdd_deviation(db, list(_sigungu_stations()))
-    return _with_properties(deviation_by_code)
+    today = date.today()
+    deviation_by_code = sigungu_gdd_deviation(db, list(_sigungu_stations()), today)
+    return _with_properties(deviation_by_code, today.isoformat())
 
 
 @router.get("/sigungu-warn", dependencies=[Depends(require_service_token)])
@@ -74,5 +76,5 @@ def sigungu_warn(db: Session = Depends(get_db)) -> dict:
     항상 색을 칠하면 오히려 눈에 안 띈다.
     """
     warn_regions = list(_sigungu_warn_regions())
-    status_by_code = sigungu_warning_status(db, warn_regions, _warn_region_up_by_id())
-    return _with_properties(status_by_code)
+    status_by_code, as_of = sigungu_warning_status(db, warn_regions, _warn_region_up_by_id())
+    return _with_properties(status_by_code, as_of.isoformat() if as_of else None)
