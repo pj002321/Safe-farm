@@ -64,6 +64,25 @@ export interface SigunguGddFeatureCollection {
   }>;
 }
 
+/** 시군구 경계 + 발효 중인 기상특보. `/map` 특보 레이어(V1-39)가 그대로 그린다. */
+export interface SigunguWarnFeatureCollection {
+  type: "FeatureCollection";
+  features: Array<{
+    type: "Feature";
+    properties: {
+      code: string;
+      name: string;
+      regId?: string;
+      /** 발효 중인 특보 종류(예: ["강풍", "호우"]). 없으면 빈 배열. */
+      warnings?: string[];
+      /** 발효 중인 특보가 있을 때만 값이 있다 — 없으면 폴리곤을 안 그린다. */
+      color?: string | null;
+      label?: string | null;
+    };
+    geometry: { type: "Polygon" | "MultiPolygon"; coordinates: unknown };
+  }>;
+}
+
 export type AiResult<T> =
   | { ok: true; data: T }
   | { ok: false; reason: AiFailure; detail?: string };
@@ -156,6 +175,11 @@ export const aiService = {
   /** 시군구 250개 폴리곤 + GDD 편차. 매번 DB 를 훑으므로 상태 조회보다 타임아웃을 넉넉히 준다. */
   sigunguGdd: () =>
     call<SigunguGddFeatureCollection>("/v1/map/sigungu-gdd", {
+      timeoutMs: 15_000,
+    }),
+  /** 시군구 250개 폴리곤 + 발효 중인 기상특보. */
+  sigunguWarn: () =>
+    call<SigunguWarnFeatureCollection>("/v1/map/sigungu-warn", {
       timeoutMs: 15_000,
     }),
 };

@@ -62,7 +62,24 @@ export function KakaoSdkScript({ onStatusChange }: KakaoSdkScriptProps) {
   useEffect(() => {
     if (!appKey) {
       onStatusChange("error");
+      return;
     }
+    // 같은 src 의 Script 가 세 번째 이상 마운트되면 onLoad/onReady 가 이
+    // 인스턴스로는 안 불린다(플랫 지도가 이미 두 곳에서 떠 있는 이 페이지처럼).
+    // 다른 마운트가 로드를 끝내는 시점은 알 수 없으니 짧게 폴링해서 넘어간다 —
+    // `kakao.maps` 는 `maps.load()` 콜백이 끝나야 채워지므로 이 값 자체가
+    // "완전히 준비됨" 신호다.
+    if (window.kakao?.maps) {
+      onStatusChange("ready");
+      return;
+    }
+    const interval = setInterval(() => {
+      if (window.kakao?.maps) {
+        onStatusChange("ready");
+        clearInterval(interval);
+      }
+    }, 100);
+    return () => clearInterval(interval);
   }, [appKey, onStatusChange]);
 
   if (!appKey) {

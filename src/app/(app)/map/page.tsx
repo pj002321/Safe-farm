@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { MapIcon } from "@/components/icons";
 import { PlotsMap } from "@/components/map/PlotsMap";
 import { SigunguGddMap } from "@/components/map/SigunguGddMap";
+import { SigunguWarnMap } from "@/components/map/SigunguWarnMap";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { SectionHeading } from "@/components/shared/SectionHeading";
 import { listPlots } from "@/features/plots/plotStore";
@@ -12,8 +13,9 @@ import { getCurrentProfile } from "@/shared/auth/profileStore";
  * [Feature]: 지도  →  /map
  *
  * [Description]
- * - 텃밭 마커 지도(PlotsMap)와 시군구 GDD 색칠 지도(SigunguGddMap, V1-37)를 함께 둔다.
- *   후자는 텃밭 등록 여부와 무관한 전국 통계라 텃밭이 없어도 항상 보여준다.
+ * - 텃밭 마커 지도(PlotsMap), 시군구 GDD 색칠 지도(SigunguGddMap, V1-37), 기상특보
+ *   오버레이(SigunguWarnMap, V1-39)를 함께 둔다. 뒤 둘은 텃밭 등록 여부와 무관한
+ *   전국 통계라 텃밭이 없어도 항상 보여준다.
  * ---------------------------------------------
  */
 
@@ -46,6 +48,12 @@ export default async function Page() {
         title="지역 생육 기상"
       />
       <SigunguGddMap />
+
+      <SectionHeading
+        description="한파·호우·강풍 등 발효 중인 기상특보가 있는 지역만 경고색으로 표시합니다."
+        title="지역 기상특보"
+      />
+      <SigunguWarnMap />
     </main>
   );
 }
