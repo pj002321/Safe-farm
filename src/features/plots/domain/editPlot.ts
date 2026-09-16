@@ -21,8 +21,7 @@
  *
  * [Usage]
  * ```ts
- * const parsed = parsePlotEdit(formData);
- * if (!parsed.ok) throw new Error(parsed.error);
+ * const input = parsePlotEdit(formData);
  * ```
  * ---------------------------------------------
  */
