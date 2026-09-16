@@ -57,9 +57,11 @@ export async function insertPlot(
 }
 
 /**
- * 텃밭 정보 수정. 이름·면적·위치만 바꾼다.
+ * 텃밭 정보 수정. 이름과 면적만 바꾼다.
  *
- * 위치가 바뀌면 격자도 같이 바뀌므로 호출자가 다시 계산해 넘긴다(등록과 같다).
+ * 위치(좌표·격자·행정동)는 여기서 손대지 않는다 — 격자가 바뀌면 그 격자로 쌓아
+ * 온 관측 이력이 어긋나므로, 옮긴 밭은 새로 등록한다. 그래서 등록과 달리
+ * 격자를 넘겨받지 않는다.
  * 남의 밭이면 RLS 가 걸러 **0행이 고쳐지고 오류는 나지 않는다.** 그래서
  * `select()` 로 고쳐진 행을 돌려받아 없으면 예외로 바꾼다 — 조용한 실패를 막는다.
  */
@@ -67,7 +69,6 @@ export async function updatePlot(
   userId: string,
   plotId: string,
   input: PlotEditInput,
-  grid: PlotGrid,
 ): Promise<void> {
   const supabase = await getSupabaseServer();
 
@@ -76,13 +77,6 @@ export async function updatePlot(
     .update({
       name: input.name,
       area_m2: input.areaM2,
-      latitude: input.latitude,
-      longitude: input.longitude,
-      grid_x: grid.gridX,
-      grid_y: grid.gridY,
-      region_code: input.regionCode,
-      region_ko: input.regionKo,
-      address_ko: input.addressKo,
     })
     .eq("id", plotId)
     .eq("user_id", userId)
