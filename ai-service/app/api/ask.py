@@ -27,6 +27,10 @@ def ask(request: AskRequest, db: Session = Depends(get_db)) -> AskResponse:
     이력, 사용량 제한)가 필요해지면 그때 요청 모양에 사용자 식별자를 추가한다.
     """
     matches = retrieve_with_score(db, request.question)
+    matches = retrieve_with_score(db, request.question)
     return AskResponse(
-        matches=[AskMatch(body=chunk.body, distance=dist) for chunk, dist in matches]
-        )
+        matches=[
+            AskMatch(body=chunk.body, distance=dist, source_title=chunk.document.title)
+            for chunk, dist in matches
+        ]
+    )

@@ -11,11 +11,12 @@ class AskRequest(BaseModel):
     question 이 비어 있거나(0자) 500자를 넘으면 라우터 함수가 실행되기도 전에 422 로 거부된다.
     """
     question: str = Field(...,min_length=1,max_length=500)
-    
+
 class AskMatch(BaseModel):
-    """검색된 조각 한 건. 지금은 원문 그대로 노출한다 — 출처 표시는 V1-75에서 붙는다."""
+    """검색된 조각 한 건. source_title 은 이 조각이 속한 문서의 이름, 문서에 제목이 없으면 None."""
     body: str
     distance: float
+    source_title: str | None
 
 
 class AskResponse(BaseModel):
