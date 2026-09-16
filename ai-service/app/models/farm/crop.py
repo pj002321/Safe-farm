@@ -8,7 +8,7 @@ crop_variants 감자 안의 품종별    gdd_target, days_to_harvest
 crop_stages   그 품종의 단계별    water_need_mm, fertilize_needed, guide_text
 """
 
-from sqlalchemy import Column, Identity, Integer, Numeric, Text
+from sqlalchemy import CheckConstraint, Column, Identity, Integer, Numeric, Text
 
 from app.models.farm.base import FarmBase
 
@@ -35,5 +35,24 @@ class Crop(FarmBase):
     # (gdd.ts 의 dailyGdd 가 upperTempC 없으면 Standard 로 간다)
     upper_temp = Column(Numeric(4, 1))
 
-    # 재배 난이도. 초보자에게 작물을 추천할 때 거르는 기준
+    # 관리 노력. 강(거의 매일) · 중(주 1~2회) · 약(월 1~2회).
+    # 초보자에게 작물을 추천할 때 거르는 기준이 이것이다.
+    #
+    # ⚠ 난이도가 아니라 **손이 얼마나 자주 가나**다. 정본은
+    #   safefarm-crop-data 의 작물_확정표.md §H (농진청 『텃밭 디자인』 9쪽).
+    #
+    # nullable 인 이유: §H 에 줄이 없는 작물이 들어올 수 있다
+    care_level = Column(Text)
+
+    # 재배 난이도(쉬움·보통·어려움).
+    #
+    # ⚠ **지금 전부 비어 있다.** 1차 자료가 없다 — 농진청 보도자료의
+    #   '재배하기 쉬운/보통/어려운' 은 원본 『텃밭 디자인』 43쪽 어디에도 없고,
+    #   §H 의 관리 노력 표를 풀어 쓰며 만든 표현이다. care_level 을 쓴다.
     difficulty = Column(Text)
+
+    __table_args__ = (
+        # 확정표를 사람이 고치다 '중하' 같은 딴 척도가 섞여 들어오는 것을 막는다.
+        # spec.py 도 같은 검사를 하지만, CSV 를 손으로 고치면 그걸 안 거친다
+        CheckConstraint("care_level in ('강','중','약')", name="ck_crops_care_level"),
+    )
