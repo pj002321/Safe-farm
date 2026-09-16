@@ -1,5 +1,10 @@
-"""필지별 작업카드 생성. 금요일 06시 배치(아직 스케줄러가 없어 Step 미정, pipeline
-스크립트로 수동 실행)가 이 모듈의 `generate_weekly_tasks` 를 부른다.
+"""필지별 작업카드 생성. 매일 00시 배치(아직 스케줄러가 없어 Step 미정, pipeline
+스크립트로 수동 실행)가 이 모듈의 `generate_daily_tasks` 를 부른다. 00시인 이유는
+농부들이 새벽부터 일을 시작해서다 — 밭에 나갈 때 이미 그날 카드가 있어야 한다.
+
+매주가 아니라 매일 판정하는 이유: 강수량 같은 판정 기준이 날마다 바뀐다. 주 1회만
+갱신하면 화·수에 비가 와도 금요일 카드엔 반영되지 않는다. `existing_open_titles`
+가 막아 주므로 매일 돌려도 미완료 카드가 중복 생기지는 않는다.
 
 판정 자체(무슨 카드를 만들지)는 app/domain/task_rules.py 순수 함수가 한다. 여기는
 DB에서 값을 모아 넘기고, 나온 후보를 plot_tasks 테이블에 적재하기만 한다.
@@ -79,7 +84,7 @@ def generate_tasks_for_plot(db: Session, plot: Plot) -> list[PlotTask]:
     return created
 
 
-def generate_weekly_tasks(db: Session) -> int:
+def generate_daily_tasks(db: Session) -> int:
     """모든 밭을 판정한다. 배치 스크립트(pipeline)가 부르는 진입점."""
     plots = db.query(Plot).all()
     return sum(len(generate_tasks_for_plot(db, plot)) for plot in plots)

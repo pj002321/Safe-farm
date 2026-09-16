@@ -1,6 +1,6 @@
 """plot_tasks 스키마. 정본은 supabase/migrations/20260916010000_plot_tasks.sql 이다.
 
-쓰기(카드 생성)는 ai-service 몫이라(금요일 배치가 만드는 주체) ask_history 처럼
+쓰기(카드 생성)는 ai-service 몫이라(매일 배치가 만드는 주체) ask_history 처럼
 init_farm_db 의 EXTERNAL_TABLES 에 넣어 create_all 대상에서는 뺀다 — RLS가 빠진
 반쪽 테이블이 생기는 걸 막기 위해서다.
 

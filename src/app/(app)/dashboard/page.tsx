@@ -13,7 +13,6 @@ import {
 import {
   SAMPLE_ALERT,
   SAMPLE_FRESHNESS,
-  SAMPLE_TASKS,
   SAMPLE_WEEKEND,
 } from "@/components/dashboard/sample";
 import { TaskBoard } from "@/components/dashboard/TaskBoard";
@@ -21,17 +20,20 @@ import { WeekendForecast } from "@/components/dashboard/WeekendForecast";
 import { MapPinIcon } from "@/components/icons";
 import { ButtonLink } from "@/components/shared/Button";
 import { SectionHeading } from "@/components/shared/SectionHeading";
+import { listTaskCards } from "@/features/dashboard/taskStore";
 import { listPlotCards } from "@/features/plots/plotStore";
 import { displayNameOf } from "@/shared/auth/profile";
 import { getCurrentProfile } from "@/shared/auth/profileStore";
+import { toggleTask } from "./actions";
 
 /**
  * ---------------------------------------------
  * [Feature]: 앱 홈(대시보드)  →  /dashboard
  *
  * [Description]
- * - **퍼블(마크업) 단계다.** 화면에 보이는 값은 `components/dashboard/sample.ts`
- *   의 고정 데이터이고, 조회가 붙으면 그 파일은 통째로 사라진다.
+ * - **할 일 카드만 실제 조회다.** `plot_tasks` 를 읽어 `TaskBoard` 에 넘긴다.
+ *   특보·주말 예보·데이터 기준 시각은 아직 `components/dashboard/sample.ts` 의
+ *   고정 데이터다 — 각자 자기 단계(특보 Step 6·예보 Step 5·기준시각 Step 9)에서 조회가 붙는다.
  *   로그인·동의 검사만 진짜다(그건 레이아웃이 한다).
  * - 화면 순서가 곧 급한 순서다: **특보 → 내 밭 → 오늘 할 일 → 주말 날씨**.
  *   특보를 아래에 두면 스크롤하지 않은 사람이 못 본다.
@@ -43,8 +45,8 @@ import { getCurrentProfile } from "@/shared/auth/profileStore";
  *   `/plots/new` 는 이 화면으로 되돌리지 않으므로 순환하지 않는다.
  * - 그래도 `PlotStrip` 의 빈 상태는 남겨 뒀다. 아래 조회가 실패하면 리다이렉트를
  *   포기하고 화면을 그리는데, 그때 보여 줄 것이 필요하다.
- * - `"use client"` 가 없다. 완료 체크·더보기까지 CSS 로 처리해서 이 화면의
- *   상호작용은 JS 없이 동작한다.
+ * - `"use client"` 가 없다. 더보기는 CSS(`<details>`), 완료 체크는 폼 제출
+ *   (Server Action)이라 둘 다 JS 없이 동작한다.
  * ---------------------------------------------
  */
 
@@ -76,6 +78,16 @@ export default async function DashboardPage() {
       console.error("[dashboard] 텃밭 목록 조회 실패", error);
     }
     if (plotCount === 0) redirect(PLOT_ONBOARDING_PATH);
+  }
+
+  // 위 plots 조회와 같은 이유로 실패해도 빈 배열로 화면을 그린다.
+  let tasks: Awaited<ReturnType<typeof listTaskCards>> = [];
+  if (profile) {
+    try {
+      tasks = await listTaskCards(profile.id);
+    } catch (error) {
+      console.error("[dashboard] 할 일 카드 조회 실패", error);
+    }
   }
 
   return (
@@ -139,13 +151,13 @@ export default async function DashboardPage() {
         <section aria-labelledby="tasks-heading">
           <div className="mb-3 flex items-baseline justify-between gap-3">
             <h2 className="font-semibold text-fg text-sm" id="tasks-heading">
-              주말 할 일
+              오늘 할 일
             </h2>
             <p className="font-mono text-[0.68rem] text-fg-subtle">
-              금요일 06시 생성 · 우선순위순
+              매일 00시 갱신 · 우선순위순
             </p>
           </div>
-          <TaskBoard tasks={SAMPLE_TASKS} />
+          <TaskBoard tasks={tasks} toggleTaskAction={toggleTask} />
         </section>
 
         <section aria-labelledby="forecast-heading">
