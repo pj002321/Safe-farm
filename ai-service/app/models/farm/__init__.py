@@ -16,6 +16,7 @@ from app.models.farm.crop import Crop
 from app.models.farm.crop_disaster_rule import CropDisasterRule
 from app.models.farm.crop_stage import CropStage
 from app.models.farm.crop_variant import CropVariant
+from app.models.farm.variety import Variety
 from app.models.farm.grid import Grid
 from app.models.farm.profile import Profile
 from app.models.farm.station import Station
@@ -34,6 +35,7 @@ __all__ = [
     "Profile",
     "Station",
     "Terms",
+    "Variety",
     "UserAgreement",
     "WeatherForecast",
     "WeatherObsDaily",

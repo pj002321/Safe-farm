@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from app.models.farm.crop import Crop
 from app.models.farm.crop_stage import CropStage
 from app.models.farm.crop_variant import CropVariant
+from app.models.farm.variety import Variety
 
 
 @dataclass(frozen=True)
@@ -44,6 +45,12 @@ _CROP_STAGE_QUERY = (
         CropStage.fertilize_needed.label("fertilize_needed"),
         CropVariant.gdd_target.label("gdd_target"),
         CropVariant.days_to_harvest.label("days_to_harvest"),
+        # 심는 방법과 창. content_columns 에 안 넣으므로 meta 로 간다 —
+        # 본문에 넣으면 모든 문서가 같은 모양이 되어 유사도가 흐려진다(아래 주석).
+        # generator.build_context 가 '참고값' 줄로 붙여 LLM 에게 보낸다
+        CropVariant.sow_method.label("sow_method"),
+        CropVariant.sow_from.label("sow_from"),
+        CropVariant.sow_to.label("sow_to"),
         Crop.base_temp.label("base_temp"),
         Crop.difficulty.label("difficulty"),
     )
@@ -52,7 +59,32 @@ _CROP_STAGE_QUERY = (
     .order_by(CropVariant.variant_id, CropStage.stage_order)
 )
 
-# TODO: 팀 문서가 오면 여기 추가한다. 파일로 오면 read_rows 에 분기가 필요하다.
+# 품종 카탈로그. 한 품종이 문서 둘이다 — 요약(깨끗하고 짧다)과 본문(길고 찌꺼기가 남을 수 있다).
+# 같은 variety_no 로 묶인다. 본문이 검색을 해치면 variety_body 만 빼면 된다
+_VARIETY_COLUMNS = (
+    Variety.crop_name.label("작물"),
+    Variety.name.label("품종"),
+    Variety.maturity_raw.label("숙기"),
+    Variety.use.label("용도"),
+    Variety.variety_no.label("variety_no"),
+    Variety.crop_group.label("crop_group"),
+    Variety.maturity_type.label("maturity_type"),
+    Variety.bred_year.label("bred_year"),
+    Variety.variant_id.label("variant_id"),
+)
+
+_VARIETY_SUMMARY_QUERY = (
+    select(*_VARIETY_COLUMNS, Variety.summary.label("주요특성"))
+    .where(Variety.summary.is_not(None))
+    .order_by(Variety.variety_no)
+)
+
+_VARIETY_BODY_QUERY = (
+    select(*_VARIETY_COLUMNS, Variety.body.label("본문"))
+    .where(Variety.body.is_not(None))
+    .order_by(Variety.variety_no)
+)
+
 SOURCES: tuple[DbEmbedSource, ...] = (
     DbEmbedSource(
         name="crop_stage",
@@ -61,6 +93,21 @@ SOURCES: tuple[DbEmbedSource, ...] = (
         content_columns=("작물", "숙기", "생육단계", "관리요령"),
         id_columns=("variant_id", "stage_order"),
         title_columns=("작물", "숙기", "생육단계"),
+    ),
+    DbEmbedSource(
+        name="variety_summary",
+        statement=_VARIETY_SUMMARY_QUERY,
+        # 숙기·용도는 본문에 넣는다 — "극조생" "장류용" 이 검색어가 된다. 숫자 라벨(gdd) 과 다르다
+        content_columns=("작물", "품종", "숙기", "용도", "주요특성"),
+        id_columns=("variety_no",),
+        title_columns=("작물", "품종"),
+    ),
+    DbEmbedSource(
+        name="variety_body",
+        statement=_VARIETY_BODY_QUERY,
+        content_columns=("작물", "품종", "본문"),
+        id_columns=("variety_no",),
+        title_columns=("작물", "품종"),   # 잘릴 때 조각마다 "[고추 원강7호] " 가 붙는다
     ),
 )
 
@@ -143,14 +190,18 @@ def build_external_id(source: DbEmbedSource, row: dict[str, str], line_no: int) 
     line_no: 1부터 세는 행 번호. id_columns 가 없을 때만 쓴다<br>
 
     # returns
-    id_columns 값을 ':' 로 이은 문자열. 선언한 컬럼이 없으면 line_no 를 문자열로.
-    쿼리 순서가 바뀌면 행 번호도 바뀌므로 id_columns 를 주는 편이 안전하다
+    id_columns 값을 ':' 로 이은 문자열. 빈 값도 빈 조각으로 자리를 지킨다.
+    선언한 컬럼이 없으면 line_no 를 문자열로 — 쿼리 순서가 바뀌면 행 번호도 바뀌므로
+    id_columns 를 주는 편이 안전하다
 
     # examples
         build_external_id(source, row, 1)  -> '1:1'
     """
-    parts = [row[col].strip() for col in source.id_columns if row.get(col, "").strip()]
-    return ":".join(parts) or str(line_no)
+    if not source.id_columns:
+        return str(line_no)
+    # 빈 조각도 자리를 지킨다 — '고추::재배법:모 기르기'. 건너뛰면 작형 유무가 다른 두 행이
+    # 같은 열쇠가 되어 서로를 덮어쓴다. crop_stage 의 '1:1' 은 빈 값이 없어 그대로다
+    return ":".join(row.get(col, "").strip() for col in source.id_columns)
 
 
 def build_meta(source: DbEmbedSource, row: dict[str, str]) -> dict[str, str]:
