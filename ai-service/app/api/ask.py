@@ -24,3 +24,9 @@ def ask(request: AskRequest) -> dict:
     이력, 사용량 제한)가 필요해지면 그때 요청 모양에 사용자 식별자를 추가한다.
     """
     return {"question": request.question}
+
+''' content-length: 63 
+ content-type: application/json 
+ date: Wed,16 Sep 2026 03:21:03 GMT 
+ server: uvicorn 
+'''
