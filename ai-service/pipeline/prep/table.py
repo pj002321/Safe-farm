@@ -29,7 +29,12 @@ def read_csv(path: Path) -> list[dict]:
         read_csv(Path("data/dummy/crops.csv"))
         -> [{'name': '상추', 'base_temp': '4.0', 'difficulty': None}, ...]
     """
-    with path.open(encoding="utf-8", newline="") as f:
+    # utf-8-sig 인 이유: BOM(EF BB BF)이 붙은 CSV 를 utf-8 로 읽으면 첫 헤더가
+    # '\ufeffname' 이 되어 upsert 가 "그런 컬럼 없다"로 죽는다. Excel·윈도우 도구가
+    # BOM 을 붙이므로 들어오는 파일을 통제할 수 없다.
+    # utf-8-sig 는 BOM 이 없는 파일도 그대로 읽는다 — 한쪽만 맞추는 게 아니다.
+    with path.open(encoding="utf-8-sig", newline="") as f:
+
         return [
             {k: ((v or "").strip() or None) for k, v in row.items()}
             for row in csv.DictReader(f)
