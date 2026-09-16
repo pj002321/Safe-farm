@@ -20,7 +20,16 @@ from sqlalchemy import select
 
 from app.core.config import DATA_DIR
 from app.core.db import get_engine, new_session
-from app.models.farm import Crop, CropDisasterRule, CropStage, CropVariant, Grid, Station, Variety
+from app.models.farm import (
+    Crop,
+    CropDisasterRule,
+    CropGuide,
+    CropStage,
+    CropVariant,
+    Grid,
+    Station,
+    Variety,
+)
 from pipeline.prep import check
 from pipeline.prep.seeding import count_rows, read_all, report, require_tables
 from pipeline.prep.table import key_dict, upsert
@@ -37,6 +46,7 @@ TABLES = [
     "crop_stages",
     "crop_disaster_rules",
     "varieties",        # crops·crop_variants 뒤. crop_id·variant_id 를 거기서 찾는다
+    "crop_guides",
     "grids",
     "stations",
 ]
@@ -49,6 +59,7 @@ UNIQUE = [
     # DB 의 UNIQUE 는 crop_id 로 걸리지만 CSV 는 자연키라 crop_name 으로 본다
     ("crop_disaster_rules", ["crop_name", "rule_kind", "stage_name", "severity"]),
     ("varieties", ["variety_no"]),
+    ("crop_guides", ["crop_name", "cultivation_type", "section", "topic"]),
     ("grids", ["nx", "ny"]),
     ("stations", ["station_code"]),
 ]
@@ -259,6 +270,23 @@ def load(db, data: dict[str, list[dict]]) -> dict[str, int]:
         for r in data["varieties"]
     ]
     done["varieties"] = upsert(db, Variety, rows, ["variety_no"])
+
+    # ── crop_guides ────────────────────────────────────────────────
+    rows = [
+        {
+            "crop_name": r["crop_name"],
+            "cultivation_type": r["cultivation_type"] or "",   # read_csv 가 빈 칸을 None 으로 준다. UNIQUE 때문에 빈 문자열로
+            "section": r["section"],
+            "topic": r["topic"],
+            "body": r["body"],
+            "source_file": r["source_file"],
+            "source_loc": r["source_loc"],
+            "crop_id": crop_id.get(r["crop_name"]),
+        }
+        for r in data["crop_guides"]
+    ]
+    done["crop_guides"] = upsert(db, CropGuide, rows,
+                                 ["crop_name", "cultivation_type", "section", "topic"])
 
     rows = [
         {

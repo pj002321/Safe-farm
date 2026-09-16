@@ -10,7 +10,9 @@ from sqlalchemy import Select, select
 from sqlalchemy.orm import Session
 
 from app.models.farm.crop import Crop
+from app.models.farm.crop_guide import CropGuide
 from app.models.farm.crop_stage import CropStage
+from app.models.farm.crop_guide import CropGuide
 from app.models.farm.crop_variant import CropVariant
 from app.models.farm.variety import Variety
 
@@ -88,6 +90,19 @@ _VARIETY_BODY_QUERY = (
     .order_by(Variety.variety_no)
 )
 
+_CROP_GUIDE_QUERY = (
+    select(
+        CropGuide.crop_name.label("작물"),
+        CropGuide.cultivation_type.label("작형"),
+        CropGuide.section.label("구분"),
+        CropGuide.topic.label("주제"),
+        CropGuide.body.label("본문"),
+        CropGuide.source_file.label("source_file"),
+    )
+    .order_by(CropGuide.crop_name, CropGuide.cultivation_type,
+              CropGuide.section, CropGuide.topic)
+)
+
 SOURCES: tuple[DbEmbedSource, ...] = (
     DbEmbedSource(
         name="crop_stage",
@@ -111,6 +126,16 @@ SOURCES: tuple[DbEmbedSource, ...] = (
         content_columns=("작물", "품종", "본문"),
         id_columns=("variety_no",),
         title_columns=("작물", "품종"),   # 잘릴 때 조각마다 "[고추 원강7호] " 가 붙는다
+    ),
+    DbEmbedSource(
+        name="crop_guide",
+        statement=_CROP_GUIDE_QUERY,
+        # 작형·구분을 본문에 넣는다 — "촉성재배" "기상재해대책" 이 그대로 검색어가 된다.
+        # 숫자도 빼지 않는다: "낮 22~30℃" 는 문장 안에 있어 crop_stage 의 gdd_target 라벨과 다르다
+        content_columns=("작물", "작형", "구분", "주제", "본문"),
+        # 자연키. guide_id 는 Identity 라 표를 다시 만들면 바뀐다
+        id_columns=("작물", "작형", "구분", "주제"),
+        title_columns=("작물", "작형", "주제"),
     ),
 )
 
