@@ -3,6 +3,8 @@ import { Button } from "@/components/shared/Button";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { Field } from "@/components/shared/Field";
 import type { PlotCard } from "@/features/plots/domain/plotSummary";
+import { cropById } from "./crops";
+import { plotFaceClass } from "./plotFace";
 import { ARM_CLASS, ARM_NONE_ID, DELETE_FORM_ID } from "./plotManage";
 
 /**
@@ -134,11 +136,13 @@ function PlotRow({
       />
 
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-5 py-4">
+        {/* 홈 카드와 **같은 얼굴**이다. 화면이 달라도 같은 밭은 같게 보여야
+            "아까 그 밭"이라는 것이 한눈에 붙는다. */}
         <span
           aria-hidden="true"
-          className="grid size-9 shrink-0 place-items-center rounded-full bg-accent-subtle text-accent"
+          className={`grid size-9 shrink-0 place-items-center rounded-full ${plotFaceClass(plot.id)}`}
         >
-          <FieldIcon />
+          {cropById(plot.cropIds[0])?.icon ?? <FieldIcon />}
         </span>
         <div className="min-w-0 flex-1">
           <p className="truncate font-medium text-fg">
