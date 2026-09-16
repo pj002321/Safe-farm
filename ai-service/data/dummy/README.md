@@ -1,16 +1,15 @@
 # 더미 데이터
 
-전부 가짜 값이다. 실제 기상·작물 수치가 아니다.
+실측 마스터(crops · crop_variants · crop_stages · grids · stations)는
+`data/master/` 로 옮겼다. 이름이 거짓말을 하지 않게 하려는 것이다.
 
 ## 적재 순서
 
 FK 때문에 순서를 지켜야 한다.
 
 ```
-grids ──> weather_forecast
-stations ──> weather_obs_daily
-
-crops ──> crop_variants ──> crop_stages
+weather_forecast   부모 grids 는 data/master/ 에 있다
+weather_obs_daily  부모 stations 도 마찬가지
 ```
 
 `terms`·`user_agreements` 는 어느 스크립트도 넣지 않는다 — 아래 참고.

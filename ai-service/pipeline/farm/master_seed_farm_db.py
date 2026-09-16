@@ -1,4 +1,4 @@
-"""data/dummy/*.csv -> farm 마스터 테이블. 사람이 관리하는 기준 정보다.
+"""data/master/*.csv -> farm 마스터 테이블. 사람이 관리하는 기준 정보다.
 
 마스터는 운영 중에 스스로 늘지 않는다. 작물 도메인(crops·crop_variants·crop_stages),
 기상청 격자와 관측소 목록(grids·stations) 이 여기 속한다.
@@ -25,7 +25,9 @@ from pipeline.prep import check
 from pipeline.prep.seeding import count_rows, read_all, report, require_tables
 from pipeline.prep.table import key_dict, upsert
 
-DUMMY_DIR = DATA_DIR / "dummy"
+# 마스터는 실측값이다. 더미(런타임 대체용 가짜)와 섞으면 어느 쪽이 버려도 되는
+# 값인지 구분이 사라진다 — data/dummy/README.md 가 "전부 가짜"라고 선언한다
+MASTER_DIR = DATA_DIR / "master"
 INIT_HINT = "py -3.12 -m pipeline.farm.init_farm_db"
 
 # 넣는 순서. 부모가 먼저다
@@ -212,7 +214,7 @@ def main() -> None:
         py -3.12 -m pipeline.farm.master_seed_farm_db --check
         py -3.12 -m pipeline.farm.master_seed_farm_db
     """
-    data = read_all(DUMMY_DIR, TABLES)
+    data = read_all(MASTER_DIR, TABLES)
 
     if "--check" in sys.argv:
         count_rows(data, TABLES)
