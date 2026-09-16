@@ -72,6 +72,15 @@ def test_normalize_alerts_keeps_raw():
     assert rows[0]["raw"] == ALERT_RECORD
 
 
+def test_normalize_alerts_strips_fixed_width_padding():
+    """실측 응답은 WRN/LVL/CMD 가 고정폭이라 "강풍  " 처럼 뒤에 공백이 붙는다."""
+    padded = {**ALERT_RECORD, "WRN": "강풍  ", "LVL": "예비    ", "CMD": "발표"}
+    rows = normalize_alerts([padded])
+    assert rows[0]["wrn"] == "강풍"
+    assert rows[0]["lvl"] == "예비"
+    assert rows[0]["cmd"] == "발표"
+
+
 def test_parse_lst_values_ignores_non_interval_keys():
     values = parse_lst_values(LST_CHUNK)
     assert values == [17.4, 14.6, 13.1]

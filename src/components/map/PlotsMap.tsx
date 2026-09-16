@@ -62,7 +62,7 @@ function summaryHtml(point: PlotMapPoint, now: Date): string {
   const stage = calendar && days !== null ? stageAt(calendar, days) : null;
 
   return renderToStaticMarkup(
-    <div className="max-w-56 rounded-lg border border-border bg-surface px-3 py-2 text-sm shadow-md">
+    <div className="max-w-56 whitespace-normal rounded-lg border border-border bg-surface px-3 py-2 text-sm shadow-md">
       <p className="font-medium text-fg">{point.nameKo ?? "이름 없는 밭"}</p>
       <p className="text-fg-muted">{crop?.labelKo ?? "작물 미정"}</p>
       {stage && (
@@ -114,7 +114,7 @@ export function PlotsMap({ points }: PlotsMapProps) {
       const summary = new sdk.maps.CustomOverlay({
         position,
         content: summaryHtml(point, now),
-        yAnchor: 2.2,
+        yAnchor: 1.3,
       });
 
       const marker = markerElement(point, now);
@@ -122,6 +122,7 @@ export function PlotsMap({ points }: PlotsMapProps) {
       marker.addEventListener("click", () => {
         isOpen = !isOpen;
         summary.setMap(isOpen ? map : null);
+        if (isOpen) map.panTo(position);
       });
 
       new sdk.maps.CustomOverlay({
@@ -136,7 +137,7 @@ export function PlotsMap({ points }: PlotsMapProps) {
     <>
       <KakaoSdkScript onStatusChange={setStatus} />
       <div
-        className="h-[24rem] w-full overflow-hidden rounded-lg border border-border sm:h-[28rem]"
+        className="h-[24rem] w-full rounded-lg border border-border sm:h-[28rem]"
         id={FARM_MAP_CONTAINER_ID}
       />
     </>
