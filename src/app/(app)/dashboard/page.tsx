@@ -12,7 +12,6 @@ import {
 import {
   SAMPLE_ALERT,
   SAMPLE_FRESHNESS,
-  SAMPLE_PLOTS,
   SAMPLE_TASKS,
   SAMPLE_WEEKEND,
 } from "@/components/dashboard/sample";
@@ -21,6 +20,16 @@ import { WeekendForecast } from "@/components/dashboard/WeekendForecast";
 import { MapPinIcon } from "@/components/icons";
 import { ButtonLink } from "@/components/shared/Button";
 import { SectionHeading } from "@/components/shared/SectionHeading";
+import {
+  findCalendarByNameKo,
+  stageAt,
+} from "@/features/growth/domain/growthStage";
+import { toPlotStripItem } from "@/features/plots/domain/plotStrip";
+import {
+  daysSincePlanting,
+  type PlotCard,
+} from "@/features/plots/domain/plotSummary";
+import { listPlotCards } from "@/features/plots/plotStore";
 import { displayNameOf } from "@/shared/auth/profile";
 import { getCurrentProfile } from "@/shared/auth/profileStore";
 
@@ -29,9 +38,11 @@ import { getCurrentProfile } from "@/shared/auth/profileStore";
  * [Feature]: 앱 홈(대시보드)  →  /dashboard
  *
  * [Description]
- * - **퍼블(마크업) 단계다.** 화면에 보이는 값은 `components/dashboard/sample.ts`
- *   의 고정 데이터이고, 조회가 붙으면 그 파일은 통째로 사라진다.
- *   로그인·동의 검사만 진짜다(그건 레이아웃이 한다).
+ * - **텃밭 줄만 진짜 조회다.** 특보·할 일·주말 예보·신선도는 아직
+ *   `components/dashboard/sample.ts` 의 고정 데이터이고, 조회가 붙는 대로
+ *   하나씩 걷어낸다.
+ * - 생육 단계는 여기서 낸다. `features/plots` 가 `features/growth` 를 import 할
+ *   수 없어서(features 끼리 금지) app 계층인 이 파일이 둘을 잇는다.
  * - 화면 순서가 곧 급한 순서다: **특보 → 내 밭 → 오늘 할 일 → 주말 날씨**.
  *   특보를 아래에 두면 스크롤하지 않은 사람이 못 본다.
  * - 할 일이 주인공이라 반반이 아니다. 오른쪽 예보는 "토·일에 나갈 수 있나"를
@@ -45,12 +56,33 @@ import { getCurrentProfile } from "@/shared/auth/profileStore";
 
 export const metadata: Metadata = { title: "대시보드" };
 
+/**
+ * 밭의 대표 작물로 생육 단계를 낸다. 모르면 null 이고 배지를 안 그린다.
+ *
+ * ⚠️ 아직 **날짜 기반** 달력이라 상추·배추 둘만 걸린다. 누적 GDD 와
+ * `crop_stages` 가 붙으면 이 함수째로 사라질 자리다.
+ */
+function stageKoOf(plot: PlotCard, now: Date): string | null {
+  const calendar = findCalendarByNameKo(
+    plot.cultivations[0]?.cropNameKo ?? null,
+  );
+  const days = daysSincePlanting(plot, now);
+  if (!calendar || days === null) return null;
+  return stageAt(calendar, days).nameKo;
+}
+
 /** 위성 위상차가 길게 벌어졌을 때만 나온다. null 이면 배너를 그리지 않는다. */
 const SAMPLE_DEVIATION =
   "배추밭 생육이 인근 평균보다 6일 느립니다. 위성 관측이 5일 넘게 이어져 알려 드립니다.";
 
 export default async function DashboardPage() {
   const profile = await getCurrentProfile();
+  const plots = profile ? await listPlotCards(profile.id) : [];
+
+  const now = new Date();
+  const stripItems = plots.map((plot) =>
+    toPlotStripItem(plot, now, stageKoOf(plot, now)),
+  );
 
   return (
     <main className="mx-auto flex max-w-6xl flex-col gap-7 px-6 py-6 sm:py-8">
@@ -91,10 +123,10 @@ export default async function DashboardPage() {
         <h2 className="mb-3 font-semibold text-fg text-sm" id="plots-heading">
           내 텃밭
           <span className="ml-1.5 font-mono text-fg-subtle text-xs">
-            {SAMPLE_PLOTS.length}
+            {plots.length}
           </span>
         </h2>
-        <PlotStrip plots={SAMPLE_PLOTS} />
+        <PlotStrip plots={stripItems} />
         <div className="mt-3">
           <DeviationBanner deviationKo={SAMPLE_DEVIATION} />
         </div>

@@ -2,7 +2,7 @@ import Link from "next/link";
 import { FieldIcon, MapPinIcon, SproutIcon } from "@/components/icons";
 import { Badge } from "@/components/shared/Badge";
 import { ButtonLink } from "@/components/shared/Button";
-import type { PlotSummary } from "./sample";
+import type { PlotStripItem } from "@/features/plots/domain/plotStrip";
 
 /**
  * ---------------------------------------------
@@ -19,9 +19,14 @@ import type { PlotSummary } from "./sample";
  * - 밭이 하나도 없을 때는 카드 줄 대신 **온보딩 유도**를 그린다(스펙의 빈 상태).
  *   빈 가로 스크롤은 화면이 고장 난 것처럼 보인다.
  *
+ * - 카드를 누르면 **그 밭의 상세**로 간다. 예전에는 셋 다 등록 화면으로 갔는데,
+ *   그때는 값이 샘플이라 갈 곳이 없었다.
+ * - 생육 단계는 없을 수 있다. 누적 GDD 가 붙기 전에는 단계를 못 내는 밭이
+ *   대부분이라, 배지 자리를 비워 두고 카드는 그대로 그린다.
+ *
  * [Usage]
  * ```tsx
- * <PlotStrip plots={SAMPLE_PLOTS} />
+ * <PlotStrip plots={items} />
  * <PlotStrip plots={[]} />        // 온보딩 유도
  * ```
  * ---------------------------------------------
@@ -31,7 +36,7 @@ import type { PlotSummary } from "./sample";
 export const PLOT_ONBOARDING_PATH = "/plots/new";
 
 interface PlotStripProps {
-  plots: readonly PlotSummary[];
+  plots: readonly PlotStripItem[];
 }
 
 export function PlotStrip({ plots }: PlotStripProps) {
@@ -44,16 +49,18 @@ export function PlotStrip({ plots }: PlotStripProps) {
       {plots.map((plot) => (
         <Link
           className="group w-[15.5rem] shrink-0 rounded-lg border border-border bg-surface p-4 transition-[transform,border-color,box-shadow] duration-200 ease-out-expo hover:-translate-y-0.5 hover:border-accent hover:shadow-e2"
-          href={PLOT_ONBOARDING_PATH}
+          href={`/plots/${plot.id}`}
           key={plot.id}
         >
           <div className="flex items-start justify-between gap-2">
             <span className="grid size-8 shrink-0 place-items-center rounded-full bg-accent-subtle text-accent">
               <FieldIcon />
             </span>
-            <Badge size="sm" tone="telemetry">
-              {plot.stageKo}
-            </Badge>
+            {plot.stageKo && (
+              <Badge size="sm" tone="telemetry">
+                {plot.stageKo}
+              </Badge>
+            )}
           </div>
 
           <p className="mt-3 truncate font-semibold text-[0.95rem] text-fg">
