@@ -1,6 +1,6 @@
 """chunks 벡터 저장/조회. pgvector 문법을 아는 곳을 여기 하나로 묶는다."""
 
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from app.models.chunk import Chunk
 
@@ -82,7 +82,8 @@ def search_with_score(
 
     # returns
     (조각, 코사인 거리) 를 가까운 순으로. 거리는 0(같음) ~ 1(무관) ~ 2(정반대).
-    임계값 판단은 부르는 쪽 몫임
+    임계값 판단은 부르는 쪽 몫임.
+    조각의 document 는 같이 실려 온다 — 세션 밖에서 읽어도 안전하고, 왕복도 1번이다
 
     # examples
         search_with_score(db, vector, top_k=2)  -> [(Chunk(id=7), 0.21), (Chunk(id=2), 0.48)]
@@ -91,6 +92,11 @@ def search_with_score(
     distance = Chunk.embedding.cosine_distance(query_vector)
     rows = (
         db.query(Chunk, distance)
+        # 부르는 쪽이 전부 document 를 본다 — ask.py 는 title(출처 칩),
+        # generator.py 는 meta(답변에 쓸 숫자). 이 줄이 없으면 조각마다
+        # documents 를 한 번씩 더 쳐서 top_k=10 에 SELECT 11번이 된다.
+        # top_k 를 올릴수록 왕복이 같이 늘어나므로 여기서 한 번에 붙인다
+        .options(joinedload(Chunk.document))
         .filter(Chunk.embedding.is_not(None))
         .order_by(distance)
         .limit(top_k)
