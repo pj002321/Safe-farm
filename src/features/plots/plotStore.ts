@@ -4,8 +4,10 @@ import { getSupabaseServer } from "@/shared/supabase/server";
 import type { PlotEditInput } from "./domain/editPlot";
 import {
   type PlotCard,
+  type PlotDetail,
   type PlotMapPoint,
   toPlotCard,
+  toPlotDetail,
   toPlotMapPoint,
 } from "./domain/plotSummary";
 import type { PlotRegistrationInput } from "./domain/registerPlot";
@@ -131,9 +133,29 @@ export async function getPlot(
   return data ? toPlotMapPoint(data) : null;
 }
 
-/** 카드 목록이 읽는 컬럼. 지도용 select 와 달라 따로 적는다. */
-const CARD_COLUMNS =
-  "id, name, area_m2, region_ko, crops, sowing_date, sowing_unknown, created_at";
+/**
+ * 밭 상세 화면이 읽는 밭 한 행. 없거나 남의 밭이면 null.
+ *
+ * `getPlot()` 과 나눈 이유는 상세가 지역·넓이를 쓰고 작물은 안 쓰기 때문이다.
+ * 지도용 반환 모양을 넓히면 `map/page.tsx` 가 같이 흔들린다.
+ */
+export async function getPlotDetail(
+  userId: string,
+  plotId: string,
+): Promise<PlotDetail | null> {
+  const supabase = await getSupabaseServer();
+
+  const { data, error } = await supabase
+    .from("plots")
+    .select("id, name, region_ko, area_m2, latitude, longitude")
+    .eq("user_id", userId)
+    .eq("id", plotId)
+    .maybeSingle();
+
+  if (error) throw new Error(error.message);
+
+  return data ? toPlotDetail(data) : null;
+}
 
 /**
  * 등록한 텃밭을 카드 목록으로.

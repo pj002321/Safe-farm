@@ -1,6 +1,12 @@
 import "server-only";
 
 import { getSupabaseServer } from "@/shared/supabase/server";
+import {
+  type CultivationCard,
+  type CultivationCardRow,
+  sortCultivationCards,
+  toCultivationCard,
+} from "./domain/cultivationCard";
 
 /**
  * ---------------------------------------------
@@ -53,4 +59,100 @@ export async function insertCultivations(
   );
 
   if (error) throw new Error(error.message);
+}
+
+/**
+ * 밭 상세의 작물 카드가 읽는 컬럼.
+ *
+ * `crop_variants → crops` 까지 타고 내려가는 이유는 이름이 작물에 있고 목표
+ * GDD 는 품종에 있어서다. 둘 다 없으면 카드도 게이지도 못 그린다.
+ */
+const CARD_SELECT = `
+  id, variant_id, alias, status, sowing_date, sowing_type,
+  start_stage_order, harvested_at, created_at,
+  crop_variants(
+    maturity_type, gdd_target, days_to_harvest,
+    crops(name, base_temp, upper_temp)
+  )
+`;
+
+/**
+ * 밭 하나에 심은 것 전부. 진행 중인 것이 위로 온다.
+ *
+ * `user_id` 를 받지 않는다 — `cultivations` 에는 그 컬럼이 없고, RLS 가
+ * `plots` 를 경유해 소유자를 확인한다(마이그레이션의 `cultivations_select_own`).
+ * 남의 밭 id 를 넣으면 오류가 아니라 **빈 배열**이 돌아온다. 호출자는 그 전에
+ * `getPlot()` 으로 밭 자체를 확인하므로 여기서 다시 막지 않는다.
+ */
+export async function listCultivationCards(
+  plotId: string,
+): Promise<CultivationCard[]> {
+  const supabase = await getSupabaseServer();
+
+  const { data, error } = await supabase
+    .from("cultivations")
+    .select(CARD_SELECT)
+    .eq("plot_id", plotId);
+
+  if (error) throw new Error(error.message);
+
+  const rows = (data ?? []) as unknown as CultivationCardRow[];
+  return sortCultivationCards(rows.map(toCultivationCard));
+}
+
+/**
+ * 수확 완료로 바꾼다.
+ *
+ * 행을 지우지 않는다 — "언제 무엇을 거뒀나"가 다음 시즌의 자료다. 상태만 바뀌고
+ * 파종일·품종은 그대로 남으므로 지난 기록 화면이 그대로 읽어 간다.
+ *
+ * `plot_id` 를 where 에 같이 넣는 이유는 `plotStore` 의 다른 함수들과 같다.
+ * RLS 가 막지만, 정책이 한 번 헐거워졌을 때 조용히 남의 행을 고치지 않게 한다.
+ *
+ * 0건이면 던진다. update 는 조건에 맞는 행이 없어도 **오류가 아니라 0건으로
+ * 조용히 끝나기** 때문이다 — 그대로 성공으로 넘기면 화면만 수확했다고 말한다.
+ */
+export async function markHarvested(
+  plotId: string,
+  cultivationId: string,
+  harvestedAt: string,
+): Promise<void> {
+  const supabase = await getSupabaseServer();
+
+  const { data, error } = await supabase
+    .from("cultivations")
+    .update({ status: "HARVESTED", harvested_at: harvestedAt })
+    .eq("id", cultivationId)
+    .eq("plot_id", plotId)
+    .select("id");
+
+  if (error) throw new Error(error.message);
+  if (!data || data.length === 0) throw new Error("CULTIVATION_NOT_FOUND");
+}
+
+/**
+ * 재배 한 건을 지운다. 되돌릴 수 없다.
+ *
+ * 수확한 기록까지 지우려는 게 아니다 — 끝난 재배는 `markHarvested` 로
+ * `HARVESTED` 가 되어 남는다. 이쪽은 **잘못 등록한 건을 정정**하는 길이다.
+ * 그래서 `deleted_at` 을 두지 않는다. 숨겨 두면 모든 읽기 경로에 필터가 붙는
+ * 대신 사용자가 다시 볼 일은 없다.
+ */
+export async function deleteCultivation(
+  plotId: string,
+  cultivationId: string,
+): Promise<void> {
+  if (!cultivationId) throw new Error("CULTIVATION_NOT_FOUND");
+
+  const supabase = await getSupabaseServer();
+
+  const { data, error } = await supabase
+    .from("cultivations")
+    .delete()
+    .eq("id", cultivationId)
+    .eq("plot_id", plotId)
+    .select("id");
+
+  if (error) throw new Error(error.message);
+  if (!data || data.length === 0) throw new Error("CULTIVATION_NOT_FOUND");
 }

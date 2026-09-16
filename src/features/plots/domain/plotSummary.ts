@@ -73,8 +73,8 @@ export interface PlotRow {
 }
 
 export function toPlotMapPoint(row: PlotRow): PlotMapPoint {
-// 마커는 한 밭에 하나뿐이라 대표 하나만 쓴다. 가장 먼저 심은 것을 대표로 본다.
-const lead = leadCultivation(row.cultivations);
+  // 마커는 한 밭에 하나뿐이라 대표 하나만 쓴다. 가장 먼저 심은 것을 대표로 본다.
+  const lead = leadCultivation(row.cultivations);
   return {
     id: row.id,
     nameKo: row.name,
@@ -83,6 +83,49 @@ const lead = leadCultivation(row.cultivations);
     variantId: lead?.variant_id ?? null,
     cropNameKo: lead ? toCultivationSummary(lead).cropNameKo : null,
     sowingDate: lead?.sowing_date ?? null,
+  };
+}
+
+/**
+ * 밭 상세 화면이 쓰는 밭 자체의 값.
+ *
+ * 지도 마커와 달리 **작물을 담지 않는다.** 상세의 작물 카드는 게이지에 쓸
+ * 목표 GDD·기준온도까지 필요해서 `features/cultivations` 가 따로 읽는다. 여기에
+ * 절반짜리 작물 목록을 같이 담으면 화면이 어느 쪽을 믿을지 모르게 된다.
+ *
+ * 좌표를 들고 나오는 이유는 게이지 때문이다 — 밭에서 가장 가까운 관측소를
+ * 골라야 기온을 읽는다.
+ */
+export interface PlotDetail {
+  id: string;
+  nameKo: string | null;
+  regionKo: string;
+  areaM2: number | null;
+  latitude: number;
+  longitude: number;
+}
+
+/** 상세가 읽어 오는 plots 한 행. */
+export interface PlotDetailRow {
+  id: string;
+  name: string | null;
+  region_ko: string;
+  /** ⚠️ `numeric` 이라 supabase-js 는 **문자열로** 준다. */
+  area_m2: number | string | null;
+  latitude: number | string;
+  longitude: number | string;
+}
+
+export function toPlotDetail(row: PlotDetailRow): PlotDetail {
+  const area = row.area_m2 === null ? Number.NaN : Number(row.area_m2);
+
+  return {
+    id: row.id,
+    nameKo: row.name,
+    regionKo: row.region_ko,
+    areaM2: Number.isFinite(area) ? area : null,
+    latitude: Number(row.latitude),
+    longitude: Number(row.longitude),
   };
 }
 
