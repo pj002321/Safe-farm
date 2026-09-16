@@ -62,6 +62,10 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 OPENAI_MODEL = os.getenv("OPENAI_MODEL")
 KMA_API_KEY = os.getenv("KMA_API_KEY")
 
+# 사용자당 하루 질문 수 상한. 지금은 등급 없이 고정값 — 결제 체계가 들어오면
+# 등급별 값으로 바뀔 자리다.
+DAILY_ASK_LIMIT = _env_int("DAILY_ASK_LIMIT", 20)
+
 # --- 임베딩 ---
 # 아래 넷은 일부러 env 로 빼지 않는다. 바꾸면 쌓인 벡터가 무의미해지고(공간이 갈린다),
 # DIMENSION 은 models/chunk.py 의 Vector(1536) 로 스키마에 박혀 있다. 교체 = 전량 재색인.
