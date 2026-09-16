@@ -1,10 +1,5 @@
-import type { ReactNode } from "react";
-import {
-  CheckIcon,
-  HarvestIcon,
-  LeafIcon,
-  SproutIcon,
-} from "@/components/icons";
+import { CheckIcon } from "@/components/icons";
+import { CROPS } from "./crops";
 
 /**
  * ---------------------------------------------
@@ -28,49 +23,6 @@ import {
  * ```
  * ---------------------------------------------
  */
-
-interface CropOption {
-  id: string;
-  labelKo: string;
-  icon: ReactNode;
-  /** 1=쉬움 2=보통 3=어려움. 점 개수로 그린다. */
-  difficulty: 1 | 2 | 3;
-  difficultyKo: string;
-  /** 씨뿌림에서 수확까지. */
-  durationKo: string;
-  noteKo: string;
-}
-
-/** 지원 작물. 연동 단계에서 조회 결과로 바뀔 자리다. */
-const CROPS: readonly CropOption[] = [
-  {
-    id: "cabbage",
-    labelKo: "배추",
-    icon: <LeafIcon />,
-    difficulty: 1,
-    difficultyKo: "쉬움",
-    durationKo: "약 80일",
-    noteKo: "가을에 심어 김장까지",
-  },
-  {
-    id: "rice",
-    labelKo: "벼",
-    icon: <SproutIcon />,
-    difficulty: 2,
-    difficultyKo: "보통",
-    durationKo: "약 150일",
-    noteKo: "물 대기 관리가 필요",
-  },
-  {
-    id: "persimmon",
-    labelKo: "단감",
-    icon: <HarvestIcon />,
-    difficulty: 3,
-    difficultyKo: "어려움",
-    durationKo: "여러 해",
-    noteKo: "상주는 북방 한계선",
-  },
-];
 
 interface CropCardsProps {
   /** 폼 필드 이름. 선택한 값이 이 이름으로 여러 개 제출된다. */
