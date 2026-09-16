@@ -1,11 +1,22 @@
 ﻿crop_name,hazard,rule_kind,stage_name,metric,op,threshold_c,duration_days,severity
+꽃도라지,frost,동해,,ta_min,lte,0,,
 옥수수,frost,동해,,ta_min,lte,-1.7,,
+사과,heat,고온해,과실비대기-수확기(조/중),ta_max,gte,30,,주의
+사과,heat,고온해,과실비대기-수확기(조/중),ta_max,gte,32,,위험
+배,heat,고온해,과실비대기,ta_max,gte,33,2,주의
+배,heat,고온해,과실비대기,ta_max,gte,35,2,위험
+복숭아,heat,고온해,과실비대기-수확기(조/중),ta_max,gte,30,,주의
+복숭아,heat,고온해,과실비대기-수확기(조/중),ta_max,gte,35,,위험
+포도,heat,고온해,과실착색기-수확기,ta_max,gte,32,,주의
+포도,heat,고온해,과실착색기-수확기,ta_max,gte,35,,위험
 고추,heat,고온해,개화착과기-수확기,ta_max,gte,30,,주의
 고추,heat,고온해,개화착과기-수확기,ta_max,gte,32,,위험
 수박,heat,고온해,개화기(조),ta_max,gte,30,,주의
 수박,heat,고온해,개화기(조),ta_max,gte,32,,위험
 수박,heat,고온해,과실비대기-성숙기-수확기(조),ta_max,gte,35,,주의
 수박,heat,고온해,과실비대기-성숙기-수확기(조),ta_max,gte,40,,위험
+포도,heat,고온해,과실착색기-수확기(거봉),ta_max,gte,32,,주의
+포도,heat,고온해,과실착색기-수확기(거봉),ta_max,gte,35,,위험
 벼,heat,고온해,묘대기,ta_avg,gte,24,,주의
 벼,heat,고온해,묘대기,ta_avg,gte,26,,위험
 벼,heat,고온해,이앙‧착근기,ta_avg,gte,33,,주의
@@ -16,6 +27,10 @@
 벼,heat,고온해,신장기,ta_avg,gte,35,,위험
 벼,heat,고온해,출수기,ta_avg,gte,33,,주의
 벼,heat,고온해,출수기,ta_avg,gte,35,,위험
+사과,heat,고온해,과실비대기-수확기,ta_max,gte,30,,주의
+사과,heat,고온해,과실비대기-수확기,ta_max,gte,32,,위험
+복숭아,heat,고온해,과실비대기-수확기,ta_max,gte,30,,주의
+복숭아,heat,고온해,과실비대기-수확기,ta_max,gte,35,,위험
 딸기,frost,저온,모기를 때,ta_min,lte,10,,
 딸기,frost,저온,꽃눈생기기전,ta_min,lte,3,,
 딸기,frost,저온,꽃필 때,ta_min,lte,10,,
@@ -24,6 +39,10 @@
 방울토마토,frost,저온,꽃눈생기기전,ta_min,lte,5,,
 방울토마토,frost,저온,꽃필 때,ta_min,lte,10,,
 방울토마토,frost,냉해,,ta_min,lte,-1,,
+오이,frost,저온,모기를 때,ta_min,lte,12,,
+오이,frost,저온,꽃눈생기기전,ta_min,lte,7,,
+오이,frost,저온,꽃필 때,ta_min,lte,12,,
+오이,frost,냉해,,ta_min,lte,0,,
 고추,frost,저온,모기를 때,ta_min,lte,15,,
 고추,frost,저온,꽃눈생기기전,ta_min,lte,12,,
 고추,frost,저온,꽃필 때,ta_min,lte,15,,
@@ -32,6 +51,10 @@
 수박,frost,저온,꽃눈생기기전,ta_min,lte,8,,
 수박,frost,저온,꽃필 때,ta_min,lte,12,,
 수박,frost,냉해,,ta_min,lte,0,,
+호박,frost,저온,모기를 때,ta_min,lte,12,,
+호박,frost,저온,꽃눈생기기전,ta_min,lte,7,,
+호박,frost,저온,꽃필 때,ta_min,lte,12,,
+호박,frost,냉해,,ta_min,lte,0,,
 무,frost,저온,모기를 때,ta_min,lte,10,,
 무,frost,저온,꽃눈생기기전,ta_min,lte,2,,
 무,frost,냉해,,ta_min,lte,0,,
@@ -44,12 +67,24 @@
 시금치,frost,저온,모기를 때,ta_min,lte,5,,
 시금치,frost,저온,꽃눈생기기전,ta_min,lte,0,,
 시금치,frost,냉해,,ta_min,lte,-10,,
+쑥갓,frost,저온,모기를 때,ta_min,lte,10,,
+쑥갓,frost,저온,꽃눈생기기전,ta_min,lte,5,,
+쑥갓,frost,냉해,,ta_min,lte,-5,,
+셀러리,frost,저온,모기를 때,ta_min,lte,10,,
+셀러리,frost,저온,꽃눈생기기전,ta_min,lte,6,,
+셀러리,frost,냉해,,ta_min,lte,0,,
 방울토마토,frost,동해,,ta_min,lte,-1,,
+가지,frost,동해,,ta_min,lte,0,,
 고추,frost,동해,,ta_min,lte,0,,
+오이,frost,동해,,ta_min,lte,0,,
 수박,frost,동해,,ta_min,lte,0,,
+참외,frost,동해,,ta_min,lte,0,,
+호박,frost,동해,,ta_min,lte,0,,
 시금치,frost,동해,,ta_min,lte,-10,,
 무,frost,동해,,ta_min,lte,0,,
 배추,frost,동해,,ta_min,lte,-6,,
+셀러리,frost,동해,,ta_min,lte,0,,
+쑥갓,frost,동해,,ta_min,lte,-5,,
 상추,frost,동해,,ta_min,lte,-5,,
 딸기,frost,동해,,ta_min,lte,-5,,
 마늘,frost,동해,생육 정지기․휴면기,ta_min,lte,-6,,

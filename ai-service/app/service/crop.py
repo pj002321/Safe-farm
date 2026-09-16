@@ -110,6 +110,9 @@ def crop_detail(db: Session, names: list[str]) -> list[dict]:
                     "maturity_type": v.maturity_type,
                     "gdd_target": v.gdd_target,
                     "days_to_harvest": v.days_to_harvest,
+                    "sow_method": v.sow_method,
+                    "sow_from": v.sow_from,
+                    "sow_to": v.sow_to,
                     "stages": [
                         {
                             "stage_order": s.stage_order,
