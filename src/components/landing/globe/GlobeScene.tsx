@@ -4,6 +4,7 @@ import { Canvas } from "@react-three/fiber";
 import { type RefObject, Suspense, useEffect, useRef, useState } from "react";
 import type { ObservationSite } from "@/features/monitoring/domain/hazards";
 import { Earth } from "./Earth";
+import { FieldPatches } from "./FieldPatches";
 import { useThemeColors } from "./palette";
 import { Satellite } from "./Satellite";
 import { SiteMarkers } from "./SiteMarkers";
@@ -175,6 +176,8 @@ export function GlobeScene({
 
               <group ref={groupRef}>
                 <Earth radius={EARTH_RADIUS} scanEnabled={!reducedMotion} />
+                {/* 곡창지대의 필지. 재해 마커보다 먼저 그려 마커가 위에 오게 한다. */}
+                <FieldPatches animate={!reducedMotion} radius={EARTH_RADIUS} />
                 <SiteMarkers
                   radius={EARTH_RADIUS}
                   sites={sites}

@@ -17,6 +17,7 @@ const row = {
   signup_provider: "email",
   terms_agreed_at: null,
   privacy_agreed_at: null,
+  location_agreed_at: null,
   marketing_opt_in: false,
   created_at: "2026-09-14T00:00:00.000Z",
 };
@@ -40,6 +41,7 @@ describe("toProfile", () => {
       signupProvider: "google",
       termsAgreedAt: null,
       privacyAgreedAt: null,
+      locationAgreedAt: null,
       marketingOptIn: true,
       createdAt: row.created_at,
     });
@@ -89,13 +91,29 @@ describe("displayNameOf", () => {
 describe("hasCompletedConsent", () => {
   const base = toProfile(row);
 
-  it("둘 다 있어야 완료다", () => {
+  it("필수 셋이 모두 있어야 완료다", () => {
     const t = "2026-01-01T00:00:00Z";
+
+    // 하나씩만 있으면 미완료
     expect(hasCompletedConsent(base)).toBe(false);
     expect(hasCompletedConsent({ ...base, termsAgreedAt: t })).toBe(false);
     expect(hasCompletedConsent({ ...base, privacyAgreedAt: t })).toBe(false);
+    expect(hasCompletedConsent({ ...base, locationAgreedAt: t })).toBe(false);
+
+    // ⚠️ 위치정보 하나만 빠져도 미완료다. 이 단언이 없으면, 항목을 추가하면서
+    // hasCompletedConsent 를 안 고쳐도 테스트가 통과해 "화면에서는 받았는데
+    // 게이트는 통과시키는" 상태가 조용히 만들어진다.
     expect(
       hasCompletedConsent({ ...base, termsAgreedAt: t, privacyAgreedAt: t }),
+    ).toBe(false);
+
+    expect(
+      hasCompletedConsent({
+        ...base,
+        termsAgreedAt: t,
+        privacyAgreedAt: t,
+        locationAgreedAt: t,
+      }),
     ).toBe(true);
   });
 });

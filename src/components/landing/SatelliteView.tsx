@@ -20,8 +20,9 @@ import {
  * [Description]
  * - 같은 날 같은 하늘 아래 논·밭·과수원이 다르게 보인다는 것을 NDVI·NDMI 두 차트로
  *   보인다. 숫자는 한 자리도 여기서 만들지 않는다 — 전부 `monitoring/domain` 에서 온다.
- * - **"솔직히 말하면" 목록을 뺄 수 없다.** 75번 중 42번이 구름으로 날아갔다는 문장이
- *   이 절의 값이다. 잘 되는 것만 보여주면 나머지 숫자도 못 믿을 것이 된다.
+ * - "솔직히 말하면"(관측 실패율·튀는 값) 목록은 **요청으로 걷어냈다.** 함께 쓰던
+ *   `SATELLITE_NOTES.honestlyKo` 도 지웠다 — 화면에서 뺐는데 데이터만 남기면
+ *   다음 사람이 "왜 안 쓰이지" 하고 되살린다.
  * - 필지 → 색 대응은 여기서 한 번만 정한다(논 accent · 밭 telemetry · 과수 earth).
  *   두 차트가 같은 대응을 써야 범례를 한 번만 읽고도 아래 차트를 읽을 수 있다.
  * - 서버 컴포넌트다. 상호작용이 없으므로 차트 전체가 HTML 로 실려 나간다.
@@ -66,7 +67,7 @@ interface NoteListProps {
   tone: "good" | "caution";
 }
 
-/** "이 값으로 할 수 있는 것" / "솔직히 말하면" 두 목록의 공통 껍데기. */
+/** "이 값으로 할 수 있는 것" 목록의 껍데기. tone 은 caution 도 받는다. */
 function NoteList({ title, items, tone }: NoteListProps) {
   const Icon = tone === "good" ? CheckIcon : AlertTriangleIcon;
   const iconClass = tone === "good" ? "text-good" : "text-caution";
@@ -153,19 +154,13 @@ export function SatelliteView() {
         </Reveal>
       </div>
 
-      <div className="mt-6 grid gap-6 md:grid-cols-2">
+      {/* 2열이던 자리에 카드가 하나만 남았다. 섹션 폭을 그대로 쓴다. */}
+      <div className="mt-6">
         <Reveal delay={60}>
           <NoteList
             items={SATELLITE_NOTES.canDoKo}
             title="이 값으로 할 수 있는 것"
             tone="good"
-          />
-        </Reveal>
-        <Reveal delay={120}>
-          <NoteList
-            items={SATELLITE_NOTES.honestlyKo}
-            title="솔직히 말하면"
-            tone="caution"
           />
         </Reveal>
       </div>

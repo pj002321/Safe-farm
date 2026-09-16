@@ -45,6 +45,7 @@ const STEPS = ["약관 동의", "계정 만들기"] as const;
 const NO_CONSENT: Consent = {
   terms: false,
   privacy: false,
+  location: false,
   marketing: false,
 };
 

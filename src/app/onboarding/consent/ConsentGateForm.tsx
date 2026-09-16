@@ -34,7 +34,12 @@ import { submitConsent } from "./actions";
  * ---------------------------------------------
  */
 
-const NO_CONSENT: Consent = { terms: false, privacy: false, marketing: false };
+const NO_CONSENT: Consent = {
+  terms: false,
+  privacy: false,
+  location: false,
+  marketing: false,
+};
 
 export function ConsentGateForm() {
   const [consent, setConsent] = useState<Consent>(NO_CONSENT);

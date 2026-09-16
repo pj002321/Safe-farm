@@ -7,7 +7,7 @@ TopoJSON 인 이유: 원본 GeoJSON(18MB)보다 simplify 된 topo 버전(약 550
 렌더링에 맞다. 그래서 매번 파싱하지 않고 한 번 GeoJSON 으로 펼쳐 커밋해 둔다
 (정적 파일이라 정확도 열화가 매 실행마다 반복되지 않는다).
 
-실행: py -3.12 -m pipeline.fetch_sigungu_boundary
+실행: py -3.12 -m pipeline.region.fetch_sigungu_boundary
 """
 
 import json
