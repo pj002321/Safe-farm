@@ -214,18 +214,23 @@ def normalize_disaster_rule(rows, station, risk, solar_term, crop_id=""):
 
 
 def normalize_alerts(records):
-    """wrn_now_data_new 의 배열 → official_alerts 컬럼 (DATA_SCHEMA §3)."""
+    """wrn_now_data_new 의 배열 → official_alerts 컬럼 (DATA_SCHEMA §3).
+
+    REG_KO/WRN/LVL/CMD 는 고정폭 필드라 실측값에 트레일링 공백이 붙어 온다
+    (예: "강풍  ", "발표"는 안 붙지만 "예비    "는 붙음) — strip 안 하면 이후
+    == 비교(cmd == "해제" 등)가 전부 깨진다.
+    """
     out = []
     for rec in records:
         out.append(
             {
                 "reg_id": rec.get("REG_ID"),
-                "reg_ko": rec.get("REG_KO"),
-                "wrn": rec.get("WRN"),
-                "lvl": rec.get("LVL"),
+                "reg_ko": (rec.get("REG_KO") or "").strip() or None,
+                "wrn": (rec.get("WRN") or "").strip() or None,
+                "lvl": (rec.get("LVL") or "").strip() or None,
                 "tm_fc": rec.get("TM_FC"),
                 "tm_ef": rec.get("TM_EF"),
-                "cmd": rec.get("CMD"),
+                "cmd": (rec.get("CMD") or "").strip() or None,
                 "raw": rec,
             }
         )

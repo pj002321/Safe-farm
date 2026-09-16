@@ -43,6 +43,50 @@ export interface AiServiceStatus {
   };
 }
 
+/** 시군구 경계 + 올해 누적 GDD·평년 대비 편차·색상. `/map` 색칠 지도(V1-37)가 그대로 그린다. */
+export interface SigunguGddFeatureCollection {
+  type: "FeatureCollection";
+  /** 누적 구간의 마지막 날짜(YYYY-MM-DD, 서버가 응답을 만든 날). */
+  asOf?: string | null;
+  features: Array<{
+    type: "Feature";
+    properties: {
+      code: string;
+      name: string;
+      /** 평년값이 없는 관측소(AWS 다수)에 걸리면 GDD 관련 필드가 전부 없다. */
+      station?: string;
+      stationName?: string;
+      actualGdd?: number | null;
+      normalGdd?: number | null;
+      deviationPct?: number | null;
+      color?: string;
+      label?: string;
+    };
+    geometry: { type: "Polygon" | "MultiPolygon"; coordinates: unknown };
+  }>;
+}
+
+/** 시군구 경계 + 발효 중인 기상특보. `/map` 특보 레이어(V1-39)가 그대로 그린다. */
+export interface SigunguWarnFeatureCollection {
+  type: "FeatureCollection";
+  /** 특보 스냅샷을 가져온 시각(ISO). 스냅샷이 아예 없으면 null. */
+  asOf?: string | null;
+  features: Array<{
+    type: "Feature";
+    properties: {
+      code: string;
+      name: string;
+      regId?: string;
+      /** 발효 중인 특보 종류(예: ["강풍", "호우"]). 없으면 빈 배열. */
+      warnings?: string[];
+      /** 발효 중인 특보가 있을 때만 값이 있다 — 없으면 폴리곤을 안 그린다. */
+      color?: string | null;
+      label?: string | null;
+    };
+    geometry: { type: "Polygon" | "MultiPolygon"; coordinates: unknown };
+  }>;
+}
+
 export type AiResult<T> =
   | { ok: true; data: T }
   | { ok: false; reason: AiFailure; detail?: string };
@@ -132,4 +176,14 @@ async function call<T>(
 export const aiService = {
   /** 서비스가 살아 있는지, 무엇을 할 수 있는지. */
   status: () => call<AiServiceStatus>("/v1/status"),
+  /** 시군구 250개 폴리곤 + GDD 편차. 매번 DB 를 훑으므로 상태 조회보다 타임아웃을 넉넉히 준다. */
+  sigunguGdd: () =>
+    call<SigunguGddFeatureCollection>("/v1/map/sigungu-gdd", {
+      timeoutMs: 15_000,
+    }),
+  /** 시군구 250개 폴리곤 + 발효 중인 기상특보. */
+  sigunguWarn: () =>
+    call<SigunguWarnFeatureCollection>("/v1/map/sigungu-warn", {
+      timeoutMs: 15_000,
+    }),
 };
