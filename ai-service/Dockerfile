@@ -42,26 +42,25 @@ USER appuser
 ENV PORT=8000
 EXPOSE 8000
 
-# ⚠️ `--host ::` 다. 루프백에만 붙으면 플랫폼 헬스체크가 전부 실패한다
-#    — "시작은 됐는데 죽는" 증상의 대표적 원인이다.
+# ⚠️ `uvicorn --host ...` 를 직접 부르지 않는다. `serve.py` 가 소켓을 열어 준다.
 #
-#    **0.0.0.0 과 :: 는 이 이미지에서 서로 배타적이다.** 실측:
+#    이유: uvicorn 의 --host 로는 IPv4 와 IPv6 를 **동시에** 못 받는다. 실측:
 #        --host 0.0.0.0   127.0.0.1 OK    [::1] 실패
 #        --host ::        127.0.0.1 실패   [::1] OK
-#    커널의 net.ipv6.bindv6only 가 0 이고 새 소켓의 IPV6_V6ONLY 기본값도 0인데도
-#    그렇다(uvicorn 이 리스닝 소켓을 v6 전용으로 연다). 둘 다 받는 방법은 없다.
+#    커널 net.ipv6.bindv6only 가 0 이고 새 소켓의 IPV6_V6ONLY 기본값도 0인데도
+#    그렇다(uvicorn 이 리스닝 소켓을 v6 전용으로 연다).
 #
-#    그래서 **어느 쪽을 버릴지**가 결정이고, 답은 배포 대상이 정한다:
-#    **Railway 사설망(`*.railway.internal`)은 IPv6 다.** 0.0.0.0 으로 열면
-#    Next 가 `http://ai-service.railway.internal:8000` 을 불러도 닿지 않아
-#    `/api/map/*` 이 전부 502 로 떨어진다(실제로 그렇게 났다).
-#    컨테이너 안에서 127.0.0.1 을 부르는 코드는 없으므로 IPv4 를 버려도 잃는 게 없다.
-#    ⚠️ 로컬에서 `docker run -p 18000:8000` 은 이 기본값으로는 **안 닿는다.**
-#       Docker 의 포트 포워딩이 컨테이너의 IPv4 로 들어오기 때문이다. 그래서
-#       탈출구를 하나 뒀다 — 로컬에서는 `-e BIND_HOST=0.0.0.0` 을 준다.
-#       컨테이너 안에서 바로 확인할 때는 `curl http://[::1]:8000/health`.
+#    그런데 들어오는 경로가 프로토콜이 다르다:
+#        Railway 사설망(*.railway.internal)   IPv6
+#        로컬 docker run -p                   IPv4
+#        플랫폼 헬스체크                      플랫폼이 정한다
+#    한쪽만 고르면 나머지가 조용히 끊긴다. 실제로 0.0.0.0 이던 동안
+#    `/api/map/*` 이 전부 502 였다.
 #
-# ⚠️ sh -c 로 감싸는 이유는 $PORT 를 셸이 풀어야 하기 때문이다. exec 형태로
-#    쓰면 문자열 "$PORT" 가 그대로 전달돼 uvicorn 이 포트 파싱에 실패한다.
-ENV BIND_HOST=::
-CMD ["sh", "-c", "uvicorn app.main:app --host ${BIND_HOST:-::} --port ${PORT:-8000}"]
+#    `serve.py` 는 소켓을 직접 열고 IPV6_V6ONLY 를 꺼서 양쪽을 함께 받는다.
+#    자세한 근거는 그 파일 머리말에 있다.
+#
+# ⚠️ exec 형태로 둔다. sh -c 로 감싸면 신호(SIGTERM)가 uvicorn 까지 안 가서
+#    재배포 때 컨테이너가 강제 종료될 때까지 매달린다. $PORT 는 serve.py 가
+#    파이썬에서 직접 읽으므로 셸 확장이 필요 없다.
+CMD ["python", "serve.py"]
