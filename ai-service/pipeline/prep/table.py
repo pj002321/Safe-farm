@@ -26,7 +26,7 @@ def read_csv(path: Path) -> list[dict]:
     행 목록. 파일 순서를 지킨다. 키는 헤더 이름이고, 빈 칸의 값은 None
 
     # examples
-        read_csv(Path("data/dummy/crops.csv"))
+        read_csv(Path("data/master/crops.csv"))
         -> [{'name': '상추', 'base_temp': '4.0', 'difficulty': None}, ...]
     """
     with path.open(encoding="utf-8", newline="") as f:
