@@ -10,6 +10,7 @@ relationship 은 두지 않는다. 조회는 명시적 join 으로 쓴다.
   advices       정의 자체가 없음 (인덱스 목록과 jsonb 언급만 존재)
 """
 
+from app.models.farm.ask_history import AskHistory
 from app.models.farm.auth_user import auth_users
 from app.models.farm.base import FarmBase
 from app.models.farm.crop import Crop
@@ -24,6 +25,7 @@ from app.models.farm.weather_forecast import WeatherForecast
 from app.models.farm.weather_obs_daily import WeatherObsDaily
 
 __all__ = [
+    "AskHistory",
     "Crop",
     "CropStage",
     "CropVariant",
