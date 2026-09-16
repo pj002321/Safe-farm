@@ -26,7 +26,7 @@ SKIP_SCHEMAS = ["auth"]
 # 남의 데이터를 지운다(ask_history 는 쓰기 자체는 ai-service 몫이지만 RLS 는
 # 마이그레이션에만 있다). terms·user_agreements 는 동의 절차가 채우는 것이라 같이 둔다.
 # 옵션으로도 열지 않음 — 이 DB 를 빈 상태로 띄워야 하면 supabase db push 를 쓴다
-EXTERNAL_TABLES = ["profiles", "plots", "terms", "user_agreements", "ask_history"]
+EXTERNAL_TABLES = ["profiles", "plots", "terms", "user_agreements", "ask_history", "plot_tasks"]
 
 
 def main() -> None:
