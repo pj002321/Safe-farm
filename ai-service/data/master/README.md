@@ -25,3 +25,25 @@
   원문의 6갈래(극조생~조중생) 접기는 build.py 가 끝낸 상태로 온다.
 - `crop_stages` 의 GDD 구간은 반개구간이다 — `gdd_from` 포함, `gdd_to` 미포함.
 - 출처·근거 컬럼은 없다. ORM 에 자리가 없어 떨어뜨렸다.
+
+## ⚠ CSV 에서 행을 빼도 DB 에서는 안 지워진다
+
+`master_seed_farm_db.py` 는 upsert 만 한다 — 자연키가 있으면 UPDATE, 없으면 INSERT.
+**삭제는 없다.** CSV 에서 빠진 행이 DB 에 남는다.
+
+⚠ **층마다 따로 남는다.** crops 를 지우면 CASCADE 로 자식이 따라가지만,
+작물은 살아 있고 숙기만 바뀐 경우(상추 EARLY → MID 하나로)는 안 지워진다.
+2026-09-16 에 실제로 crops 2 · crop_variants 4 · crop_stages 11 행이 남아 있었다.
+
+CSV 를 갈아끼운 뒤에는 행 수를 맞춰 보고, 안 맞으면 위층부터 지운다.
+
+    delete from crops where name <> all(<CSV 의 작물 목록>);
+    delete from crop_variants v using crops c
+      where c.crop_id = v.crop_id
+        and (c.name || '/' || v.maturity_type) <> all(<CSV 의 조합 목록>);
+
+    delete from crop_stages s using crop_variants v, crops c
+      where s.variant_id = v.variant_id and v.crop_id = c.crop_id
+        and (c.name || '/' || v.maturity_type || '/' || s.stage_order)
+            <> all(<CSV 의 조합 목록>);
+
