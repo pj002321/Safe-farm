@@ -23,6 +23,7 @@ from app.domain.guardrail import BLOCKED_MESSAGE, is_blocked_topic
 from app.knowledge.generator import stream_answer
 from app.knowledge.reranker import rerank
 from app.models.farm.ask_history import AskHistory
+from app.service.ask_context import build_plot_context
 from app.service.ask_history import complete_answer, record_question, submit_feedback, today_ask_count
 
 router = APIRouter(prefix="/v1", tags=["ask"])
@@ -72,8 +73,9 @@ def ask(request: AskRequest, db: Session = Depends(get_db)) -> AskResponse | Str
         AskMatch(body=chunk.body, distance=dist, source_title=chunk.document.title)
         for chunk, dist in found
     ]
+    plot_context = build_plot_context(db, request.plot_id) if request.plot_id else None
     return StreamingResponse(
-        _sse(history, ask_matches, stream_answer(request.question, found), db),
+        _sse(history, ask_matches, stream_answer(request.question, found, plot_context), db),
         media_type="text/event-stream",
     )
 
