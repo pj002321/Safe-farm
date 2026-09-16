@@ -3,6 +3,7 @@
 질문을 벡터 검색 → 리랭크 → 근거 조각으로 LLM 답변을 생성한다.
 """
 from __future__ import annotations
+
 import json
 from collections.abc import Iterator
 
@@ -12,13 +13,18 @@ from sqlalchemy.orm import Session
 
 from app.core.db import get_db
 from app.core.security import require_service_token
-from app.knowledge.retriever import retrieve_with_score
-from app.schemas.ask import AskRequest,AskMatch,AskResponse,NO_MATCH_DISTANCE
 from app.domain.guardrail import BLOCKED_MESSAGE, is_blocked_topic
 from app.knowledge.generator import stream_answer
 from app.knowledge.reranker import rerank
+from app.knowledge.retriever import retrieve_with_score
+from app.schemas.ask import NO_MATCH_DISTANCE, AskMatch, AskRequest, AskResponse
 
 router = APIRouter(prefix="/v1", tags=["ask"])
+
+# 후보를 받아 리랭커로 줄인다. 값의 근거는 pipeline/doc/golden.py 주석 참고
+# (2026-09-17 실측: 10→5 와 20→4 가 같은 점수라 왕복이 적은 쪽을 쓴다)
+CANDIDATES = 10
+TOP_K = 5
 
 def _sse(matches: list[AskMatch], tokens: Iterator[str]) -> Iterator[str]:
     """matches 를 먼저 한 번 이벤트로 보내고, 그다음 토큰을 오는 대로 흘려보낸다.
@@ -40,8 +46,13 @@ def ask(request: AskRequest, db: Session = Depends(get_db)) -> AskResponse | Str
     if is_blocked_topic(request.question):
         return AskResponse(matches=[], message=BLOCKED_MESSAGE)
 
-    matches = rerank(request.question, retrieve_with_score(db, request.question))
+    # 후보 CANDIDATES 개를 받아 리랭커로 TOP_K 개까지 줄인다. 자르지 않으면 10개가 통째로
+    # 프롬프트에 들어가 관련 없는 조각이 답변을 흐린다 — 골든셋 실측에서 5개면 충분했다
+    matches = rerank(
+        request.question, retrieve_with_score(db, request.question, CANDIDATES)
+    )[:TOP_K]
     found = [(chunk, dist) for chunk, dist in matches if dist < NO_MATCH_DISTANCE]
+
     if not found:
         return AskResponse(matches=[])
 

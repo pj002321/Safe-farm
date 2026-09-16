@@ -12,7 +12,6 @@ from sqlalchemy.orm import Session
 from app.models.farm.crop import Crop
 from app.models.farm.crop_guide import CropGuide
 from app.models.farm.crop_stage import CropStage
-from app.models.farm.crop_guide import CropGuide
 from app.models.farm.crop_variant import CropVariant
 from app.models.farm.variety import Variety
 
@@ -255,4 +254,10 @@ def build_meta(source: DbEmbedSource, row: dict[str, str]) -> dict[str, str]:
     else:
         used = {*source.content_columns, *source.id_columns, *source.title_columns}
         columns = tuple(c for c in row if c not in used)
-    return {col: row[col] for col in columns if row.get(col, "").strip()}
+    meta = {col: row[col] for col in columns if row.get(col, "").strip()}
+    # ★ 작물은 본문에도 있지만 meta 에도 넣는다. 검색이 작물로 후보를 줄이려면(vector_store 의
+    #   crops 인자) 필터를 걸 자리가 필요한데, 본문은 텍스트라 LIKE 밖에 못 쓰고 그건 취약하다.
+    #   모든 소스가 첫 컬럼을 '작물' 로 label 하고 있어 이 한 줄이 네 소스에 다 걸린다
+    if row.get("작물", "").strip():
+        meta["작물"] = row["작물"].strip()
+    return meta

@@ -1,8 +1,11 @@
 """chunks 벡터 저장/조회. pgvector 문법을 아는 곳을 여기 하나로 묶는다."""
 
+from collections.abc import Collection
+
 from sqlalchemy.orm import Session, joinedload
 
 from app.models.chunk import Chunk
+from app.models.document import Document
 
 
 def find_chunks_to_embed(db: Session, limit: int | None = None) -> list[Chunk]:
@@ -66,7 +69,10 @@ def search(db: Session, query_vector: list[float], top_k: int = 10) -> list[Chun
 
 
 def search_with_score(
-    db: Session, query_vector: list[float], top_k: int = 10
+    db: Session,
+    query_vector: list[float],
+    top_k: int = 10,
+    crops: Collection[str] | None = None,
 ) -> list[tuple[Chunk, float]]:
     """
     # summary
@@ -79,6 +85,9 @@ def search_with_score(
     db: 세션<br>
     query_vector: 질의 임베딩<br>
     top_k: 가져올 개수<br>
+    crops: 이 작물의 문서만 후보로 삼는다. 비거나 None 이면 전체.
+        meta 에 '작물' 이 없는 문서(옛 색인)는 걸러지지 않고 남는다 — 필터가 후보를 줄일 뿐
+        없는 작물을 지어내지는 않기 때문이다<br>
 
     # returns
     (조각, 코사인 거리) 를 가까운 순으로. 거리는 0(같음) ~ 1(무관) ~ 2(정반대).
@@ -90,7 +99,7 @@ def search_with_score(
     """
     # 정렬 키와 반환 값이 같은 식이어야 순서와 숫자가 어긋나지 않음
     distance = Chunk.embedding.cosine_distance(query_vector)
-    rows = (
+    query = (
         db.query(Chunk, distance)
         # 부르는 쪽이 전부 document 를 본다 — ask.py 는 title(출처 칩),
         # generator.py 는 meta(답변에 쓸 숫자). 이 줄이 없으면 조각마다
@@ -98,8 +107,18 @@ def search_with_score(
         # top_k 를 올릴수록 왕복이 같이 늘어나므로 여기서 한 번에 붙인다
         .options(joinedload(Chunk.document))
         .filter(Chunk.embedding.is_not(None))
-        .order_by(distance)
-        .limit(top_k)
-        .all()
     )
+    if crops:
+        # meta 는 JSONB 다. ->> 로 문자열을 꺼내 비교한다.
+        #
+        # ⚠ **order_by·limit 보다 먼저 걸어야 한다.** 10개를 뽑은 뒤 거르면 정답이 11위였을 때
+        #   영영 안 나온다 — 필터의 목적이 "후보를 줄여 정답을 top_k 안으로 올리는 것" 이다.
+        #
+        # ⚠ join 이 아니라 has(EXISTS) 를 쓴다. joinedload 가 이미 documents 를 붙이고 있어
+        #   join 을 또 걸면 같은 표를 두 번 조인하게 된다
+        query = query.filter(
+            Chunk.document.has(Document.meta["작물"].astext.in_(list(crops)))
+        )
+    rows = query.order_by(distance).limit(top_k).all()
     return [(chunk, float(dist)) for chunk, dist in rows]
+
