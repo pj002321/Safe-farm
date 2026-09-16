@@ -7,6 +7,7 @@ import { PlotLocationStep } from "@/components/plot/PlotLocationStep";
 import { SowingFields } from "@/components/plot/SowingFields";
 import { WizardNav } from "@/components/plot/WizardNav";
 import { SectionHeading } from "@/components/shared/SectionHeading";
+import { listCropOptions } from "@/features/crops/cropStore";
 import { registerPlot } from "./actions";
 
 /**
@@ -102,7 +103,11 @@ const STEPS = [
   },
 ] as const;
 
-export default function PlotRegisterPage() {
+export default async function PlotRegisterPage() {
+  // 작물 목록은 DB(작물 마스터)에서 온다. 예전에는 CropCards 에 세 개가 박혀
+  // 있었는데, 그 id 가 마스터와 달라 저장할 작물을 못 찾았다.
+  const crops = await listCropOptions();
+
   return (
     <main className="mx-auto max-w-5xl px-6 py-8 sm:py-10">
       <div className="flex flex-wrap items-end justify-between gap-4">
@@ -186,7 +191,7 @@ export default function PlotRegisterPage() {
               {step.no === 3 && (
                 <fieldset>
                   <legend className="sr-only">재배할 작물</legend>
-                  <CropCards defaultSelected={["cabbage"]} />
+                  <CropCards crops={crops} />
                 </fieldset>
               )}
               {step.no === 4 && (

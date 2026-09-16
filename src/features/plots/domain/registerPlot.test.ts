@@ -37,7 +37,7 @@ describe("parsePlotRegistration", () => {
         addressKo: "경북 상주시 낙양동",
         regionCode: "4725011000",
         regionKo: "경상북도 상주시 낙양동",
-        crops: [],
+        cropIds: [],
         sowingDate: null,
         sowingUnknown: false,
         sowingMethod: "seed",
@@ -59,10 +59,17 @@ describe("parsePlotRegistration", () => {
     expect(result.ok && result.value.areaM2).toBe(50);
   });
 
-  it("작물은 여러 개 담긴다", () => {
+  it("작물은 crop_id 로 여러 개 담긴다", () => {
     const result = parsePlotRegistration(
-      formData({ ...VALID_LOCATION, crops: ["cabbage", "rice"] }),
+      formData({ ...VALID_LOCATION, cropIds: ["5", "7"] }),
     );
-    expect(result.ok && result.value.crops).toEqual(["cabbage", "rice"]);
+    expect(result.ok && result.value.cropIds).toEqual([5, 7]);
+  });
+
+  it("숫자가 아닌 작물 값은 버린다 — 예전 슬러그가 섞여 들어와도 막힌다", () => {
+    const result = parsePlotRegistration(
+      formData({ ...VALID_LOCATION, cropIds: ["cabbage", "0", "3"] }),
+    );
+    expect(result.ok && result.value.cropIds).toEqual([3]);
   });
 });

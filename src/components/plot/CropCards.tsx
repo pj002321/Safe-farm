@@ -5,6 +5,7 @@ import {
   LeafIcon,
   SproutIcon,
 } from "@/components/icons";
+import type { CropOption } from "@/features/crops/domain/cropOption";
 
 /**
  * ---------------------------------------------
@@ -21,80 +22,61 @@ import {
  * - 선택을 **색으로만** 알리지 않는다. 오른쪽 위 체크 표시가 형태로 함께 말한다.
  * - 난이도는 점 세 개로 그린다. "쉬움/보통/어려움" 글자를 함께 두되(스크린리더가
  *   읽는 것은 글자다), 눈으로는 점 개수가 빠르다.
+ * - 작물 목록은 **호출자가 넘긴다.** 예전에는 여기 세 개가 박혀 있었는데, 그 id
+ *   ("cabbage")가 작물 마스터(`crops.name` = "배추")와 달라 저장할 때 작물을
+ *   찾을 수 없었다. 제출값은 `crop_id` 다 — 이름은 바뀌어도 id 는 안 바뀐다.
  *
  * [Usage]
  * ```tsx
- * <CropCards defaultSelected={["cabbage"]} />
+ * const crops = await listCropOptions();
+ * <CropCards crops={crops} defaultSelected={[5]} />
  * ```
  * ---------------------------------------------
  */
 
-interface CropOption {
-  id: string;
-  labelKo: string;
-  icon: ReactNode;
-  /** 1=쉬움 2=보통 3=어려움. 점 개수로 그린다. */
-  difficulty: 1 | 2 | 3;
-  difficultyKo: string;
-  /** 씨뿌림에서 수확까지. */
-  durationKo: string;
-  noteKo: string;
-}
-
-/** 지원 작물. 연동 단계에서 조회 결과로 바뀔 자리다. */
-const CROPS: readonly CropOption[] = [
-  {
-    id: "cabbage",
-    labelKo: "배추",
-    icon: <LeafIcon />,
-    difficulty: 1,
-    difficultyKo: "쉬움",
-    durationKo: "약 80일",
-    noteKo: "가을에 심어 김장까지",
-  },
-  {
-    id: "rice",
-    labelKo: "벼",
-    icon: <SproutIcon />,
-    difficulty: 2,
-    difficultyKo: "보통",
-    durationKo: "약 150일",
-    noteKo: "물 대기 관리가 필요",
-  },
-  {
-    id: "persimmon",
-    labelKo: "단감",
-    icon: <HarvestIcon />,
-    difficulty: 3,
-    difficultyKo: "어려움",
-    durationKo: "여러 해",
-    noteKo: "상주는 북방 한계선",
-  },
-];
+/**
+ * 작물 이름 → 아이콘.
+ *
+ * 아이콘은 표시일 뿐이라 DB 에 둘 성질이 아니다. 여기 없는 작물이 마스터에
+ * 추가돼도 기본 아이콘으로 그려진다 — 화면이 멈추지는 않는다.
+ */
+const ICONS: Record<string, ReactNode> = {
+  상추: <LeafIcon />,
+  배추: <LeafIcon />,
+  무: <SproutIcon />,
+  감자: <SproutIcon />,
+  방울토마토: <HarvestIcon />,
+  고추: <HarvestIcon />,
+  오이: <HarvestIcon />,
+  가지: <HarvestIcon />,
+};
 
 interface CropCardsProps {
+  crops: readonly CropOption[];
   /** 폼 필드 이름. 선택한 값이 이 이름으로 여러 개 제출된다. */
   name?: string;
-  defaultSelected?: readonly string[];
+  /** 미리 선택해 둘 `crop_id`. */
+  defaultSelected?: readonly number[];
 }
 
 export function CropCards({
-  name = "crops",
+  crops,
+  name = "cropIds",
   defaultSelected = [],
 }: CropCardsProps) {
   return (
     <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-      {CROPS.map((crop) => (
+      {crops.map((crop) => (
         <label
           className="relative flex cursor-pointer flex-col rounded-lg border border-border bg-surface p-4 transition-[border-color,background-color,transform] duration-200 ease-out-expo hover:-translate-y-0.5 hover:border-telemetry has-[:checked]:border-telemetry has-[:checked]:bg-telemetry-subtle has-[:focus-visible]:outline has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-ring has-[:focus-visible]:outline-offset-2"
-          key={crop.id}
+          key={crop.cropId}
         >
           <input
             className="peer sr-only"
-            defaultChecked={defaultSelected.includes(crop.id)}
+            defaultChecked={defaultSelected.includes(crop.cropId)}
             name={name}
             type="checkbox"
-            value={crop.id}
+            value={crop.cropId}
           />
 
           {/* 입력의 형제라야 peer-checked 가 닿는다. 색 말고 형태로도 알린다. */}
@@ -103,19 +85,24 @@ export function CropCards({
           </span>
 
           <span className="grid size-10 place-items-center rounded-full bg-surface-2 text-xl text-fg-muted">
-            {crop.icon}
+            {ICONS[crop.nameKo] ?? <LeafIcon />}
           </span>
 
           <span className="mt-3 font-semibold text-[1.05rem] text-fg">
-            {crop.labelKo}
+            {crop.nameKo}
           </span>
-          <span className="mt-0.5 text-fg-muted text-xs">{crop.noteKo}</span>
 
           <span className="mt-3 flex items-center gap-2 border-border border-t pt-3">
-            <Difficulty level={crop.difficulty} labelKo={crop.difficultyKo} />
-            <span className="ml-auto font-mono text-[0.7rem] text-fg-subtle tabular-nums">
-              {crop.durationKo}
-            </span>
+            <Difficulty
+              labelKo={crop.difficultyKo}
+              level={crop.difficultyLevel}
+            />
+            {/* 품종이 없으면 기간을 모른다. "약 0일"을 적지 않고 자리를 비운다. */}
+            {crop.durationKo && (
+              <span className="ml-auto font-mono text-[0.7rem] text-fg-subtle tabular-nums">
+                {crop.durationKo}
+              </span>
+            )}
           </span>
         </label>
       ))}
