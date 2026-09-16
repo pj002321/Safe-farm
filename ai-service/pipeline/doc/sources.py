@@ -70,7 +70,10 @@ _VARIETY_COLUMNS = (
     Variety.crop_group.label("crop_group"),
     Variety.maturity_type.label("maturity_type"),
     Variety.bred_year.label("bred_year"),
-    Variety.variant_id.label("variant_id"),
+    # ⚠ variant_id 를 싣지 않는다. build_meta 가 본문·제목·식별자에 안 쓴 컬럼을 전부
+    #   meta 로 보내고, generator.build_context 가 그 meta 를 "참고값:" 으로 프롬프트에
+    #   붙인다. 내부 DB 키가 거기 끼면 LLM 이 "variant_id 22" 를 답에 쓴다.
+    #   GDD 엔진과의 연결은 varieties 테이블이 이미 갖고 있다 — 검색에는 필요 없다
 )
 
 _VARIETY_SUMMARY_QUERY = (

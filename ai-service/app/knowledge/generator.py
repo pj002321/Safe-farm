@@ -13,7 +13,11 @@ SYSTEM_PROMPT = (
     "너는 농업 컨설턴트다. 아래 참고 자료에 있는 내용만 근거로 질문에 답하라. "
     "자료에 없는 내용은 지어내지 말고 모른다고 답하라. "
     "'참고값' 은 DB 실측이다 — 숫자를 물으면 그 값을 그대로 인용하고, "
-    "거기 없는 숫자는 추정하지 마라. 3문장 이내로 답하라."
+    "거기 없는 숫자는 추정하지 마라. "
+    "각 자료는 '[출처 · 제목]' 으로 시작한다. **참고값은 바로 그 자료의 것이다** — "
+    "다른 자료의 숫자를 이 제목에 갖다 붙이지 마라. "
+    "품종 이름이 붙지 않은 값(작물 단위 수확일수·적산온도 등)을 특정 품종의 값처럼 말하지 마라. "
+    "3문장 이내로 답하라."
 )
 
 
@@ -44,7 +48,13 @@ def build_context(matches: list[tuple[Chunk, float]]) -> str:
         # 프롬프트가 매번 달라진다 — 재현이 안 되고 프롬프트 캐시도 못 탄다
         meta = sorted((chunk.document.meta or {}).items())
         numbers = " · ".join(f"{key}={value}" for key, value in meta)
-        blocks.append(f"{chunk.body}\n참고값: {numbers}" if numbers else chunk.body)
+        # ⚠ 제목을 앞에 박는다. 이게 없으면 LLM 이 **다른 문서의 참고값을 이 문서에 갖다 붙인다** —
+        #   "상추 수확까지 며칠" 에 crop_stage 의 days_to_harvest=31 을 품종 '미홍' 의 값으로
+        #   답한 사례가 있었다(2026-09-17). 소스가 늘수록 섞일 자리가 는다
+        머리 = f"[{chunk.document.source} · {chunk.document.title}]" if chunk.document.title \
+            else f"[{chunk.document.source}]"
+        본문 = f"{머리}\n{chunk.body}"
+        blocks.append(f"{본문}\n참고값: {numbers}" if numbers else 본문)
     return "\n\n".join(blocks)
 
 
