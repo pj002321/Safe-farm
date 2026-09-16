@@ -37,44 +37,66 @@ export default async function Page({ params }: PageProps<"/plots/[id]">) {
   const plot = profile ? await getPlot(profile.id, id) : null;
   if (!plot) notFound();
 
-  const calendar = findCalendarByNameKo(plot.cropNameKo);
-  const days = daysSincePlanting(plot, new Date());
-  const stage = calendar && days !== null ? stageAt(calendar, days) : null;
+  const now = new Date();
 
   return (
     <main className="mx-auto flex max-w-2xl flex-col gap-6 px-6 py-6 sm:py-8">
       <SectionHeading
-        description={plot.cropNameKo ?? "작물 미정"}
+        description={
+          plot.cultivations.length > 0
+            ? `${plot.cultivations.length}가지 작물 재배 중`
+            : "재배 중인 작물이 없습니다"
+        }
         title={plot.nameKo ?? "이름 없는 밭"}
       />
-      {stage ? (
-        <div className="rounded-lg border border-border bg-surface px-4 py-3">
-          <p className="font-medium text-accent text-sm">{stage.nameKo}</p>
-          <p className="mt-1 text-fg-muted text-sm">{stage.adviceKo}</p>
-        </div>
-      ) : (
-        <p className="text-fg-muted text-sm">생육 단계 정보가 아직 없습니다.</p>
-      )}
 
-      {/* 기르는 중인 재배 건만 수확 처리 대상이다. */}
-      {plot.cultivations
-        .filter((cultivation) => cultivation.status === "GROWING")
-        .map((cultivation) => (
-          <form
-            action={harvestCultivation}
-            className="flex items-center justify-between rounded-lg border border-border bg-surface px-4 py-3"
+      {plot.cultivations.map((cultivation) => {
+        const calendar = findCalendarByNameKo(cultivation.cropNameKo);
+        const days = daysSincePlanting(
+          { sowingDate: cultivation.sowingDate },
+          now,
+        );
+        const stage =
+          calendar && days !== null ? stageAt(calendar, days) : null;
+
+        return (
+          <div
+            className="rounded-lg border border-border bg-surface px-4 py-3"
             key={cultivation.id}
           >
-            <input name="plotId" type="hidden" value={plot.id} />
-            <input name="cultivationId" type="hidden" value={cultivation.id} />
-            <p className="text-fg text-sm">
-              {cultivation.cropNameKo ?? "작물 미지정"}
-            </p>
-            <Button size="sm" type="submit">
-              수확 완료
-            </Button>
-          </form>
-        ))}
+            <div className="flex items-center justify-between">
+              <p className="font-medium text-fg text-sm">
+                {cultivation.cropNameKo ?? "작물 미지정"}
+              </p>
+              {cultivation.status === "GROWING" && (
+                <form action={harvestCultivation}>
+                  <input name="plotId" type="hidden" value={plot.id} />
+                  <input
+                    name="cultivationId"
+                    type="hidden"
+                    value={cultivation.id}
+                  />
+                  <Button size="sm" type="submit">
+                    수확 완료
+                  </Button>
+                </form>
+              )}
+            </div>
+            {stage ? (
+              <div className="mt-2">
+                <p className="font-medium text-accent text-sm">
+                  {stage.nameKo}
+                </p>
+                <p className="mt-1 text-fg-muted text-sm">{stage.adviceKo}</p>
+              </div>
+            ) : (
+              <p className="mt-2 text-fg-muted text-sm">
+                생육 단계 정보가 아직 없습니다.
+              </p>
+            )}
+          </div>
+        );
+      })}
     </main>
   );
 }
