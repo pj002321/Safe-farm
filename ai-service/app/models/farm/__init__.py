@@ -13,6 +13,7 @@ relationship 은 두지 않는다. 조회는 명시적 join 으로 쓴다.
 from app.models.farm.auth_user import auth_users
 from app.models.farm.base import FarmBase
 from app.models.farm.crop import Crop
+from app.models.farm.crop_disaster_rule import CropDisasterRule
 from app.models.farm.crop_stage import CropStage
 from app.models.farm.crop_variant import CropVariant
 from app.models.farm.grid import Grid
@@ -25,6 +26,7 @@ from app.models.farm.weather_obs_daily import WeatherObsDaily
 
 __all__ = [
     "Crop",
+    "CropDisasterRule",
     "CropStage",
     "CropVariant",
     "FarmBase",
