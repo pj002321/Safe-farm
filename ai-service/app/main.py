@@ -19,6 +19,7 @@ from __future__ import annotations
 from fastapi import FastAPI
 
 from app.api import ask as ask_api
+from app.api import crop as crop_api
 from app.api import map as map_api
 from app.api import status as status_api
 from app.core import config
@@ -37,6 +38,7 @@ app = FastAPI(
 app.include_router(status_api.router)
 app.include_router(map_api.router)
 app.include_router(ask_api.router)
+app.include_router(crop_api.router)
 
 @app.get("/health")
 def health() -> dict[str, object]:
