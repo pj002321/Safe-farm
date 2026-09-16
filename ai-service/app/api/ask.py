@@ -15,6 +15,7 @@ from app.core.security import require_service_token
 from app.knowledge.retriever import retrieve_with_score
 from app.schemas.ask import AskRequest,AskMatch,AskResponse,NO_MATCH_DISTANCE
 from app.domain.guardrail import BLOCKED_MESSAGE, is_blocked_topic
+from app.knowledge.reranker import rerank
 
 router = APIRouter(prefix="/v1", tags=["ask"])
 
@@ -27,11 +28,10 @@ def ask(request: AskRequest, db: Session = Depends(get_db)) -> AskResponse:
     어떤 회원이 물었는지는 이 함수도, 그 의존성도 모른다. 회원 단위 처리(대화
     이력, 사용량 제한)가 필요해지면 그때 요청 모양에 사용자 식별자를 추가한다.
     """
-    matches = retrieve_with_score(db, request.question)
     if is_blocked_topic(request.question):
         return AskResponse(matches=[], message=BLOCKED_MESSAGE)
 
-    matches = retrieve_with_score(db, request.question)
+    matches = rerank(request.question, retrieve_with_score(db, request.question))
     return AskResponse(
         matches=[
             AskMatch(body=chunk.body, distance=dist, source_title=chunk.document.title)
