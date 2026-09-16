@@ -121,12 +121,19 @@ def _growing(db: Session, plot_id: uuid.UUID) -> list[tuple[Cultivation, Crop]]:
     답하는 자리라 이미 끝났거나 시작 안 한 작물은 답을 흐린다.
 
     cultivations 는 작물이 아니라 품종을 참조하므로 crops 까지 두 번 탄다.
+
+    지운 건(deleted_at)도 뺀다. 삭제가 soft delete 라 행이 그대로 남아 있어,
+    필터를 빼면 사용자가 지운 작물을 LLM 이 아직 기르는 것처럼 말한다.
     """
     return (
         db.query(Cultivation, Crop)
         .join(CropVariant, CropVariant.variant_id == Cultivation.variant_id)
         .join(Crop, Crop.crop_id == CropVariant.crop_id)
-        .filter(Cultivation.plot_id == plot_id, Cultivation.status == "GROWING")
+        .filter(
+            Cultivation.plot_id == plot_id,
+            Cultivation.status == "GROWING",
+            Cultivation.deleted_at.is_(None),
+        )
         .all()
     )
 
@@ -147,7 +154,12 @@ def _lead(rows: list[tuple[Cultivation, Crop]]) -> tuple[Cultivation, Crop]:
 def build_plot_context(db: Session, plot_id: uuid.UUID) -> str | None:
     """밭 하나를 조회해 LLM 프롬프트에 붙일 한글 문장을 만든다. 밭이 없거나 기르는
     작물이 없으면 None — 이때 /ask 는 컨텍스트 없이 예전처럼 답한다."""
-    plot = db.query(Plot).filter(Plot.id == plot_id).first()
+    # 지운 밭은 없는 밭으로 본다(soft delete 라 행은 남아 있다).
+    plot = (
+        db.query(Plot)
+        .filter(Plot.id == plot_id, Plot.deleted_at.is_(None))
+        .first()
+    )
     if plot is None:
         return None
 
