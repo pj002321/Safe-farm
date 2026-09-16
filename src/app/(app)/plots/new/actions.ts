@@ -5,7 +5,10 @@ import { toKmaGrid } from "@/features/monitoring/domain/kmaGrid";
 import { parsePlotRegistration } from "@/features/plots/domain/registerPlot";
 import { insertPlot } from "@/features/plots/plotStore";
 import { requireUser } from "@/shared/auth/session";
-
+import {
+  PLOT_LOCATION_MESSAGE,
+  validatePlotLocation,
+} from "@/features/monitoring/domain/plotLocation";
 /**
  * ---------------------------------------------
  * [Feature]: 텃밭 등록 제출
@@ -32,6 +35,14 @@ export async function registerPlot(formData: FormData): Promise<void> {
 
   const parsed = parsePlotRegistration(formData);
   if (!parsed.ok) throw new Error(parsed.error);
+
+  // 지도 단계의 검사는 클라이언트일 뿐이다. 이 액션은 공개 POST 엔드포인트라
+  // 폼을 거치지 않고 직접 호출될 수 있으므로 국내 좌표인지 여기서 다시 막는다.
+  const locationIssue = validatePlotLocation({
+    lat: parsed.value.latitude,
+    lon: parsed.value.longitude,
+  });
+  if (locationIssue) throw new Error(PLOT_LOCATION_MESSAGE[locationIssue]);
 
   const grid = toKmaGrid({
     lat: parsed.value.latitude,
