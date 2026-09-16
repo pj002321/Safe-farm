@@ -69,8 +69,13 @@ class CropDisasterRule(FarmBase):
     # 며칠 이어져야 걸리나. 없으면 하루만 넘어도 걸린다
     duration_days = Column(SmallInteger)
 
-    # 등급. 지금은 고온해에만 있다 — 주의 · 위험
-    severity = Column(Text)
+    # 등급. 지금은 고온해에만 있다 — 주의 · 위험. 없으면 빈 문자열이다.
+    #
+    # ⚠ **nullable 로 두면 안 된다.** stage_name 과 같은 까닭이다 — 이 칸도
+    #   아래 UNIQUE 에 들어가는데, Postgres 는 NULL 끼리를 서로 다르게 본다.
+    #   그러면 등급 없는 규칙(저온해 계열)이 적재할 때마다 새 행으로 쌓인다.
+    #   실제로 58행짜리 CSV 를 세 번 넣었더니 142행이 됐다(2026-09-16).
+    severity = Column(Text, nullable=False, server_default="")
 
     __table_args__ = (
         # 한 작물의 같은 규칙·단계·등급이 둘일 수 없다.
