@@ -67,11 +67,13 @@ export function accumulateGdd(
   rows: readonly DailyObservation[],
   fromDate: string,
   baseTempC: number,
+  upperTempC?: number,
 ): number {
   const total = rows
     .filter((row) => row.date >= fromDate)
     .reduce(
-      (sum, row) => sum + dailyGdd(row.tempMaxC, row.tempMinC, baseTempC),
+      (sum, row) =>
+        sum + dailyGdd(row.tempMaxC, row.tempMinC, baseTempC, upperTempC),
       0,
     );
   return roundTenth(total);
@@ -88,11 +90,13 @@ export function recentDailyGdd(
   rows: readonly DailyObservation[],
   days: number,
   baseTempC: number,
+  upperTempC?: number,
 ): number {
   const window = rows.slice(Math.max(0, rows.length - days));
   if (window.length === 0) return 0;
   const total = window.reduce(
-    (sum, row) => sum + dailyGdd(row.tempMaxC, row.tempMinC, baseTempC),
+    (sum, row) =>
+      sum + dailyGdd(row.tempMaxC, row.tempMinC, baseTempC, upperTempC),
     0,
   );
   return roundTenth(total / window.length);
