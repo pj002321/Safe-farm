@@ -1,0 +1,21 @@
+﻿question,expect_source,expect_hint,note
+풋마름병에 강한 고추 품종 있어?,variety_summary,풋마름병,품종
+탄저병에 강한 고추 품종 알려줘,variety_summary,탄저병,품종
+흰가루병에 강한 보리 품종은?,variety_summary,흰가루병,품종
+점질 감자 품종 추천해줘,variety_summary,점질,품종
+콩나물용 콩 품종 뭐가 있어?,variety_summary,콩나물,품종
+대광 감자 재배할 때 주의점,variety_body,더뎅이병,품종 본문
+세원4호 고추는 어떻게 육성됐어?,variety_body,세균성점무늬병,품종 본문
+수박 생육단계 알려줘,crop_stage,수박,단계
+마늘 쪽비대기가 언제야?,crop_stage,쪽비대기,단계
+양파 아주심기 단계 설명해줘,crop_stage,아주심기,단계
+고추 모 기를 때 온도 몇 도야?,crop_guide,22~30,재배법
+고추 아주심기 거리 얼마로 해?,crop_guide,35~40,재배법
+마늘 언제 씨뿌림 해?,crop_guide,10월,재배법 — 마늘 crop_guide 에 씨앗량은 없다. 시기는 있다
+시금치 씨뿌림 어떻게 해?,crop_guide,씨뿌림,재배법
+배추 고온에 어떻게 대응해?,crop_guide,고온,생리적특성 — 지금 상추 품종에 밀림
+배추 한파 대비 어떻게 해?,crop_guide,언 피해,기상재해대책 — 원문 topic 은 '한 파'(공백)
+상추 수확까지 며칠 걸려?,(tool),31,수치 — Phase 4
+고추 목표 적산온도가 얼마야?,(tool),1305,수치 — Phase 4
+마늘 언제 심어야 해?,(tool),09-21,수치 — Phase 4
+농약 희석배수 알려줘,(blocked),,가드레일
