@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { FieldIcon, MapPinIcon, SproutIcon } from "@/components/icons";
+import { plotFaceClass } from "@/components/plot/plotFace";
 import { Badge } from "@/components/shared/Badge";
 import { ButtonLink } from "@/components/shared/Button";
 import type { PlotStripItem } from "@/features/plots/domain/plotStrip";
@@ -12,6 +13,10 @@ import type { PlotStripItem } from "@/features/plots/domain/plotStrip";
  * - 등록된 텃밭을 D+n 과 생육단계 배지로 요약해 가로로 흘린다(스펙).
  *   세로 목록이 아닌 이유는 밭이 늘어도 "오늘 할 일"이 화면 아래로 밀리지
  *   않게 하려는 것이다.
+ * - **글자는 이미 만들어져 들어온다.** 작물 이름·경과일·면적은
+ *   `toPlotStripItem`(features/plots) 이 내고, 이 파일은 그대로 찍기만 한다.
+ *   작물 이름이 `cultivations` 를 타고 오면서 화면에 박아 둔 작물 목록으로는
+ *   더 이상 맞출 수 없어졌다.
  * - 가로 스크롤은 **컨테이너 안에서만** 일어난다. `overflow-x-auto` 를 이 줄에
  *   가두지 않으면 페이지 전체가 좌우로 흔들린다.
  * - 마지막 칸이 **텃밭 등록 카드**다. 별도 버튼만 두면 밭이 늘어났을 때 어디서
@@ -53,7 +58,12 @@ export function PlotStrip({ plots }: PlotStripProps) {
           key={plot.id}
         >
           <div className="flex items-start justify-between gap-2">
-            <span className="grid size-8 shrink-0 place-items-center rounded-full bg-accent-subtle text-accent">
+            {/* 색은 밭 id 에서 온다. 같은 밭은 목록·상세 어디서나 같은 얼굴이라
+                눈이 자리를 기억한다. 작물별 그림은 없다 — 화면에 박아 둔 작물
+                목록이 작물 마스터와 이어지지 않아 배추밭에 딴 그림이 붙는다. */}
+            <span
+              className={`grid size-8 shrink-0 place-items-center rounded-full ${plotFaceClass(plot.id)}`}
+            >
               <FieldIcon />
             </span>
             {plot.stageKo && (
@@ -66,7 +76,7 @@ export function PlotStrip({ plots }: PlotStripProps) {
           <p className="mt-3 truncate font-semibold text-[0.95rem] text-fg">
             {plot.nameKo}
           </p>
-          <p className="mt-0.5 text-fg-muted text-xs">
+          <p className="mt-0.5 truncate text-fg-muted text-xs">
             {plot.cropKo} · {plot.areaKo}
           </p>
 

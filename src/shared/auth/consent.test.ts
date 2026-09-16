@@ -10,12 +10,27 @@ import {
   toConsentMetadata,
 } from "./consent";
 
-const NONE: Consent = { terms: false, privacy: false, marketing: false };
-const REQUIRED_ONLY: Consent = { terms: true, privacy: true, marketing: false };
-const ALL: Consent = { terms: true, privacy: true, marketing: true };
+const NONE: Consent = {
+  terms: false,
+  privacy: false,
+  location: false,
+  marketing: false,
+};
+const REQUIRED_ONLY: Consent = {
+  terms: true,
+  privacy: true,
+  location: true,
+  marketing: false,
+};
+const ALL: Consent = {
+  terms: true,
+  privacy: true,
+  location: true,
+  marketing: true,
+};
 
 describe("isConsentComplete", () => {
-  it("필수 두 항목이 모두 있어야 통과한다", () => {
+  it("필수 항목이 모두 있어야 통과한다", () => {
     expect(isConsentComplete(REQUIRED_ONLY)).toBe(true);
     expect(isConsentComplete(ALL)).toBe(true);
   });
@@ -61,7 +76,7 @@ describe("parseConsent", () => {
     );
   });
 
-  it("모르는 필드는 버리고 세 항목만 남긴다", () => {
+  it("모르는 필드는 버리고 정의된 항목만 남긴다", () => {
     const parsed = parseConsent({
       ...ALL,
       isAdmin: true,
@@ -70,6 +85,7 @@ describe("parseConsent", () => {
 
     expect(parsed).toEqual(ALL);
     expect(Object.keys(parsed).sort()).toEqual([
+      "location",
       "marketing",
       "privacy",
       "terms",
@@ -82,13 +98,20 @@ describe("CONSENT_ITEMS", () => {
     expect(CONSENT_ITEMS.map((item) => item.key)).toEqual([
       "terms",
       "privacy",
+      "location",
       "marketing",
     ]);
   });
 
-  it("필수 항목은 이용약관과 개인정보 둘뿐이다", () => {
+  it("필수는 이용약관·개인정보·위치정보 셋이고 마케팅만 선택이다", () => {
     const required = CONSENT_ITEMS.filter((item) => item.required);
-    expect(required.map((item) => item.key)).toEqual(["terms", "privacy"]);
+    expect(required.map((item) => item.key)).toEqual([
+      "terms",
+      "privacy",
+      "location",
+    ]);
+    const optional = CONSENT_ITEMS.filter((item) => !item.required);
+    expect(optional.map((item) => item.key)).toEqual(["marketing"]);
   });
 
   it("모든 항목이 수집 내용을 설명하는 본문을 가진다", () => {
@@ -106,6 +129,7 @@ describe("toConsentMetadata", () => {
     expect(toConsentMetadata(ALL, at)).toEqual({
       terms_agreed_at: at,
       privacy_agreed_at: at,
+      location_agreed_at: at,
       marketing_opt_in: true,
     });
     expect(toConsentMetadata(REQUIRED_ONLY, at).marketing_opt_in).toBe(false);

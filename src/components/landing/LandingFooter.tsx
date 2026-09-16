@@ -48,11 +48,12 @@ const COLUMNS: readonly FooterColumn[] = [
     title: "쓰는 것",
     items: [
       { label: "내 밭", href: "#my" },
-      { label: "오늘 상주", href: "#today" },
+      { label: "오늘의 값", href: "#today" },
       { label: "로그인", href: "/login" },
       { label: "밭 등록하기", href: "/signup" },
       { label: "서비스 이용약관", href: "/terms" },
       { label: "개인정보처리방침", href: "/privacy" },
+      { label: "위치기반서비스 이용약관", href: "/location" },
     ],
   },
 ];

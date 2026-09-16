@@ -43,7 +43,13 @@ import { safeNextPath } from "./redirect";
  * **접두사 매칭 하나로 처리하면 두 군데가 뚫린다.** `"/"` 를 접두사 목록에 넣는
  * 순간 세상의 모든 경로가 공개된다. 그래서 루트는 정확 일치로만 연다.
  */
-const PUBLIC_EXACT = new Set(["/", "/report", "/terms", "/privacy"]);
+const PUBLIC_EXACT = new Set([
+  "/",
+  "/report",
+  "/terms",
+  "/privacy",
+  "/location",
+]);
 
 /**
  * 이 경로 자신과 그 하위 트리가 공개. 경계는 `/` 로 끊어서 본다

@@ -142,20 +142,22 @@ export const TIMELINE: readonly TraceStep[] = [
     reveals: "gauge",
     blocks: [
       {
-        captionKo: "하루치 = 평균기온 − 기준온도, 음수는 0",
-        text: `dailyGdd(tmax, tmin, base) =
-    max(0, (tmax + tmin) / 2 - base)`,
+        captionKo:
+          "하루치 = 평균기온 − 기준온도. 상한을 넘은 낮은 상한으로 친다",
+        text: `dailyGdd(tmax, tmin, base, upper) =
+  max(0, (min(tmax, upper) + max(tmin, base)) / 2 - base)`,
       },
       {
-        text: `base = 5.0   씨뿌림 = 08-25
+        text: `base = 5.0   upper = 25.0   씨뿌림 = 08-25
 
-09-11  (27.1+14.0)/2 - 5 = 15.6
-09-12  (28.1+15.1)/2 - 5 = 16.6
-09-13  (28.8+15.0)/2 - 5 = 16.9
+09-11  (min(27.1,25)+max(14.0,5))/2 - 5 = 14.5
+09-12  (min(28.1,25)+max(15.1,5))/2 - 5 = 15.1
+09-13  (min(28.8,25)+max(15.0,5))/2 - 5 = 15.0
 
-누적          384.2 GDD / 797   진행 48.2%
-최근 7일 평균  15.8 GDD/일
-결구(505)까지  약 8일`,
+누적          361.6 GDD / 797   진행 45.4%
+
+최근 7일 평균   14.6 GDD/일
+결구(505)까지  약 10일`,
       },
     ],
     whyKo:

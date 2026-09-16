@@ -4,12 +4,16 @@
  *
  * [Description]
  * - 다크모드의 단일 출처. globals.css 는 `[data-theme]` 속성 하나만 본다.
- * - **기본값은 다크다**(`DEFAULT_THEME`). 저장된 값이 없으면 OS 설정을 따르지 않고
- *   다크를 칠한다. 이 서비스의 기준 디자인이 위성 관측 화면(어두운 배경)이기 때문이다.
- * - 그래서 부트스트랩은 `data-theme` 을 **항상** 세팅한다. 속성을 지워 OS 설정에
- *   맡기던 예전 방식은 라이트 OS 사용자가 기본 다크를 볼 수 없게 만든다.
+ * - **기본값은 "system" 이다**(`DEFAULT_THEME`). 저장된 선택이 없으면 OS 설정을
+ *   그대로 따른다. 예전에는 다크로 고정했는데, 라이트 OS 사용자가 들어올 때마다
+ *   어두운 화면을 받고 매번 토글해야 했다. 기기 설정을 존중하는 편이 맞다.
+ * - 그래도 부트스트랩은 `data-theme` 을 **항상** 세팅한다. 속성을 지우고 CSS 의
+ *   `prefers-color-scheme` 에 맡기면 토글이 현재 테마를 읽을 곳이 없어진다.
+ *   부트스트랩이 OS 선호를 읽어 값으로 박아 두는 편이 한 곳에서 끝난다.
  *   globals.css 의 `prefers-color-scheme` 블록은 스크립트가 실패했을 때만 작동하는
  *   안전망으로 남는다 — 지우지 말 것.
+ * - 저장된 선택이 **없을 때만** OS 변경을 따라간다(부트스트랩이 matchMedia 를
+ *   구독한다). 토글로 고른 값이 있으면 그 선택이 이긴다.
  * - 서버(ThemeScript)와 클라이언트(테마 토글)가 함께 import 하므로
  *   "use client" 를 붙이지 않는다. 브라우저 API 는 `public/theme-init.js` 안에만 둔다.
  *
@@ -27,18 +31,22 @@ export type ThemeMode = "light" | "dark" | "system";
 export const THEME_STORAGE_KEY = "safe-farm-theme";
 
 /**
- * 저장된 선택이 없을 때 칠하는 테마.
+ * 저장된 선택이 없을 때의 동작.
  *
- * `public/theme-init.js` 가 같은 값을 하드코딩하고 있다(번들 밖이라 import 가 닿지
- * 않는다). 둘이 어긋나는지는 theme.test.ts 가 검사한다.
+ * `"system"` 은 **적용 테마가 아니다** — 부트스트랩이 OS 선호를 읽어 light/dark
+ * 중 하나로 바꿔 속성에 박는다. `resolveTheme` 이 그 변환을 정의한다.
+ *
+ * `public/theme-init.js` 가 같은 계약을 따로 구현하고 있다(번들 밖이라 import 가
+ * 닿지 않는다). 둘이 어긋나는지는 theme.test.ts 가 검사한다.
  */
-export const DEFAULT_THEME: Extract<ThemeMode, "light" | "dark"> = "dark";
+export const DEFAULT_THEME: ThemeMode = "system";
 
 /**
  * 저장된 모드와 OS 선호를 합쳐 실제로 적용될 테마를 정한다.
  *
- * ⚠️ 지금 앱의 부트스트랩은 이 함수를 쓰지 않는다(기본값이 다크로 고정돼 "system"
- * 경로가 실행되지 않는다). 설정 화면에 3선택 컨트롤을 낼 때 쓸 자리로 남겨 둔다.
+ * 부트스트랩(`public/theme-init.js`)은 번들 밖이라 이 함수를 import 할 수 없어
+ * 같은 규칙을 직접 구현한다. 그래서 이 함수는 **그 규칙의 명세이자 테스트 대상**이고,
+ * 설정 화면에 3선택 컨트롤을 낼 때 그대로 쓴다.
  */
 export function resolveTheme(
   mode: ThemeMode,

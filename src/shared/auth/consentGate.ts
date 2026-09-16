@@ -37,10 +37,17 @@ import { getViewer, type Viewer } from "./session";
 /** 동의를 받는 화면. 게이트가 보내는 곳이자, 게이트를 적용하면 안 되는 경로다. */
 export const CONSENT_GATE_PATH = "/onboarding/consent";
 
+/**
+ * 게이트를 **통과한** 결과.
+ *
+ * `profile` 이 `null` 이 아니다. 프로필이 없으면 동의 여부를 알 수 없으므로 두
+ * 함수 모두 그 자리에서 보내거나 던지고, 여기까지 오지 않는다. 타입을 넓게 두면
+ * 부르는 쪽마다 없는 경우를 한 번씩 더 다뤄야 하고, 그 분기는 영영 실행되지 않는
+ * 죽은 코드가 된다.
+ */
 interface GateResult {
   viewer: Viewer;
-  /** 트리거 이전 계정이면 null 일 수 있다. 화면은 없을 때도 그려져야 한다. */
-  profile: Profile | null;
+  profile: Profile;
 }
 
 /**

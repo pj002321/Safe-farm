@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { requireUser } from "@/shared/auth/session";
 import { listPlots } from "@/features/plots/plotStore";
+import { requireUser } from "@/shared/auth/session";
 
 /**
  * ---------------------------------------------

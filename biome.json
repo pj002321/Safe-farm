@@ -15,7 +15,9 @@
       "!build",
       "!src/app/globals.css",
       "!ai-service",
-      "!.vscode"
+      "!.vscode",
+      "!docs",
+      "!public/mockups"
     ]
   },
   "formatter": {

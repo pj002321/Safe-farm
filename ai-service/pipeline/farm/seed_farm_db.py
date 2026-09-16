@@ -24,7 +24,8 @@ from pipeline.prep import check
 from pipeline.prep.seeding import count_rows, read_all, report, require_tables
 from pipeline.prep.table import key_dict, upsert
 
-DUMMY_DIR = DATA_DIR / "dummy"
+DUMMY_DIR = DATA_DIR / "dummy"    # 런타임 대체용 가짜 (weather_*)
+MASTER_DIR = DATA_DIR / "master"  # 실측 마스터. 넣지 않고 자연키 검사에만 읽는다
 MASTER_HINT = "py -3.12 -m pipeline.farm.master_seed_farm_db"
 
 # 넣는 순서. 부모가 먼저다
@@ -105,7 +106,8 @@ def main() -> None:
         py -3.12 -m pipeline.farm.seed_farm_db --check
         py -3.12 -m pipeline.farm.seed_farm_db
     """
-    data = read_all(DUMMY_DIR, TABLES + MASTER_TABLES)
+    data = read_all(DUMMY_DIR, TABLES) | read_all(MASTER_DIR, MASTER_TABLES)
+
 
     if "--check" in sys.argv:
         count_rows(data, TABLES)

@@ -77,35 +77,24 @@ export async function insertPlot(
 }
 
 /**
- * 텃밭 정보 수정. 이름과 면적만 바꾼다.
+ * 이 사용자가 등록한 밭 수.
  *
- * 위치(좌표·격자·행정동)는 여기서 손대지 않는다 — 격자가 바뀌면 그 격자로 쌓아
- * 온 관측 이력이 어긋나므로, 옮긴 밭은 새로 등록한다. 그래서 등록과 달리
- * 격자를 넘겨받지 않는다.
- * 남의 밭이면 RLS 가 걸러 **0행이 고쳐지고 오류는 나지 않는다.** 그래서
- * `select()` 로 고쳐진 행을 돌려받아 없으면 예외로 바꾼다 — 조용한 실패를 막는다.
+ * 로그인 직후 "온보딩으로 보낼지 홈으로 보낼지"를 정하는 데 쓴다. 행을 받아오지
+ * 않고 개수만 센다(`head: true`) — 판단에 필요한 것은 0 인지 아닌지뿐이다.
+ *
+ * RLS 가 자기 행만 보이게 하지만 where 를 명시한다. 정책이 한 번 헐거워졌을 때
+ * 쿼리가 조용히 남의 행을 세지 않게 하려는 것이다(getCurrentProfile 과 같은 방침).
  */
-export async function updatePlot(
-  userId: string,
-  plotId: string,
-  input: PlotEditInput,
-): Promise<void> {
+export async function countPlots(userId: string): Promise<number> {
   const supabase = await getSupabaseServer();
 
-  const { data, error } = await supabase
+  const { count, error } = await supabase
     .from("plots")
-    .update({
-      name: input.name,
-      area_m2: input.areaM2,
-    })
-    .eq("id", plotId)
-    .eq("user_id", userId)
-    .select("id");
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", userId);
 
   if (error) throw new Error(error.message);
-  if (!data || data.length === 0) {
-    throw new Error("수정할 텃밭을 찾지 못했습니다.");
-  }
+  return count ?? 0;
 }
 
 /** 로그인한 사용자가 등록한 텃밭 좌표 목록. */
@@ -142,12 +131,15 @@ export async function getPlot(
   return data ? toPlotMapPoint(data) : null;
 }
 
+/** 카드 목록이 읽는 컬럼. 지도용 select 와 달라 따로 적는다. */
+const CARD_COLUMNS =
+  "id, name, area_m2, region_ko, crops, sowing_date, sowing_unknown, created_at";
+
 /**
- * 텃밭 목록(카드 화면용). 최근 등록이 앞에 온다.
+ * 등록한 텃밭을 카드 목록으로.
  *
- * `listPlots()` 를 고치지 않고 따로 둔다 — 지도(map/page.tsx)가 그 반환 모양을
- * 쓰고 있어, 열을 늘리면 같이 흔들린다.
- * 개인 텃밭은 수가 적어 아직 페이징하지 않는다.
+ * 홈의 요약 줄과 텃밭 관리 화면이 **같은 함수**를 쓴다. 두 벌로 두면 한쪽만
+ * 고쳐져 같은 밭이 화면마다 다르게 보인다. 최근에 등록한 밭이 위로 온다.
  */
 export async function listPlotCards(userId: string): Promise<PlotCard[]> {
   const supabase = await getSupabaseServer();
@@ -159,6 +151,63 @@ export async function listPlotCards(userId: string): Promise<PlotCard[]> {
     .order("created_at", { ascending: false });
 
   if (error) throw new Error(error.message);
-
   return (data ?? []).map(toPlotCard);
+}
+
+/**
+ * 텃밭의 **이름과 넓이만** 고친다.
+ *
+ * ⚠️ 위경도를 받지 않는다. `grid_x`·`grid_y` 는 위경도에서 계산되는 값이라
+ *    좌표만 바뀌면 엉뚱한 동네의 예보를 받는다(`editPlot.ts` 와
+ *    `20260915120000_plots_manage.sql` 이 같은 경고를 적어 두었다).
+ *
+ * `.select("id")` 로 고친 행을 돌려받아 0건이면 던진다. update 는 조건에 맞는 행이
+ * 없어도 **오류가 아니라 0건으로 조용히 끝나기** 때문이다 — 그대로 성공으로
+ * 넘기면 화면은 저장됐다고 말하고 값은 그대로인 상태가 된다
+ * (`recordConsentForUser` 에서 실제로 겪은 함정).
+ */
+export async function updatePlotBasics(
+  userId: string,
+  input: PlotEditInput,
+): Promise<void> {
+  const supabase = await getSupabaseServer();
+
+  const { data, error } = await supabase
+    .from("plots")
+    .update({ name: input.name, area_m2: input.areaM2 })
+    .eq("id", input.plotId)
+    .eq("user_id", userId)
+    .select("id");
+
+  if (error) throw new Error(error.message);
+  if (!data || data.length === 0) throw new Error("PLOT_NOT_FOUND");
+}
+
+/**
+ * 텃밭을 지운다. 되돌릴 수 없다.
+ *
+ * 딸려 지울 것은 아직 없다 — `plots.id` 를 참조하는 테이블이 하나도 없다.
+ * // ponytail: 하드 삭제. 되살리기가 필요해지면 deleted_at 컬럼 + 모든 읽기
+ * //           경로의 필터로 올린다(정책 수정이 같이 따라온다).
+ *
+ * 0건이면 던지는 이유는 `updatePlotBasics` 와 같다. 남의 밭 id 를 보냈거나 이미
+ * 지워진 뒤인데, 조용히 성공으로 넘기면 화면만 지워진 것처럼 보인다.
+ */
+export async function deletePlot(
+  userId: string,
+  plotId: string,
+): Promise<void> {
+  if (!plotId) throw new Error("PLOT_NOT_FOUND");
+
+  const supabase = await getSupabaseServer();
+
+  const { data, error } = await supabase
+    .from("plots")
+    .delete()
+    .eq("id", plotId)
+    .eq("user_id", userId)
+    .select("id");
+
+  if (error) throw new Error(error.message);
+  if (!data || data.length === 0) throw new Error("PLOT_NOT_FOUND");
 }

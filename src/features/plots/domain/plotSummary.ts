@@ -73,9 +73,8 @@ export interface PlotRow {
 }
 
 export function toPlotMapPoint(row: PlotRow): PlotMapPoint {
-  // 마커는 한 밭에 하나뿐이라 대표 하나만 쓴다. 가장 먼저 심은 것을 대표로 본다.
-  const lead = leadCultivation(row.cultivations);
-
+// 마커는 한 밭에 하나뿐이라 대표 하나만 쓴다. 가장 먼저 심은 것을 대표로 본다.
+const lead = leadCultivation(row.cultivations);
   return {
     id: row.id,
     nameKo: row.name,
@@ -87,7 +86,14 @@ export function toPlotMapPoint(row: PlotRow): PlotMapPoint {
   };
 }
 
-/** 목록 카드 한 장이 쓰는 값. 지도 마커(PlotMapPoint)보다 넓다. */
+/**
+ * 목록 카드 한 장이 쓰는 값. 지도 마커(`PlotMapPoint`)보다 넓다.
+ *
+ * ⚠️ 이 타입은 HO-Vic 이 `e2ef705` 에서 쓴 것이다. 브랜치를 주고받는 과정의
+ *    충돌 해결에서 한 번 통째로 사라졌다가(9b409c5) 되살렸다. 나는 같은 시기에
+ *    거의 같은 모양의 `PlotManageItem` 을 따로 만들고 있었는데, 둘을 남기면
+ *    같은 테이블을 읽는 모양이 둘이 되므로 이쪽 하나로 합쳤다.
+ */
 export interface PlotCard {
   id: string;
   nameKo: string | null;
@@ -103,18 +109,24 @@ export interface PlotCard {
 export interface PlotCardRow {
   id: string;
   name: string | null;
-  area_m2: number | null;
+  /** ⚠️ `numeric` 이라 supabase-js 는 **문자열로** 준다. 아래에서 숫자로 바꾼다. */
+  area_m2: number | string | null;
   region_ko: string;
   created_at: string;
   cultivations: CultivationRow[];
 }
 
 export function toPlotCard(row: PlotCardRow): PlotCard {
+  // `numeric` 을 문자열로 받는 건 정밀도를 지키려는 드라이버의 의도지만, 화면에서
+  // `.toLocaleString()` 을 부르는 순간 문자열이라 엉뚱하게 나온다. 경계인 여기서
+  // 한 번만 숫자로 바꾼다.
+  const area = row.area_m2 === null ? Number.NaN : Number(row.area_m2);
+
   return {
     id: row.id,
     nameKo: row.name,
     regionKo: row.region_ko,
-    areaM2: row.area_m2,
+    areaM2: Number.isFinite(area) ? area : null,
     // 마커는 대표 하나만 쓰지만, 카드는 심은 것을 전부 보여준다.
     cultivations: row.cultivations.map(toCultivationSummary),
     sowingDate: leadCultivation(row.cultivations)?.sowing_date ?? null,

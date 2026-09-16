@@ -64,6 +64,17 @@
       "problemMatcher": []
     },
     {
+      "label": "ai-service: 서버 실행",
+      "detail": "uvicorn --reload 로 개발 서버 기동 (localhost:8000)",
+      "type": "shell",
+      "command": { "value": "${command:python.interpreterPath}", "quoting": "strong" },
+      "args": ["-m", "uvicorn", "app.main:app", "--reload"],
+      "options": { "cwd": "${workspaceFolder}/ai-service" },
+      "isBackground": true,
+      "presentation": { "clear": true },
+      "problemMatcher": []
+    },
+    {
       "label": "🛰️ ai-service: preview kma data",
       "type": "shell",
       "command": "${command:python.interpreterPath}",
@@ -72,6 +83,72 @@
         "cwd": "${workspaceFolder}/ai-service"
       },
       "problemMatcher": []
-    }
+    },
+    {
+      "label": "ai-service: 서버 실행",
+      "detail": "uvicorn --reload 로 개발 서버 기동 (localhost:8000)",
+      "type": "shell",
+      "command": { "value": "${command:python.interpreterPath}", "quoting": "strong" },
+      "args": ["-m", "uvicorn", "app.main:app", "--reload"],
+      "options": { "cwd": "${workspaceFolder}/ai-service" },
+      "isBackground": true,
+      "presentation": { "clear": true },
+      "problemMatcher": []
+    },
+    {
+      "label": "ai-service: 질문 답변 스트리밍",
+      "detail": "터미널에 질문을 입력하면 LLM 답변만 토큰 단위로 출력한다",
+      "type": "shell",
+      "command": { "value": "${command:python.interpreterPath}", "quoting": "strong" },
+      "args": ["-m", "pipeline.ask_preview"],
+      "options": { "cwd": "${workspaceFolder}/ai-service" },
+      "presentation": { "clear": true },
+      "problemMatcher": []
+    },
+    {
+      "label": "ai-service: 임베딩 파이프라인",
+      "detail": "init → load → chunk → embed → verify. 각 단계가 멱등이라 통째로 다시 돌려도 바뀐 것만 다시 만든다",
+      "type": "shell",
+      "command": { "value": "${command:python.interpreterPath}", "quoting": "strong" },
+      "args": ["-m", "pipeline.doc.run_all"],
+      "options": { "cwd": "${workspaceFolder}/ai-service" },
+      "presentation": { "clear": true },
+      "problemMatcher": []
+    },
+    {
+      "label": "ai-service: farm 파이프라인 (upsert)",
+      "detail": "init → master → seed. 있는 행은 갱신, 없는 행만 추가한다",
+      "type": "shell",
+      "command": { "value": "${command:python.interpreterPath}", "quoting": "strong" },
+      "args": ["-m", "pipeline.farm.run_all"],
+      "options": { "cwd": "${workspaceFolder}/ai-service" },
+      "presentation": { "clear": true },
+      "problemMatcher": []
+    },
+    {
+      // 아래 "farm 테이블 드랍" 을 먼저 돌리고 이어서 run_all 한다.
+      // dependsOrder 를 빼면 두 단계가 동시에 뜬다 — 빈 테이블에 넣는 의미가 없어진다.
+      "label": "ai-service: farm 파이프라인 (drop 후 재적재)",
+      "detail": "⚠️ farm 테이블을 지우고 다시 만든 뒤 전량 적재한다. profiles·plots·terms·user_agreements 는 대상이 아니다",
+      "type": "shell",
+      "command": { "value": "${command:python.interpreterPath}", "quoting": "strong" },
+      "args": ["-m", "pipeline.farm.run_all"],
+      "options": { "cwd": "${workspaceFolder}/ai-service" },
+      "dependsOn": ["ai-service: farm 테이블 드랍"],
+      "dependsOrder": "sequence",
+      "presentation": { "clear": true },
+      "problemMatcher": []
+    },
+    {
+      // 위 작업의 앞 단계. 혼자 돌리면 빈 테이블만 남는다
+      "label": "ai-service: farm 테이블 드랍",
+      "detail": "⚠️ init_farm_db --drop. 들어 있던 데이터가 같이 없어진다",
+      "type": "shell",
+      "command": { "value": "${command:python.interpreterPath}", "quoting": "strong" },
+      "args": ["-m", "pipeline.farm.init_farm_db", "--drop"],
+      "options": { "cwd": "${workspaceFolder}/ai-service" },
+      "presentation": { "clear": true },
+      "problemMatcher": []
+    },
   ]
 }

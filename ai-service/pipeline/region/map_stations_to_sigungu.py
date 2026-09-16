@@ -8,14 +8,18 @@ sigungu.geojson 의 코드는 통계청 행정구역코드(중구=11020)라 체�
 관측소가 하나도 안 걸리는 시군구(관측망이 성긴 도서·산간)는 시군구 무게중심에서 가장 가까운
 관측소로 대체한다.
 
-실행: py -3.12 -m pipeline.map_stations_to_sigungu
+실행: py -3.12 -m pipeline.region.map_stations_to_sigungu
 """
 
 import csv
 import json
 import math
 
+from sqlalchemy import distinct, select
+
 from app.core.config import DATA_DIR
+from app.core.db import new_session
+from app.models.normal import Normal
 
 SIGUNGU_PATH = DATA_DIR / "ref" / "sigungu.geojson"
 STATIONS_PATH = DATA_DIR / "stations.csv"
@@ -70,21 +74,33 @@ def main() -> None:
     with STATIONS_PATH.open(encoding="utf-8-sig") as f:
         stations = list(csv.DictReader(f))
 
+    # 평년값(arcltr_sfc_norm)을 지원하는 관측소만 걸러 쓴다 — 안 걸러 뽑으면 근처 AWS가
+    # 뽑혀 시군구 절반 가까이가 "데이터 없음" 회색으로 남는다(V1-37 최초 배포 때 확인).
+    db = new_session()
+    try:
+        with_normal = {row[0] for row in db.execute(select(distinct(Normal.station))).all()}
+    finally:
+        db.close()
+    stations_with_normal = [s for s in stations if s["stn"] in with_normal] or stations
+
     rows = []
     unmatched = []
     for feature in sigungu:
         props = feature["properties"]
+        clon, clat = centroid(feature["geometry"])
         inside = [
-            s for s in stations if point_in_feature(float(s["lon"]), float(s["lat"]), feature["geometry"])
+            s
+            for s in stations_with_normal
+            if point_in_feature(float(s["lon"]), float(s["lat"]), feature["geometry"])
         ]
 
         if inside:
-            clon, clat = centroid(feature["geometry"])
             station = min(inside, key=lambda s: haversine_km(clon, clat, float(s["lon"]), float(s["lat"])))
             method = "contains"
         else:
-            clon, clat = centroid(feature["geometry"])
-            station = min(stations, key=lambda s: haversine_km(clon, clat, float(s["lon"]), float(s["lat"])))
+            station = min(
+                stations_with_normal, key=lambda s: haversine_km(clon, clat, float(s["lon"]), float(s["lat"]))
+            )
             method = "nearest"
             unmatched.append(props["name"])
 
