@@ -15,9 +15,11 @@ class AskRequest(BaseModel):
 
     question 이 비어 있거나(0자) 500자를 넘으면 라우터 함수가 실행되기도 전에 422 로 거부된다.
     user_id 는 이력 저장·일일 한도 계산의 키다 — Next.js 가 세션 쿠키로 확인한 값을 그대로 싣는다.
+    plot_id 는 선택이다 — 없으면 예전처럼 밭 컨텍스트 없이 답한다(app/service/ask_context.py).
     """
     question: str = Field(...,min_length=1,max_length=500)
     user_id: uuid.UUID
+    plot_id: uuid.UUID | None = None
 
 class AskMatch(BaseModel):
     """검색된 조각 한 건. source_title 은 이 조각이 속한 문서의 이름, 문서에 제목이 없으면 None."""

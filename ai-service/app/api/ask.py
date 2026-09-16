@@ -88,3 +88,5 @@ def ask_feedback(
     if not submit_feedback(db, history_id, body.user_id, body.rating):
         raise HTTPException(status_code=404, detail="해당 이력을 찾을 수 없습니다.")
     return {"ok": True}
+
+
