@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { CROPS } from "@/components/plot/CropChips";
+import { cropById } from "@/components/plot/crops";
 import { SectionHeading } from "@/components/shared/SectionHeading";
 import { CROP_CALENDARS, stageAt } from "@/features/growth/domain/growthStage";
 import { daysSincePlanting } from "@/features/plots/domain/plotSummary";
@@ -27,7 +27,7 @@ export default async function Page({ params }: PageProps<"/plots/[id]">) {
   const plot = profile ? await getPlot(profile.id, id) : null;
   if (!plot) notFound();
 
-  const crop = CROPS.find((c) => c.id === plot.cropId);
+  const crop = cropById(plot.cropId);
   const calendar = plot.cropId ? CROP_CALENDARS[plot.cropId] : undefined;
   const days = daysSincePlanting(plot, new Date());
   const stage = calendar && days !== null ? stageAt(calendar, days) : null;

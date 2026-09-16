@@ -1,10 +1,5 @@
-import type { ReactNode } from "react";
-import {
-  CheckIcon,
-  HarvestIcon,
-  LeafIcon,
-  SproutIcon,
-} from "@/components/icons";
+import { CheckIcon } from "@/components/icons";
+import { CROPS } from "./crops";
 
 /**
  * ---------------------------------------------
@@ -31,19 +26,6 @@ import {
  * ```
  * ---------------------------------------------
  */
-
-export interface CropOption {
-  id: string;
-  labelKo: string;
-  icon: ReactNode;
-}
-
-/** 참고 시안이 제시한 세 작물. 연동 단계에서 조회 결과로 바뀔 자리다. */
-export const CROPS: readonly CropOption[] = [
-  { id: "rice", labelKo: "벼", icon: <SproutIcon /> },
-  { id: "cabbage", labelKo: "배추", icon: <LeafIcon /> },
-  { id: "persimmon", labelKo: "단감", icon: <HarvestIcon /> },
-];
 
 interface CropChipsProps {
   /** 폼 필드 이름. 선택한 값이 이 이름으로 여러 개 제출된다. */

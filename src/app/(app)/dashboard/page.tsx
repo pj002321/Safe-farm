@@ -13,7 +13,6 @@ import {
 import {
   SAMPLE_ALERT,
   SAMPLE_FRESHNESS,
-  SAMPLE_PLOTS,
   SAMPLE_TASKS,
   SAMPLE_WEEKEND,
 } from "@/components/dashboard/sample";
@@ -22,7 +21,7 @@ import { WeekendForecast } from "@/components/dashboard/WeekendForecast";
 import { MapPinIcon } from "@/components/icons";
 import { ButtonLink } from "@/components/shared/Button";
 import { SectionHeading } from "@/components/shared/SectionHeading";
-import { countPlots } from "@/features/plots/plotStore";
+import { listPlotCards } from "@/features/plots/plotStore";
 import { displayNameOf } from "@/shared/auth/profile";
 import { getCurrentProfile } from "@/shared/auth/profileStore";
 
@@ -64,12 +63,17 @@ export default async function DashboardPage() {
   //    아직 없거나(마이그레이션 미적용) DB 가 잠깐 흔들릴 때, 홈 화면이 통째로
   //    500 이 되는 것보다 낫다. 증상을 숨기는 것이 아니라 더 나쁜 결과를 피하는
   //    것이므로 원인을 로그에 남긴다.
+  // 화면이 함께 쓰므로 블록 밖에 둔다. 조회가 실패하면 빈 배열 그대로 그려서
+  // 홈이 통째로 죽지 않게 한다(아래 catch 와 같은 이유).
+  let plots: Awaited<ReturnType<typeof listPlotCards>> = [];
+
   if (profile) {
     let plotCount: number | null = null;
     try {
-      plotCount = await countPlots(profile.id);
+      plots = await listPlotCards(profile.id);
+      plotCount = plots.length;
     } catch (error) {
-      console.error("[dashboard] 밭 개수 조회 실패", error);
+      console.error("[dashboard] 텃밭 목록 조회 실패", error);
     }
     if (plotCount === 0) redirect(PLOT_ONBOARDING_PATH);
   }
@@ -99,13 +103,21 @@ export default async function DashboardPage() {
           </div>
         </div>
 
-        <ButtonLink
-          href={PLOT_ONBOARDING_PATH}
-          icon={<MapPinIcon />}
-          variant="primary"
-        >
-          텃밭 등록
-        </ButtonLink>
+        {/* 등록과 관리를 나란히. 밭이 하나라도 있으면 관리가 더 자주 쓰인다. */}
+        <div className="flex flex-wrap items-center gap-2">
+          {plots.length > 0 && (
+            <ButtonLink href="/plots" variant="secondary">
+              텃밭 관리
+            </ButtonLink>
+          )}
+          <ButtonLink
+            href={PLOT_ONBOARDING_PATH}
+            icon={<MapPinIcon />}
+            variant="primary"
+          >
+            텃밭 등록
+          </ButtonLink>
+        </div>
       </div>
 
       {/* ── 텃밭 요약 ──────────────────────────────── */}
@@ -113,10 +125,10 @@ export default async function DashboardPage() {
         <h2 className="mb-3 font-semibold text-fg text-sm" id="plots-heading">
           내 텃밭
           <span className="ml-1.5 font-mono text-fg-subtle text-xs">
-            {SAMPLE_PLOTS.length}
+            {plots.length}
           </span>
         </h2>
-        <PlotStrip plots={SAMPLE_PLOTS} />
+        <PlotStrip plots={plots} />
         <div className="mt-3">
           <DeviationBanner deviationKo={SAMPLE_DEVIATION} />
         </div>
