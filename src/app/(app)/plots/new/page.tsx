@@ -8,6 +8,7 @@ import { PlotWizardDock } from "@/components/plot/PlotWizardDock";
 import { SowingFields } from "@/components/plot/SowingFields";
 import { WizardNav } from "@/components/plot/WizardNav";
 import { SectionHeading } from "@/components/shared/SectionHeading";
+import { listCropOptions } from "@/features/crops/cropStore";
 import { registerPlot } from "./actions";
 
 /**
@@ -106,7 +107,11 @@ const STEPS = [
   },
 ] as const;
 
-export default function PlotRegisterPage() {
+export default async function PlotRegisterPage() {
+  // 작물 목록은 DB(작물 마스터)에서 온다. 예전에는 CropCards 에 세 개가 박혀
+  // 있었는데, 그 id 가 마스터와 달라 저장할 작물을 못 찾았다.
+  const crops = await listCropOptions();
+
   return (
     <main className="mx-auto max-w-5xl px-6 py-8 sm:py-10">
       <div className="flex flex-wrap items-end justify-between gap-4">
@@ -197,28 +202,32 @@ export default function PlotRegisterPage() {
               예전에는 세 벌(38/40/32rem)을 손으로 재서 맞췄고, 그 탓에 1단계에서
               빈 칸 127px 를 스크롤해야 했다(375x812 실측). 그게 사라졌다.
 
-              lg 값만 남긴다: 지도 22rem · 가로 배치에서 가장 높은 1단계가 509px →
-              32rem. 패널 내용을 바꾸면 **눈대중하지 말고 다시 잴 것.** */}
-          <div className="mt-7 lg:min-h-[32rem]">
-            {STEPS.map((step) => (
-              <StepPanel key={step.id} step={step}>
-                {step.no === 1 && <PlotLocationStep />}
-                {step.no === 2 && <PlotInfoFields />}
-                {step.no === 3 && (
-                  <fieldset>
-                    <legend className="sr-only">재배할 작물</legend>
-                    <CropCards defaultSelected={["cabbage"]} />
-                  </fieldset>
-                )}
-                {step.no === 4 && (
-                  <div className="max-w-md">
-                    <SowingFields />
-                  </div>
-                )}
-              </StepPanel>
-            ))}
-          </div>
-
+            값은 실측한 **가장 높은 단계**에 맞췄다(눈대중하지 말고 다시 잴 것).
+            단이 셋인 이유는 높이를 바꾸는 지점이 둘이기 때문이다:
+              ~sm   지도 19rem, 세로 배치 → 3단계 605px  → 38rem
+              sm~lg 지도 22rem, 아직 세로 → 1단계 630px  → 40rem
+              lg~   지도 22rem, 가로 배치 → 1단계 509px  → 32rem
+            처음에 `lg` 한 곳만 나눴다가 **태블릿 폭에서 22px 어긋났다** —
+            지도가 sm 에서 커지는데 그리드는 lg 에서야 갈라지기 때문이다. */}
+        <div className="mt-7 min-h-[38rem] sm:min-h-[40rem] lg:min-h-[32rem]">
+          {STEPS.map((step) => (
+            <StepPanel key={step.id} step={step}>
+              {step.no === 1 && <PlotLocationStep />}
+              {step.no === 2 && <PlotInfoFields />}
+              {step.no === 3 && (
+                <fieldset>
+                  <legend className="sr-only">재배할 작물</legend>
+                  <CropCards crops={crops} />
+                </fieldset>
+              )}
+              {step.no === 4 && (
+                <div className="max-w-md">
+                  <SowingFields />
+                </div>
+              )}
+            </StepPanel>
+          ))}
+        </div>
           <WizardNav />
         </form>
 

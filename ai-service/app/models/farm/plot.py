@@ -8,7 +8,7 @@ auth.users 로 FK 를 걸지 않는 것은 profiles.py 와 같은 이유 — 그
 Supabase 소유고, auth 없이도 개발 DB 가 혼자 돌아야 해서다.
 """
 
-from sqlalchemy import ARRAY, Boolean, Column, Date, DateTime, Numeric, Text, Integer, func
+from sqlalchemy import Column, DateTime, Integer, Numeric, Text, func
 from sqlalchemy.dialects.postgresql import UUID
 
 from app.models.farm.base import FarmBase
@@ -37,13 +37,9 @@ class Plot(FarmBase):
     region_ko = Column(Text, nullable=False)
     address_ko = Column(Text, nullable=False)
 
-    # Next.js 쪽 영문 slug id 그대로 들어옴("cabbage", "rice") — 한글명 아님
-    # (components/plot/crops.tsx 의 CROPS 배열이 원본). Step 4에서 변환한다
-    crops = Column(ARRAY(Text), nullable=False, server_default="{}")
-
-    sowing_date = Column(Date)
-    sowing_unknown = Column(Boolean, nullable=False, server_default="false")
-    sowing_method = Column(Text, nullable=False, server_default="seed")
+    # 작물·파종일은 여기 없다. cultivations 로 옮겼다
+    # (20260916010000_plots_drop_crop_columns.sql). 한 밭에 여러 작물을 다른 날
+    # 심을 수 있어서다 — 밭의 작물을 알려면 cultivation.py 를 조인한다.
 
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
     updated_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())

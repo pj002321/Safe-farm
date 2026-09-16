@@ -21,6 +21,15 @@ import { MapPinIcon } from "@/components/icons";
 import { ButtonLink } from "@/components/shared/Button";
 import { SectionHeading } from "@/components/shared/SectionHeading";
 import { listTaskCards } from "@/features/dashboard/taskStore";
+import {
+  findCalendarByNameKo,
+  stageAt,
+} from "@/features/growth/domain/growthStage";
+import { toPlotStripItem } from "@/features/plots/domain/plotStrip";
+import {
+  daysSincePlanting,
+  type PlotCard,
+} from "@/features/plots/domain/plotSummary";
 import { listPlotCards } from "@/features/plots/plotStore";
 import { displayNameOf } from "@/shared/auth/profile";
 import { getCurrentProfile } from "@/shared/auth/profileStore";
@@ -31,10 +40,12 @@ import { toggleTask } from "./actions";
  * [Feature]: 앱 홈(대시보드)  →  /dashboard
  *
  * [Description]
- * - **할 일 카드만 실제 조회다.** `plot_tasks` 를 읽어 `TaskBoard` 에 넘긴다.
- *   특보·주말 예보·데이터 기준 시각은 아직 `components/dashboard/sample.ts` 의
- *   고정 데이터다 — 각자 자기 단계(특보 Step 6·예보 Step 5·기준시각 Step 9)에서 조회가 붙는다.
- *   로그인·동의 검사만 진짜다(그건 레이아웃이 한다).
+ * - **텃밭 줄과 할 일 카드가 실제 조회다.** `plot_tasks` 를 읽어 `TaskBoard` 에
+ *   넘긴다. 특보·주말 예보·데이터 기준 시각은 아직 `components/dashboard/sample.ts`
+ *   의 고정 데이터다 — 각자 자기 단계(특보 Step 6·예보 Step 5·기준시각 Step 9)에서
+ *   조회가 붙는다. 로그인·동의 검사만 진짜다(그건 레이아웃이 한다).
+ * - 생육 단계는 여기서 낸다. `features/plots` 가 `features/growth` 를 import 할
+ *   수 없어서(features 끼리 금지) app 계층인 이 파일이 둘을 잇는다.
  * - 화면 순서가 곧 급한 순서다: **특보 → 내 밭 → 오늘 할 일 → 주말 날씨**.
  *   특보를 아래에 두면 스크롤하지 않은 사람이 못 본다.
  * - 할 일이 주인공이라 반반이 아니다. 오른쪽 예보는 "토·일에 나갈 수 있나"를
@@ -52,6 +63,21 @@ import { toggleTask } from "./actions";
 
 export const metadata: Metadata = { title: "대시보드" };
 
+/**
+ * 밭의 대표 작물로 생육 단계를 낸다. 모르면 null 이고 배지를 안 그린다.
+ *
+ * ⚠️ 아직 **날짜 기반** 달력이라 상추·배추 둘만 걸린다. 누적 GDD 와
+ * `crop_stages` 가 붙으면 이 함수째로 사라질 자리다.
+ */
+function stageKoOf(plot: PlotCard, now: Date): string | null {
+  const calendar = findCalendarByNameKo(
+    plot.cultivations[0]?.cropNameKo ?? null,
+  );
+  const days = daysSincePlanting(plot, now);
+  if (!calendar || days === null) return null;
+  return stageAt(calendar, days).nameKo;
+}
+
 /** 위성 위상차가 길게 벌어졌을 때만 나온다. null 이면 배너를 그리지 않는다. */
 const SAMPLE_DEVIATION =
   "배추밭 생육이 인근 평균보다 6일 느립니다. 위성 관측이 5일 넘게 이어져 알려 드립니다.";
@@ -59,16 +85,16 @@ const SAMPLE_DEVIATION =
 export default async function DashboardPage() {
   const profile = await getCurrentProfile();
 
+  // 화면이 함께 쓰므로 블록 밖에 둔다. 조회가 실패하면 빈 배열 그대로 그려서
+  // 홈이 통째로 죽지 않게 한다(아래 catch 와 같은 이유).
+  let plots: PlotCard[] = [];
+
   // 등록한 밭이 없으면 온보딩으로. 판단에 필요한 것은 0 인지 아닌지뿐이다.
   //
   // ⚠️ 조회가 실패해도 **리다이렉트를 포기하고 화면을 그린다.** plots 테이블이
   //    아직 없거나(마이그레이션 미적용) DB 가 잠깐 흔들릴 때, 홈 화면이 통째로
   //    500 이 되는 것보다 낫다. 증상을 숨기는 것이 아니라 더 나쁜 결과를 피하는
   //    것이므로 원인을 로그에 남긴다.
-  // 화면이 함께 쓰므로 블록 밖에 둔다. 조회가 실패하면 빈 배열 그대로 그려서
-  // 홈이 통째로 죽지 않게 한다(아래 catch 와 같은 이유).
-  let plots: Awaited<ReturnType<typeof listPlotCards>> = [];
-
   if (profile) {
     let plotCount: number | null = null;
     try {
@@ -89,6 +115,11 @@ export default async function DashboardPage() {
       console.error("[dashboard] 할 일 카드 조회 실패", error);
     }
   }
+
+  const now = new Date();
+  const stripItems = plots.map((plot) =>
+    toPlotStripItem(plot, now, stageKoOf(plot, now)),
+  );
 
   return (
     <main className="mx-auto flex max-w-6xl flex-col gap-7 px-6 py-6 sm:py-8">
@@ -140,7 +171,7 @@ export default async function DashboardPage() {
             {plots.length}
           </span>
         </h2>
-        <PlotStrip plots={plots} />
+        <PlotStrip plots={stripItems} />
         <div className="mt-3">
           <DeviationBanner deviationKo={SAMPLE_DEVIATION} />
         </div>

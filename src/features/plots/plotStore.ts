@@ -24,36 +24,56 @@ import type { PlotRegistrationInput } from "./domain/registerPlot";
  * ---------------------------------------------
  */
 
+/**
+ * 작물·파종일은 `cultivations` 에 있다. PostgREST 중첩 select 로 한 번에 끌어온다
+ * — 밭 목록마다 재배를 따로 조회하면 N+1 이 된다.
+ * `crop_variants → crops` 까지 타고 내려가는 이유는 이름이 작물(`crops.name`)에
+ * 있고 품종에는 없어서다. `variant_id` 는 목표 GDD 와 단계표를 찾는 키라 이름과
+ * 함께 들고 나온다.
+ */
+
+// 유사 join 쿼리
+const CULTIVATION_SELECT =
+  "cultivations(variant_id, sowing_date, crop_variants(crops(name)))";
+
 export interface PlotGrid {
   gridX: number;
   gridY: number;
 }
 
+/**
+ * 밭 한 행을 넣고 **id 를 돌려준다.**
+ *
+ * 작물·파종일은 여기 없다 — `cultivations` 로 옮겼다(한 밭에 여러 작물을 서로
+ * 다른 날 심을 수 있다). 그래서 호출자가 이 id 로 재배 행을 이어 붙인다.
+ */
 export async function insertPlot(
   userId: string,
   input: PlotRegistrationInput,
   grid: PlotGrid,
-): Promise<void> {
+): Promise<string> {
   const supabase = await getSupabaseServer();
 
-  const { error } = await supabase.from("plots").insert({
-    user_id: userId,
-    name: input.name,
-    area_m2: input.areaM2,
-    latitude: input.latitude,
-    longitude: input.longitude,
-    grid_x: grid.gridX,
-    grid_y: grid.gridY,
-    region_code: input.regionCode,
-    region_ko: input.regionKo,
-    address_ko: input.addressKo,
-    crops: input.crops,
-    sowing_date: input.sowingDate,
-    sowing_unknown: input.sowingUnknown,
-    sowing_method: input.sowingMethod,
-  });
+  const { data, error } = await supabase
+    .from("plots")
+    .insert({
+      user_id: userId,
+      name: input.name,
+      area_m2: input.areaM2,
+      latitude: input.latitude,
+      longitude: input.longitude,
+      grid_x: grid.gridX,
+      grid_y: grid.gridY,
+      region_code: input.regionCode,
+      region_ko: input.regionKo,
+      address_ko: input.addressKo,
+    })
+    .select("id")
+    .single();
 
   if (error) throw new Error(error.message);
+
+  return data.id;
 }
 
 /**
@@ -83,7 +103,7 @@ export async function listPlots(userId: string): Promise<PlotMapPoint[]> {
 
   const { data, error } = await supabase
     .from("plots")
-    .select("id, name, latitude, longitude, crops, sowing_date, sowing_unknown")
+    .select(`id, name, latitude, longitude, ${CULTIVATION_SELECT}`)
     // RLS가 자기 밭만 보이게 하지만, profileStore.ts처럼 where도 명시한다.
     .eq("user_id", userId);
 
@@ -101,7 +121,7 @@ export async function getPlot(
 
   const { data, error } = await supabase
     .from("plots")
-    .select("id, name, latitude, longitude, crops, sowing_date, sowing_unknown")
+    .select(`id, name, latitude, longitude, ${CULTIVATION_SELECT}`)
     .eq("user_id", userId)
     .eq("id", plotId)
     .maybeSingle();
@@ -126,8 +146,7 @@ export async function listPlotCards(userId: string): Promise<PlotCard[]> {
 
   const { data, error } = await supabase
     .from("plots")
-    .select(CARD_COLUMNS)
-    // RLS 가 자기 밭만 보이게 하지만 where 를 명시한다(countPlots 와 같은 방침).
+    .select(`id, name, area_m2, region_ko, created_at, ${CULTIVATION_SELECT}`)
     .eq("user_id", userId)
     .order("created_at", { ascending: false });
 

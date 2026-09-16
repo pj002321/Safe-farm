@@ -1,8 +1,10 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { cropById } from "@/components/plot/crops";
 import { SectionHeading } from "@/components/shared/SectionHeading";
-import { CROP_CALENDARS, stageAt } from "@/features/growth/domain/growthStage";
+import {
+  findCalendarByNameKo,
+  stageAt,
+} from "@/features/growth/domain/growthStage";
 import { daysSincePlanting } from "@/features/plots/domain/plotSummary";
 import { getPlot } from "@/features/plots/plotStore";
 import { getCurrentProfile } from "@/shared/auth/profileStore";
@@ -16,6 +18,8 @@ import { getCurrentProfile } from "@/shared/auth/profileStore";
  *   다음 작업만 보여준다.
  * - `CROP_CALENDARS` 에 없는 작물(단감처럼 파종일 기준 생육단계 모델이 안 맞는
  *   과수 등)은 생육단계 없이 밭 이름·작물만 보여준다.
+ * - 작물 이름은 `cultivations` 를 타고 온 작물 마스터의 이름이다. 화면에 박아 둔
+ *   목록에서 찾지 않는다 — 그 목록의 슬러그는 마스터와 이어지지 않았다.
  * ---------------------------------------------
  */
 
@@ -27,15 +31,14 @@ export default async function Page({ params }: PageProps<"/plots/[id]">) {
   const plot = profile ? await getPlot(profile.id, id) : null;
   if (!plot) notFound();
 
-  const crop = cropById(plot.cropId);
-  const calendar = plot.cropId ? CROP_CALENDARS[plot.cropId] : undefined;
+  const calendar = findCalendarByNameKo(plot.cropNameKo);
   const days = daysSincePlanting(plot, new Date());
   const stage = calendar && days !== null ? stageAt(calendar, days) : null;
 
   return (
     <main className="mx-auto flex max-w-2xl flex-col gap-6 px-6 py-6 sm:py-8">
       <SectionHeading
-        description={crop?.labelKo ?? "작물 미정"}
+        description={plot.cropNameKo ?? "작물 미정"}
         title={plot.nameKo ?? "이름 없는 밭"}
       />
       {stage ? (

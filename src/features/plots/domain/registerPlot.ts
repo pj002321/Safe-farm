@@ -23,7 +23,8 @@
  * ---------------------------------------------
  */
 
-const PYEONG_TO_M2 = 3.305785;
+/** 1평 = 3.305785㎡. 저장은 ㎡ 로 하고 화면에서 다시 평으로 되돌린다. */
+export const PYEONG_TO_M2 = 3.305785;
 
 export interface PlotRegistrationInput {
   name: string | null;
@@ -33,7 +34,7 @@ export interface PlotRegistrationInput {
   addressKo: string;
   regionCode: string;
   regionKo: string;
-  crops: string[];
+  cropIds: number[];
   sowingDate: string | null;
   sowingUnknown: boolean;
   sowingMethod: "seed" | "seedling";
@@ -68,7 +69,10 @@ export function parsePlotRegistration(
       addressKo: str(formData.get("addressKo")),
       regionCode,
       regionKo: str(formData.get("regionKo")),
-      crops: formData.getAll("crops").map(String).filter(Boolean),
+      cropIds: formData
+        .getAll("cropIds")
+        .map(Number)
+        .filter((id) => Number.isInteger(id) && id > 0),
       sowingDate: str(formData.get("sowingDate")) || null,
       sowingUnknown: formData.get("sowingUnknown") === "1",
       sowingMethod:

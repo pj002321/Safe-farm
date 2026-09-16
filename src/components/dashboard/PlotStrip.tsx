@@ -1,12 +1,9 @@
 import Link from "next/link";
 import { FieldIcon, MapPinIcon, SproutIcon } from "@/components/icons";
-import { cropById } from "@/components/plot/crops";
 import { plotFaceClass } from "@/components/plot/plotFace";
 import { Badge } from "@/components/shared/Badge";
 import { ButtonLink } from "@/components/shared/Button";
-import { CROP_CALENDARS, stageAt } from "@/features/growth/domain/growthStage";
-import type { PlotCard } from "@/features/plots/domain/plotSummary";
-import { daysSincePlanting } from "@/features/plots/domain/plotSummary";
+import type { PlotStripItem } from "@/features/plots/domain/plotStrip";
 
 /**
  * ---------------------------------------------
@@ -14,11 +11,12 @@ import { daysSincePlanting } from "@/features/plots/domain/plotSummary";
  *
  * [Description]
  * - 등록된 텃밭을 D+n 과 생육단계 배지로 요약해 가로로 흘린다(스펙).
- * - 값은 **실제 조회**(`listPlotCards`)에서 온다. 생육단계와 경과일은 파종일과
- *   `CROP_CALENDARS` 로 여기서 계산한다 — 고정 데이터 시절에는 완성된 문자열이
- *   들어왔지만, 그 문자열을 만들 사람이 필요해졌다.
  *   세로 목록이 아닌 이유는 밭이 늘어도 "오늘 할 일"이 화면 아래로 밀리지
  *   않게 하려는 것이다.
+ * - **글자는 이미 만들어져 들어온다.** 작물 이름·경과일·면적은
+ *   `toPlotStripItem`(features/plots) 이 내고, 이 파일은 그대로 찍기만 한다.
+ *   작물 이름이 `cultivations` 를 타고 오면서 화면에 박아 둔 작물 목록으로는
+ *   더 이상 맞출 수 없어졌다.
  * - 가로 스크롤은 **컨테이너 안에서만** 일어난다. `overflow-x-auto` 를 이 줄에
  *   가두지 않으면 페이지 전체가 좌우로 흔들린다.
  * - 마지막 칸이 **텃밭 등록 카드**다. 별도 버튼만 두면 밭이 늘어났을 때 어디서
@@ -26,9 +24,14 @@ import { daysSincePlanting } from "@/features/plots/domain/plotSummary";
  * - 밭이 하나도 없을 때는 카드 줄 대신 **온보딩 유도**를 그린다(스펙의 빈 상태).
  *   빈 가로 스크롤은 화면이 고장 난 것처럼 보인다.
  *
+ * - 카드를 누르면 **그 밭의 상세**로 간다. 예전에는 셋 다 등록 화면으로 갔는데,
+ *   그때는 값이 샘플이라 갈 곳이 없었다.
+ * - 생육 단계는 없을 수 있다. 누적 GDD 가 붙기 전에는 단계를 못 내는 밭이
+ *   대부분이라, 배지 자리를 비워 두고 카드는 그대로 그린다.
+ *
  * [Usage]
  * ```tsx
- * <PlotStrip plots={await listPlotCards(userId)} />
+ * <PlotStrip plots={items} />
  * <PlotStrip plots={[]} />        // 온보딩 유도
  * ```
  * ---------------------------------------------
@@ -38,88 +41,50 @@ import { daysSincePlanting } from "@/features/plots/domain/plotSummary";
 export const PLOT_ONBOARDING_PATH = "/plots/new";
 
 interface PlotStripProps {
-  plots: readonly PlotCard[];
-}
-
-/**
- * 카드 한 장에 찍을 값.
- *
- * **표시 형식을 컴포넌트에서 만든다.** 예전에는 고정 데이터가 "D+41" 같은 완성된
- * 문자열을 들고 있었는데, 실제 조회가 붙으면 그 문자열을 만들 사람이 필요하다.
- * 계산 자체(생육단계·경과일)는 `features/growth`·`features/plots` 의 순수 함수가
- * 하고, 여기서는 사람이 읽는 말로 바꾸기만 한다.
- */
-function describe(plot: PlotCard, now: Date) {
-  const cropId = plot.cropIds[0];
-  const crop = cropById(cropId);
-  const cropKo = crop?.labelKo ?? "작물 미지정";
-
-  const days = daysSincePlanting(plot, now);
-  const calendar = cropId ? CROP_CALENDARS[cropId] : undefined;
-  // 달력이 없는 작물(과수처럼 파종일 기준 모델이 안 맞는 것)은 단계를 비운다.
-  const stage = calendar && days !== null ? stageAt(calendar, days) : null;
-
-  return {
-    // 카드의 얼굴은 **작물에서** 온다. 임의로 주면 배추밭에 다른 작물 그림이
-    // 붙어 화면이 거짓말을 한다. 모르는 작물이면 중립적인 밭 아이콘.
-    icon: crop?.icon ?? <FieldIcon />,
-    cropKo,
-    // 심은 날을 모르면 D+n 이 거짓말이 된다. 그대로 비운다.
-    dayLabelKo: days === null ? "심은 날 미상" : `D+${days}`,
-    stageKo: stage?.nameKo ?? null,
-    areaKo:
-      plot.areaM2 === null
-        ? "넓이 미입력"
-        : `${Math.round(plot.areaM2).toLocaleString("ko-KR")}㎡`,
-  };
+  plots: readonly PlotStripItem[];
 }
 
 export function PlotStrip({ plots }: PlotStripProps) {
   if (plots.length === 0) return <EmptyPlots />;
 
-  // 한 번만 읽는다. 카드마다 new Date() 를 부르면 목록 안에서 경과일이 갈릴 수 있다.
-  const now = new Date();
-
   return (
     // 음수 마진 + 패딩으로 카드가 화면 가장자리까지 흘러 나가는 느낌을 준다.
     // 잘린 카드가 보여야 "옆에 더 있다"가 스크롤바 없이도 전달된다.
     <div className="-mx-1 flex gap-3 overflow-x-auto px-1 pb-2">
-      {plots.map((plot) => {
-        const view = describe(plot, now);
-        return (
-          <Link
-            className="group w-[15.5rem] shrink-0 rounded-lg border border-border bg-surface p-4 transition-[transform,border-color,box-shadow] duration-200 ease-out-expo hover:-translate-y-0.5 hover:border-accent hover:shadow-e2"
-            href={`/plots/${plot.id}`}
-            key={plot.id}
-          >
-            <div className="flex items-start justify-between gap-2">
-              {/* 그림은 작물에서, 색은 밭 id 에서. 같은 밭은 언제나 같은 얼굴이라
-                  목록에서 눈이 자리를 기억한다. */}
-              <span
-                className={`grid size-8 shrink-0 place-items-center rounded-full ${plotFaceClass(plot.id)}`}
-              >
-                {view.icon}
-              </span>
-              {view.stageKo && (
-                <Badge size="sm" tone="telemetry">
-                  {view.stageKo}
-                </Badge>
-              )}
-            </div>
+      {plots.map((plot) => (
+        <Link
+          className="group w-[15.5rem] shrink-0 rounded-lg border border-border bg-surface p-4 transition-[transform,border-color,box-shadow] duration-200 ease-out-expo hover:-translate-y-0.5 hover:border-accent hover:shadow-e2"
+          href={`/plots/${plot.id}`}
+          key={plot.id}
+        >
+          <div className="flex items-start justify-between gap-2">
+            {/* 색은 밭 id 에서 온다. 같은 밭은 목록·상세 어디서나 같은 얼굴이라
+                눈이 자리를 기억한다. 작물별 그림은 없다 — 화면에 박아 둔 작물
+                목록이 작물 마스터와 이어지지 않아 배추밭에 딴 그림이 붙는다. */}
+            <span
+              className={`grid size-8 shrink-0 place-items-center rounded-full ${plotFaceClass(plot.id)}`}
+            >
+              <FieldIcon />
+            </span>
+            {plot.stageKo && (
+              <Badge size="sm" tone="telemetry">
+                {plot.stageKo}
+              </Badge>
+            )}
+          </div>
 
-            <p className="mt-3 truncate font-semibold text-[0.95rem] text-fg">
-              {plot.nameKo ?? "이름 없는 밭"}
-            </p>
-            <p className="mt-0.5 truncate text-fg-muted text-xs">
-              {view.cropKo} · {view.areaKo}
-            </p>
+          <p className="mt-3 truncate font-semibold text-[0.95rem] text-fg">
+            {plot.nameKo}
+          </p>
+          <p className="mt-0.5 truncate text-fg-muted text-xs">
+            {plot.cropKo} · {plot.areaKo}
+          </p>
 
-            <p className="mt-3 font-mono text-[1.35rem] text-accent tabular-nums leading-none">
-              {view.dayLabelKo}
-            </p>
-          </Link>
-        );
-      })}
+          <p className="mt-3 font-mono text-[1.35rem] text-accent tabular-nums leading-none">
+            {plot.dayLabelKo}
+          </p>
+        </Link>
+      ))}
 
       {/* 목록의 끝이 곧 추가 자리. */}
       <Link
