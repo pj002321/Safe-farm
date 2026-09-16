@@ -29,9 +29,21 @@ def station_plot_id(stn: str) -> str:
     return f"stn:{stn}"
 
 
-def daily_gdd(tmax_c: float, tmin_c: float, base_temp_c: float = BASE_TEMP_C) -> float:
-    """하루치 적산온도. 기준온도 아래로 내려간 날은 0(음수를 빼지 않는다)."""
-    return max(0.0, (tmax_c + tmin_c) / 2 - base_temp_c)
+def daily_gdd(
+    tmax_c: float,
+    tmin_c: float,
+    base_temp_c: float = BASE_TEMP_C,
+    upper_temp_c: float | None = None,
+) -> float:
+    """하루치 적산온도. 기준온도 아래로 내려간 날은 0(음수를 빼지 않는다).
+
+    upper_temp_c 가 있으면 그 이상은 생장에 더 기여하지 않는다고 보고 캡을 건다
+    (예: base=5, upper=30 인 작물은 평균기온이 아무리 높아도 하루 25 이상 못 쌓는다).
+    """
+    raw = (tmax_c + tmin_c) / 2 - base_temp_c
+    if upper_temp_c is not None:
+        raw = min(raw, upper_temp_c - base_temp_c)
+    return max(0.0, raw)
 
 
 def classify_deviation(deviation_pct: float | None) -> tuple[str, str]:
