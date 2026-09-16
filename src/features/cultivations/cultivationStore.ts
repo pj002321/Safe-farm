@@ -92,7 +92,8 @@ export async function listCultivationCards(
   const { data, error } = await supabase
     .from("cultivations")
     .select(CARD_SELECT)
-    .eq("plot_id", plotId);
+    .eq("plot_id", plotId)
+    .is("deleted_at", null);
 
   if (error) throw new Error(error.message);
 
@@ -124,6 +125,8 @@ export async function markHarvested(
     .update({ status: "HARVESTED", harvested_at: harvestedAt })
     .eq("id", cultivationId)
     .eq("plot_id", plotId)
+    // 지운 재배를 수확 처리하면 숨긴 행이 되살아난 것처럼 보인다.
+    .is("deleted_at", null)
     .select("id");
 
   if (error) throw new Error(error.message);
@@ -131,14 +134,19 @@ export async function markHarvested(
 }
 
 /**
- * 재배 한 건을 지운다. 되돌릴 수 없다.
+ * 재배 한 건을 숨긴다. 행은 남는다(soft delete).
  *
- * 수확한 기록까지 지우려는 게 아니다 — 끝난 재배는 `markHarvested` 로
- * `HARVESTED` 가 되어 남는다. 이쪽은 **잘못 등록한 건을 정정**하는 길이다.
- * 그래서 `deleted_at` 을 두지 않는다. 숨겨 두면 모든 읽기 경로에 필터가 붙는
- * 대신 사용자가 다시 볼 일은 없다.
+ * 수확한 기록까지 치우려는 게 아니다 — 끝난 재배는 `markHarvested` 로
+ * `HARVESTED` 가 되어 목록에 남는다. 이쪽은 **잘못 등록한 건을 정정**하는 길이다.
+ *
+ * 이름이 `delete` 가 아닌 이유는 도는 쿼리가 update 라서다(`softDeletePlot` 과
+ * 같은 이유). 행을 실제로 지우지 않는 근거는
+ * `20260917000000_soft_delete.sql` 에 적었다.
+ *
+ * 0건이면 던진다. update 는 조건에 맞는 행이 없어도 오류가 아니라 0건으로 끝나,
+ * 그대로 넘기면 화면만 지워진 것처럼 보인다.
  */
-export async function deleteCultivation(
+export async function softDeleteCultivation(
   plotId: string,
   cultivationId: string,
 ): Promise<void> {
@@ -148,9 +156,11 @@ export async function deleteCultivation(
 
   const { data, error } = await supabase
     .from("cultivations")
-    .delete()
+    .update({ deleted_at: new Date().toISOString() })
     .eq("id", cultivationId)
     .eq("plot_id", plotId)
+    // 두 번 지우면 시각이 덮어써져 "언제 지웠나"가 틀어진다.
+    .is("deleted_at", null)
     .select("id");
 
   if (error) throw new Error(error.message);

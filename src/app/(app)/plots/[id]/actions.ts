@@ -3,8 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import {
-  deleteCultivation,
   markHarvested,
+  softDeleteCultivation,
 } from "@/features/cultivations/cultivationStore";
 import { getPlotDetail } from "@/features/plots/plotStore";
 import { requireConsent } from "@/shared/auth/consentGate";
@@ -72,10 +72,13 @@ export async function harvestCultivation(formData: FormData): Promise<void> {
 }
 
 /**
- * 재배 한 건을 지운다. 되돌릴 수 없다.
+ * 재배 한 건을 지운다.
+ *
+ * 화면에서는 삭제지만 DB 에는 `deleted_at` 이 찍힌다(`softDeleteCultivation`).
+ * 되살리는 길이 화면에 없으므로 사용자에게는 삭제라고 말한다.
  *
  * 수확한 것을 치우는 길이 아니다 — 그건 `harvestCultivation` 이 상태로 남긴다.
- * 이쪽은 잘못 등록한 건을 정정한다(`cultivationStore.deleteCultivation` 주석).
+ * 이쪽은 잘못 등록한 건을 정정한다.
  */
 export async function removeCultivation(formData: FormData): Promise<void> {
   const { viewer } = await requireConsent();
@@ -87,7 +90,7 @@ export async function removeCultivation(formData: FormData): Promise<void> {
   if (!plot) fail(plotId, "밭을 찾지 못했습니다.");
 
   try {
-    await deleteCultivation(plotId, cultivationId);
+    await softDeleteCultivation(plotId, cultivationId);
   } catch {
     fail(plotId, "삭제하지 못했습니다. 새로 고친 뒤 다시 시도해 주세요.");
   }

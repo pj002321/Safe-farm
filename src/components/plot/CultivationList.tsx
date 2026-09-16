@@ -204,7 +204,7 @@ function CultivationItem({
           <div className="mt-3 rounded-lg border border-unsuitable/25 bg-unsuitable/5 p-4">
             <p className="text-fg text-sm leading-relaxed">
               <strong className="font-semibold">&ldquo;{title}&rdquo;</strong>의
-              재배 기록을 지웁니다. 파종일과 생육 기록이 함께 사라지고{" "}
+              재배 기록을 지웁니다. 파종일과 생육 단계를 더 볼 수 없고{" "}
               <strong className="font-semibold text-unsuitable">
                 되돌릴 수 없습니다.
               </strong>{" "}

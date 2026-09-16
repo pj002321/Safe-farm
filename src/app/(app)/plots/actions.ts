@@ -2,7 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { parsePlotEdit } from "@/features/plots/domain/editPlot";
-import { deletePlot, updatePlotBasics } from "@/features/plots/plotStore";
+import { softDeletePlot, updatePlotBasics } from "@/features/plots/plotStore";
 import { requireConsent } from "@/shared/auth/consentGate";
 
 /**
@@ -43,11 +43,14 @@ export async function updatePlot(formData: FormData): Promise<void> {
 }
 
 /**
- * 텃밭 삭제. 되돌릴 수 없다.
+ * 텃밭 삭제.
+ *
+ * 화면에서는 삭제지만 DB 에서는 `deleted_at` 이 찍힐 뿐이다(`softDeletePlot`).
+ * 사용자에게 "되돌릴 수 있다"고 말하지는 않는다 — 되살리는 길이 화면에 없다.
  *
  * `plotId` 는 겨냥 라디오(`name="plotId"`)에서 온다. 아무것도 겨냥하지 않았으면
- * 빈 문자열이라 아무 일도 하지 않고 돌아간다 — 빈 값으로 delete 를 보내면
- * 실패 메시지만 띄우게 되는데, 사용자는 취소한 것이지 실패한 게 아니다.
+ * 빈 문자열이라 아무 일도 하지 않고 돌아간다 — 빈 값으로 보내면 실패 메시지만
+ * 띄우게 되는데, 사용자는 취소한 것이지 실패한 게 아니다.
  */
 export async function removePlot(formData: FormData): Promise<void> {
   const { viewer } = await requireConsent();
@@ -57,7 +60,7 @@ export async function removePlot(formData: FormData): Promise<void> {
   if (!plotId) redirect("/plots");
 
   try {
-    await deletePlot(viewer.id, plotId);
+    await softDeletePlot(viewer.id, plotId);
   } catch {
     fail("삭제하지 못했습니다. 목록을 새로 고친 뒤 다시 시도해 주세요.");
   }
