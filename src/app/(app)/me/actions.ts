@@ -1,8 +1,6 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { parsePlotEdit } from "@/features/plots/domain/editPlot";
-import { deletePlot, updatePlotBasics } from "@/features/plots/plotStore";
 import { requireConsent } from "@/shared/auth/consentGate";
 import { updateProfile } from "@/shared/auth/profileStore";
 
@@ -55,51 +53,4 @@ export async function updateAccount(formData: FormData): Promise<void> {
   }
 
   redirect("/me?saved=account");
-}
-
-/** 텃밭 이름·넓이 수정. 위치는 여기서 바꾸지 않는다(editPlot.ts 주석 참고). */
-export async function updatePlot(formData: FormData): Promise<void> {
-  const { viewer } = await requireConsent();
-
-  const parsed = parsePlotEdit(formData);
-  if (!parsed.ok) fail("plot", parsed.error);
-
-  try {
-    await updatePlotBasics(viewer.id, parsed.value);
-  } catch {
-    // 남의 밭 id 를 보냈거나 이미 지워진 경우도 여기로 온다. 어느 쪽인지
-    // 알려주지 않는다 — 남의 밭이 "있다"는 사실 자체가 정보다.
-    fail(
-      "plot",
-      "수정하지 못했습니다. 목록을 새로 고친 뒤 다시 시도해 주세요.",
-    );
-  }
-
-  redirect("/me?saved=plot");
-}
-
-/**
- * 텃밭 삭제. 되돌릴 수 없다.
- *
- * `plotId` 는 겨냥 라디오(`name="plotId"`)에서 온다. 아무것도 겨냥하지 않았으면
- * 빈 문자열이라 아무 일도 하지 않고 돌아간다 — 빈 값으로 delete 를 보내면
- * 실패 메시지만 띄우게 되는데, 사용자는 취소한 것이지 실패한 게 아니다.
- */
-export async function removePlot(formData: FormData): Promise<void> {
-  const { viewer } = await requireConsent();
-
-  const raw = formData.get("plotId");
-  const plotId = typeof raw === "string" ? raw.trim() : "";
-  if (!plotId) redirect("/me");
-
-  try {
-    await deletePlot(viewer.id, plotId);
-  } catch {
-    fail(
-      "plot",
-      "삭제하지 못했습니다. 목록을 새로 고친 뒤 다시 시도해 주세요.",
-    );
-  }
-
-  redirect("/me?saved=deleted");
 }

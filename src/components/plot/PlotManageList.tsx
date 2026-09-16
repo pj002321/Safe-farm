@@ -2,8 +2,8 @@ import { FieldIcon, SproutIcon } from "@/components/icons";
 import { Button } from "@/components/shared/Button";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { Field } from "@/components/shared/Field";
-import type { PlotManageItem } from "@/features/plots/domain/plotSummary";
-import { ARM_CLASS, ARM_NONE_ID, DELETE_FORM_ID } from "./meSections";
+import type { PlotCard } from "@/features/plots/domain/plotSummary";
+import { ARM_CLASS, ARM_NONE_ID, DELETE_FORM_ID } from "./plotManage";
 
 /**
  * ---------------------------------------------
@@ -41,8 +41,8 @@ import { ARM_CLASS, ARM_NONE_ID, DELETE_FORM_ID } from "./meSections";
  * ---------------------------------------------
  */
 
-interface PlotManagePanelProps {
-  plots: readonly PlotManageItem[];
+interface PlotManageListProps {
+  plots: readonly PlotCard[];
   onSave: (formData: FormData) => Promise<void>;
   onDelete: (formData: FormData) => Promise<void>;
 }
@@ -54,11 +54,11 @@ function areaKo(areaM2: number | null): string {
   return `${Math.round(areaM2).toLocaleString("ko-KR")}㎡ · 약 ${pyeong.toLocaleString("ko-KR")}평`;
 }
 
-export function PlotManagePanel({
+export function PlotManageList({
   plots,
   onSave,
   onDelete,
-}: PlotManagePanelProps) {
+}: PlotManageListProps) {
   if (plots.length === 0) {
     return (
       <EmptyState
@@ -112,12 +112,12 @@ function PlotRow({
   plot,
   onSave,
 }: {
-  plot: PlotManageItem;
+  plot: PlotCard;
   onSave: (formData: FormData) => Promise<void>;
 }) {
   const armId = `arm-${plot.id}`;
   const cropsKo =
-    plot.crops.length > 0 ? plot.crops.join(" · ") : "작물 미지정";
+    plot.cropIds.length > 0 ? plot.cropIds.join(" · ") : "작물 미지정";
 
   return (
     // 겨냥되면 줄 전체가 물든다. `has-[:checked]` 는 이 <li> 가 겨냥 라디오의
@@ -145,7 +145,7 @@ function PlotRow({
             {plot.nameKo ?? "이름 없는 밭"}
           </p>
           <p className="mt-0.5 truncate text-fg-muted text-xs">
-            {plot.addressKo}
+            {plot.regionKo}
           </p>
         </div>
         <p className="font-mono text-fg-muted text-xs tabular-nums">

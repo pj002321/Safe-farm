@@ -42,52 +42,50 @@ export function toPlotMapPoint(row: PlotRow): PlotMapPoint {
 }
 
 /**
- * 마이페이지 텃밭 관리 목록의 한 줄.
+ * 목록 카드 한 장이 쓰는 값. 지도 마커(`PlotMapPoint`)보다 넓다.
  *
- * `PlotMapPoint` 를 넓혀 쓰지 않는다. 그쪽은 **지도 전용**이라 주소·면적을 일부러
- * 버린 모양이고, 여기에 맞춰 넓히면 지도 화면이 그리지도 않는 주소 문자열을 매번
- * 실어 나르게 된다. 같은 테이블이라도 화면이 다르면 모양도 다른 편이 정직하다.
+ * ⚠️ 이 타입은 HO-Vic 이 `e2ef705` 에서 쓴 것이다. 브랜치를 주고받는 과정의
+ *    충돌 해결에서 한 번 통째로 사라졌다가(9b409c5) 되살렸다. 나는 같은 시기에
+ *    거의 같은 모양의 `PlotManageItem` 을 따로 만들고 있었는데, 둘을 남기면
+ *    같은 테이블을 읽는 모양이 둘이 되므로 이쪽 하나로 합쳤다.
  */
-export interface PlotManageItem {
+export interface PlotCard {
   id: string;
   nameKo: string | null;
-  addressKo: string;
-  /** ㎡. 등록할 때 건너뛸 수 있는 값이라 없을 수 있다. */
+  regionKo: string;
   areaM2: number | null;
-  crops: readonly string[];
+  cropIds: readonly string[];
   sowingDate: string | null;
   sowingUnknown: boolean;
   createdAt: string;
 }
 
-/** 관리 목록이 읽는 컬럼. `PlotRow` 와 겹치지만 select 목록이 달라 따로 둔다. */
-export interface PlotManageRow {
+/** 카드 목록이 읽어 오는 plots 한 행. */
+export interface PlotCardRow {
   id: string;
   name: string | null;
-  address_ko: string;
+  /** ⚠️ `numeric` 이라 supabase-js 는 **문자열로** 준다. 아래에서 숫자로 바꾼다. */
   area_m2: number | string | null;
+  region_ko: string;
   crops: string[];
   sowing_date: string | null;
   sowing_unknown: boolean;
   created_at: string;
 }
 
-/**
- * DB 행 → 관리 목록 모양.
- *
- * `area_m2` 가 `numeric` 이라 supabase-js 는 **문자열로** 준다. 정밀도를 잃지
- * 않으려는 드라이버의 의도지만, 화면에서 `.toFixed()` 를 부르는 순간 터진다.
- * 경계인 여기서 한 번만 숫자로 바꾼다.
- */
-export function toPlotManageItem(row: PlotManageRow): PlotManageItem {
+export function toPlotCard(row: PlotCardRow): PlotCard {
+  // `numeric` 을 문자열로 받는 건 정밀도를 지키려는 드라이버의 의도지만, 화면에서
+  // `.toLocaleString()` 을 부르는 순간 문자열이라 엉뚱하게 나온다. 경계인 여기서
+  // 한 번만 숫자로 바꾼다.
   const area = row.area_m2 === null ? Number.NaN : Number(row.area_m2);
 
   return {
     id: row.id,
     nameKo: row.name,
-    addressKo: row.address_ko,
+    regionKo: row.region_ko,
     areaM2: Number.isFinite(area) ? area : null,
-    crops: row.crops,
+    // 마커는 대표 작물 하나만 쓰지만, 카드는 심은 작물을 전부 보여준다.
+    cropIds: row.crops,
     sowingDate: row.sowing_date,
     sowingUnknown: row.sowing_unknown,
     createdAt: row.created_at,
