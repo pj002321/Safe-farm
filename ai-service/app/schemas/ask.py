@@ -24,6 +24,9 @@ class AskMatch(BaseModel):
 class AskResponse(BaseModel):
     """`/ask` 가 돌려주는 모양. matches 가 비어 있으면 관련 조각을 하나도 못 찾은 것이다
     (V1-78). message 는 가드레일(V1-77)처럼 검색 대신 고정 문구로 답할 때만 채워진다.
+    answer 는 matches 를 근거로 LLM 이 생성한 답변 — matches 가 비어 있으면 근거가
+    없으므로 채우지 않는다.
     """
     matches: list[AskMatch]
+    answer: str | None = None
     message: str | None = None
