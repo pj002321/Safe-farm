@@ -34,7 +34,7 @@ import type { PlotRegistrationInput } from "./domain/registerPlot";
 
 // 유사 join 쿼리
 const CULTIVATION_SELECT =
-  "cultivations(variant_id, sowing_date, crop_variants(crops(name)))";
+  "cultivations(id, variant_id, sowing_date, status, crop_variants(crops(name)))";
 
 export interface PlotGrid {
   gridX: number;

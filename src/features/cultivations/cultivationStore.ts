@@ -54,3 +54,28 @@ export async function insertCultivations(
 
   if (error) throw new Error(error.message);
 }
+
+/**
+ * 재배 한 건을 수확 완료로 바꾼다.
+ *
+ * `GROWING` 인 것만 겨냥한다(`.eq("status", "GROWING")`) — 이미 수확했거나
+ * 실패 처리된 건을 다시 누르면 0건으로 끝나 아래에서 던진다. 소유자 확인은
+ * `insertCultivations` 와 같은 이유로 여기서 하지 않는다: RLS 가
+ * `plots.user_id` 를 타고 막는다.
+ */
+export async function markHarvested(cultivationId: string): Promise<void> {
+  const supabase = await getSupabaseServer();
+
+  const { data, error } = await supabase
+    .from("cultivations")
+    .update({
+      status: "HARVESTED",
+      harvested_at: new Date().toISOString().slice(0, 10),
+    })
+    .eq("id", cultivationId)
+    .eq("status", "GROWING")
+    .select("id");
+
+  if (error) throw new Error(error.message);
+  if (!data || data.length === 0) throw new Error("CULTIVATION_NOT_FOUND");
+}

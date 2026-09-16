@@ -8,7 +8,13 @@ const CARD: PlotCard = {
   regionKo: "전라북도 임실군 오수면",
   areaM2: 661.16,
   cultivations: [
-    { variantId: 3, cropNameKo: "배추", sowingDate: "2026-08-25" },
+    {
+      id: "c3",
+      variantId: 3,
+      cropNameKo: "배추",
+      sowingDate: "2026-08-25",
+      status: "GROWING",
+    },
   ],
   sowingDate: "2026-08-25",
   createdAt: "2026-08-25T00:00:00Z",
@@ -34,9 +40,27 @@ describe("toCropKo", () => {
 
   it("여럿이면 외 n 으로 접는다", () => {
     const cultivations = [
-      { variantId: 3, cropNameKo: "배추", sowingDate: null },
-      { variantId: 4, cropNameKo: "무", sowingDate: null },
-      { variantId: 5, cropNameKo: "상추", sowingDate: null },
+      {
+        id: "c3",
+        variantId: 3,
+        cropNameKo: "배추",
+        sowingDate: null,
+        status: "GROWING" as const,
+      },
+      {
+        id: "c4",
+        variantId: 4,
+        cropNameKo: "무",
+        sowingDate: null,
+        status: "GROWING" as const,
+      },
+      {
+        id: "c5",
+        variantId: 5,
+        cropNameKo: "상추",
+        sowingDate: null,
+        status: "GROWING" as const,
+      },
     ];
     expect(toCropKo({ cultivations })).toBe("배추 외 2");
   });
