@@ -26,7 +26,7 @@ def read_csv(path: Path) -> list[dict]:
     행 목록. 파일 순서를 지킨다. 키는 헤더 이름이고, 빈 칸의 값은 None
 
     # examples
-        read_csv(Path("data/dummy/crops.csv"))
+        read_csv(Path("data/master/crops.csv"))
         -> [{'name': '상추', 'base_temp': '4.0', 'difficulty': None}, ...]
     """
     # utf-8-sig 인 이유: BOM(EF BB BF)이 붙은 CSV 를 utf-8 로 읽으면 첫 헤더가

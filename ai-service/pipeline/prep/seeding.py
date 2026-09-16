@@ -27,7 +27,7 @@ def read_all(directory: Path, tables: Sequence[str]) -> dict[str, list[dict]]:
     파일이 없으면 FileNotFoundError 라 빈 값은 나오지 않는다
 
     # examples
-        read_all(Path("data/dummy"), ["crops", "grids"])
+        read_all(Path("data/master"), ["crops", "grids"])
         -> {'crops': [...], 'grids': [...]}
     """
     return {name: read_csv(directory / f"{name}.csv") for name in tables}
