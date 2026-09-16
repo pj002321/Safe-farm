@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { FieldIcon, MapPinIcon, SproutIcon } from "@/components/icons";
-import { CROPS } from "@/components/plot/CropChips";
+import { cropById } from "@/components/plot/crops";
+import { plotFaceClass } from "@/components/plot/plotFace";
 import { Badge } from "@/components/shared/Badge";
 import { ButtonLink } from "@/components/shared/Button";
 import { CROP_CALENDARS, stageAt } from "@/features/growth/domain/growthStage";
@@ -50,7 +51,8 @@ interface PlotStripProps {
  */
 function describe(plot: PlotCard, now: Date) {
   const cropId = plot.cropIds[0];
-  const cropKo = CROPS.find((c) => c.id === cropId)?.labelKo ?? "작물 미지정";
+  const crop = cropById(cropId);
+  const cropKo = crop?.labelKo ?? "작물 미지정";
 
   const days = daysSincePlanting(plot, now);
   const calendar = cropId ? CROP_CALENDARS[cropId] : undefined;
@@ -58,6 +60,9 @@ function describe(plot: PlotCard, now: Date) {
   const stage = calendar && days !== null ? stageAt(calendar, days) : null;
 
   return {
+    // 카드의 얼굴은 **작물에서** 온다. 임의로 주면 배추밭에 다른 작물 그림이
+    // 붙어 화면이 거짓말을 한다. 모르는 작물이면 중립적인 밭 아이콘.
+    icon: crop?.icon ?? <FieldIcon />,
     cropKo,
     // 심은 날을 모르면 D+n 이 거짓말이 된다. 그대로 비운다.
     dayLabelKo: days === null ? "심은 날 미상" : `D+${days}`,
@@ -88,8 +93,12 @@ export function PlotStrip({ plots }: PlotStripProps) {
             key={plot.id}
           >
             <div className="flex items-start justify-between gap-2">
-              <span className="grid size-8 shrink-0 place-items-center rounded-full bg-accent-subtle text-accent">
-                <FieldIcon />
+              {/* 그림은 작물에서, 색은 밭 id 에서. 같은 밭은 언제나 같은 얼굴이라
+                  목록에서 눈이 자리를 기억한다. */}
+              <span
+                className={`grid size-8 shrink-0 place-items-center rounded-full ${plotFaceClass(plot.id)}`}
+              >
+                {view.icon}
               </span>
               {view.stageKo && (
                 <Badge size="sm" tone="telemetry">
