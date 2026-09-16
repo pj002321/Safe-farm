@@ -6,15 +6,22 @@ import {
   progressRatio,
   recentDailyGdd,
 } from "./gdd";
-import { GDD_BEFORE_WINDOW, RECENT_DAYS, SOWING_DATE } from "./observations";
 
 /** 배추 기준온도. CABBAGE 상수가 생기기 전까지 여기서만 쓴다. */
 const BASE = 5;
-/** 배추 상한온도. 확정표 §B-2 (호냉성 25℃). */
-const UPPER = 25;
-/** 농진청 가을배추 작형 기준 총 적산온도와 결구 시작점. */
-const TOTAL_TARGET = 797;
-const HEADING_TARGET = 505;
+
+/**
+ * 계산 자체를 확인할 최소 픽스처.
+ *
+ * 리포트 데모 데이터(`features/report/domain/observations.ts`)를 끌어오지 않는다.
+ * shared 가 features 를 import 하면 의존 방향이 뒤집히고, 데모 숫자가 바뀔 때마다
+ * 이 파일이 같이 깨진다. 그쪽 숫자의 회귀는 `reportNumbers.test.ts` 가 지킨다.
+ */
+const ROWS = [
+  { date: "09-11", tempMinC: 14.0, tempMaxC: 27.1 },
+  { date: "09-12", tempMinC: 15.1, tempMaxC: 28.1 },
+  { date: "09-13", tempMinC: 15.0, tempMaxC: 28.8 },
+] as const;
 
 describe("dailyGdd", () => {
   it("평균기온에서 기준온도를 뺀다", () => {
@@ -49,44 +56,17 @@ describe("dailyGdd", () => {
   });
 });
 
-/**
- * 계산이 **조용히** 달라지는 것이 가장 큰 사고다. 이 리포트는 "근거를 그대로
- * 댈 수 있다"가 유일한 자산이라, 값이 바뀌면 왜 바뀌었는지가 여기 남아야 한다.
- *
- * ⚠ 2026-09-16 에 값이 바뀌었다. 출처 PoC(safefarm_nafarmer_demo.html)는
- *   상한 없는 식으로 찍은 숫자였다. 배추 upper_temp 25℃ 를 넣으면서 바뀌었다.
- *
- *     248.9 → 226.3   14일 누적
- *     384.2 → 361.6   창 이전(135.3) 포함
- *      15.8 →  14.6   최근 7일 평균
- *      48.2% → 45.4%  진행률 ·  결구까지 8일 → 10일
- *
- *   14일 중 **13일이 25℃를 넘었다.** 그만큼이 "열은 쌓였는데 배추는 안 자란"
- *   구간이었다. PoC 숫자가 그 몫까지 세고 있었던 것이다.
- */
-describe("지금 식으로 계산한 리포트 숫자", () => {
-  const observed = accumulateGdd(RECENT_DAYS, SOWING_DATE, BASE, UPPER);
-  const total = Math.round((observed + GDD_BEFORE_WINDOW) * 10) / 10;
-  const perDay = recentDailyGdd(RECENT_DAYS, 7, BASE, UPPER);
-
-  it("관측 14일 누적 = 226.3 GDD", () => {
-    expect(observed).toBe(226.3);
+describe("accumulateGdd", () => {
+  it("기준일 이전 관측은 빼고 더한다", () => {
+    // 09-12 부터. 09-11 이 섞이면 심기도 전의 열을 세는 꼴이 된다.
+    const from12 = accumulateGdd(ROWS, "09-12", BASE);
+    const all = accumulateGdd(ROWS, "09-11", BASE);
+    expect(from12).toBe(33.5);
+    expect(all).toBeGreaterThan(from12);
   });
 
-  it("창 이전 누적을 더하면 361.6 GDD", () => {
-    expect(total).toBe(361.6);
-  });
-
-  it("최근 7일 평균 = 14.6 GDD/일", () => {
-    expect(perDay).toBe(14.6);
-  });
-
-  it("결구(505)까지 약 10일", () => {
-    expect(daysToTarget(total, perDay, HEADING_TARGET)).toBe(10);
-  });
-
-  it("전체 진행률 45.4%", () => {
-    expect(progressRatio(total, TOTAL_TARGET) * 100).toBeCloseTo(45.4, 1);
+  it("기준일이 관측 뒤면 0 — 아직 심지 않은 밭", () => {
+    expect(accumulateGdd(ROWS, "09-20", BASE)).toBe(0);
   });
 });
 
@@ -120,7 +100,6 @@ describe("recentDailyGdd", () => {
   });
 
   it("요청한 일수보다 데이터가 적으면 있는 만큼만 평균낸다", () => {
-    const rows = RECENT_DAYS.slice(-3);
-    expect(recentDailyGdd(rows, 7, BASE)).toBe(recentDailyGdd(rows, 3, BASE));
+    expect(recentDailyGdd(ROWS, 7, BASE)).toBe(recentDailyGdd(ROWS, 3, BASE));
   });
 });

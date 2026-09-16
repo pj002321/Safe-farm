@@ -23,8 +23,13 @@ interface GrowthGaugeProps {
   value: number;
   /** 목표 적산온도 */
   target: number;
-  /** 0~1. 다음 단계가 시작되는 지점. */
-  markRatio: number;
+  /**
+   * 0~1. 다음 단계가 시작되는 지점.
+   *
+   * **null 이면 눈금을 그리지 않는다.** 단계를 모르는데 0 을 넘기면 눈금이 왼쪽
+   * 끝에 붙어, 사용자는 "다음 단계가 이미 지났다"로 읽는다.
+   */
+  markRatio: number | null;
   markLabelKo: string;
   /** 왼쪽 아래 보조 문구 */
   footStartKo: string;
@@ -76,17 +81,21 @@ export function GrowthGauge({
       </div>
 
       {/* 눈금은 막대 바깥에 둔다 — overflow-hidden 안에 넣으면 잘린다. */}
-      <div className="relative h-0">
-        <span
-          aria-hidden="true"
-          className="-top-[14px] absolute h-3.5 w-0.5 rounded-full bg-earth"
-          style={{ left: `${markRatio * 100}%` }}
-        />
-      </div>
+      {markRatio !== null && (
+        <div className="relative h-0">
+          <span
+            aria-hidden="true"
+            className="-top-[14px] absolute h-3.5 w-0.5 rounded-full bg-earth"
+            style={{ left: `${markRatio * 100}%` }}
+          />
+        </div>
+      )}
 
       <div className="mt-2 flex justify-between font-mono text-[0.7rem] text-fg-subtle">
         <span>{footStartKo}</span>
-        <span className="text-earth">{markLabelKo}</span>
+        {markRatio !== null && (
+          <span className="text-earth">{markLabelKo}</span>
+        )}
         <span>{footEndKo}</span>
       </div>
     </div>

@@ -9,7 +9,7 @@ import {
   REPORT,
 } from "@/features/report/domain/reportData";
 import type { RevealId } from "@/features/report/domain/timeline";
-import { GrowthGauge } from "./GrowthGauge";
+import { GrowthGauge } from "@/components/shared/GrowthGauge";
 import { SprayWindows } from "./SprayWindows";
 import { TypeOut } from "./TypeOut";
 
