@@ -52,3 +52,7 @@ class Cultivation(FarmBase):
 
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
     updated_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+    # soft delete(20260917000000_soft_delete.sql). 차 있으면 지운 재배다 —
+    # 조회는 전부 `deleted_at is null` 을 걸어야 한다
+    deleted_at = Column(DateTime(timezone=True))
