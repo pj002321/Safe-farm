@@ -3,9 +3,9 @@ import "server-only";
 import { getSupabaseServer } from "@/shared/supabase/server";
 import type { PlotEditInput } from "./domain/editPlot";
 import {
-  type PlotManageItem,
+  type PlotCard,
   type PlotMapPoint,
-  toPlotManageItem,
+  toPlotCard,
   toPlotMapPoint,
 } from "./domain/plotSummary";
 import type { PlotRegistrationInput } from "./domain/registerPlot";
@@ -111,30 +111,28 @@ export async function getPlot(
   return data ? toPlotMapPoint(data) : null;
 }
 
-/** 관리 목록이 읽는 컬럼. 지도용 select 와 달라 따로 적는다. */
-const MANAGE_COLUMNS =
-  "id, name, address_ko, area_m2, crops, sowing_date, sowing_unknown, created_at";
+/** 카드 목록이 읽는 컬럼. 지도용 select 와 달라 따로 적는다. */
+const CARD_COLUMNS =
+  "id, name, area_m2, region_ko, crops, sowing_date, sowing_unknown, created_at";
 
 /**
- * 마이페이지 텃밭 관리 목록.
+ * 등록한 텃밭을 카드 목록으로.
  *
- * `listPlots` 를 재사용하지 않는다 — 그쪽은 지도 전용 모양이라 주소·면적을 일부러
- * 버렸다(`PlotManageItem` 주석 참고). 최근에 등록한 밭이 위로 온다.
+ * 홈의 요약 줄과 텃밭 관리 화면이 **같은 함수**를 쓴다. 두 벌로 두면 한쪽만
+ * 고쳐져 같은 밭이 화면마다 다르게 보인다. 최근에 등록한 밭이 위로 온다.
  */
-export async function listManagedPlots(
-  userId: string,
-): Promise<PlotManageItem[]> {
+export async function listPlotCards(userId: string): Promise<PlotCard[]> {
   const supabase = await getSupabaseServer();
 
   const { data, error } = await supabase
     .from("plots")
-    .select(MANAGE_COLUMNS)
+    .select(CARD_COLUMNS)
     // RLS 가 자기 밭만 보이게 하지만 where 를 명시한다(countPlots 와 같은 방침).
     .eq("user_id", userId)
     .order("created_at", { ascending: false });
 
   if (error) throw new Error(error.message);
-  return (data ?? []).map(toPlotManageItem);
+  return (data ?? []).map(toPlotCard);
 }
 
 /**
