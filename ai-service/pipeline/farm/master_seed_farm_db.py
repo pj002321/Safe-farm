@@ -211,7 +211,9 @@ def load(db, data: dict[str, list[dict]]) -> dict[str, int]:
             "op": r["op"],
             "threshold_c": r["threshold_c"],
             "duration_days": r["duration_days"],
-            "severity": r["severity"],
+            # stage_name 과 같은 까닭으로 빈 문자열로 맞춘다 — UNIQUE 에 들어가는
+            # 칸이라 NULL 로 두면 등급 없는 규칙이 적재할 때마다 새 행이 된다
+            "severity": r["severity"] or "",
         }
         for r in data["crop_disaster_rules"]
     ]

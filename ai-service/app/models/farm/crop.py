@@ -8,7 +8,7 @@ crop_variants 감자 안의 품종별    gdd_target, days_to_harvest
 crop_stages   그 품종의 단계별    water_need_mm, fertilize_needed, guide_text
 """
 
-from sqlalchemy import Column, Identity, Integer, Numeric, Text
+from sqlalchemy import CheckConstraint, Column, Identity, Integer, Numeric, Text
 
 from app.models.farm.base import FarmBase
 
@@ -35,5 +35,24 @@ class Crop(FarmBase):
     # (gdd.ts 의 dailyGdd 가 upperTempC 없으면 Standard 로 간다)
     upper_temp = Column(Numeric(4, 1))
 
-    # 재배 난이도. 초보자에게 작물을 추천할 때 거르는 기준
+    # 재배 난이도. 초보자에게 작물을 추천할 때 거르는 기준이다.
+    #
+    # ⚠ **값은 '강 · 중 · 약' 이다.** 쉬움·보통·어려움이 아니다.
+    #   농진청 『텃밭 디자인』 9쪽의 **관리 노력** 등급을 그대로 담는다 —
+    #   강(거의 매일 관리) · 중(주 1~2회) · 약(월 1~2회).
+    #
+    #   난이도(쉬움·보통·어려움) 자료는 1차 출처가 없다. 보도자료에 그 표현이
+    #   있지만 원본 43쪽 어디에도 없고, 이 관리 노력 표를 풀어 쓴 것이다.
+    #   칸 이름은 팀이 쓰는 말을 따랐고 값은 원본을 지켰다.
+    #
+    #   화면에 '어려움' 대신 '자주 돌봐야 해요' 로 쓰면 값과 문구가 어긋나지 않는다.
+    #
+    # 정본은 safefarm-crop-data 의 작물_확정표.md §H.
+    # nullable 인 이유: §H 에 줄이 없는 작물이 들어올 수 있다
     difficulty = Column(Text)
+
+    __table_args__ = (
+        # 확정표를 사람이 고치다 '중하' 같은 딴 척도가 섞여 들어오는 것을 막는다.
+        # spec.py 도 같은 검사를 하지만, CSV 를 손으로 고치면 그걸 안 거친다
+        CheckConstraint("difficulty in ('강','중','약')", name="ck_crops_difficulty"),
+    )
