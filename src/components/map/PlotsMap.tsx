@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { SproutIcon } from "@/components/icons";
-import { CROPS } from "@/components/plot/CropChips";
+import { cropById } from "@/components/plot/crops";
 import { CROP_CALENDARS, stageAt } from "@/features/growth/domain/growthStage";
 import {
   daysSincePlanting,
@@ -37,7 +37,7 @@ interface PlotsMapProps {
 
 /** 작물 아이콘 + D+n 을 그리고, 클릭하면 요약 카드를 여닫는 실제 DOM 마커를 만든다. */
 function markerElement(point: PlotMapPoint, now: Date): HTMLDivElement {
-  const crop = CROPS.find((c) => c.id === point.cropId);
+  const crop = cropById(point.cropId);
   const days = daysSincePlanting(point, now);
 
   const el = document.createElement("div");
@@ -55,14 +55,14 @@ function markerElement(point: PlotMapPoint, now: Date): HTMLDivElement {
 
 /** 마커를 눌렀을 때 뜨는 밭 이름·작물·생육단계·다음 작업 요약 카드. */
 function summaryHtml(point: PlotMapPoint, now: Date): string {
-  const crop = CROPS.find((c) => c.id === point.cropId);
+  const crop = cropById(point.cropId);
   const calendar = point.cropId ? CROP_CALENDARS[point.cropId] : undefined;
   const days = daysSincePlanting(point, now);
   // persimmon 처럼 CROP_CALENDARS 에 없는 작물은 생육단계를 못 낸다 — 별도 계산식이 필요하다(과수).
   const stage = calendar && days !== null ? stageAt(calendar, days) : null;
 
   return renderToStaticMarkup(
-    <div className="max-w-56 rounded-lg border border-border bg-surface px-3 py-2 text-sm shadow-md">
+    <div className="max-w-56 whitespace-normal rounded-lg border border-border bg-surface px-3 py-2 text-sm shadow-md">
       <p className="font-medium text-fg">{point.nameKo ?? "이름 없는 밭"}</p>
       <p className="text-fg-muted">{crop?.labelKo ?? "작물 미정"}</p>
       {stage && (
@@ -114,7 +114,7 @@ export function PlotsMap({ points }: PlotsMapProps) {
       const summary = new sdk.maps.CustomOverlay({
         position,
         content: summaryHtml(point, now),
-        yAnchor: 2.2,
+        yAnchor: 1.3,
       });
 
       const marker = markerElement(point, now);
@@ -122,6 +122,7 @@ export function PlotsMap({ points }: PlotsMapProps) {
       marker.addEventListener("click", () => {
         isOpen = !isOpen;
         summary.setMap(isOpen ? map : null);
+        if (isOpen) map.panTo(position);
       });
 
       new sdk.maps.CustomOverlay({
@@ -136,7 +137,7 @@ export function PlotsMap({ points }: PlotsMapProps) {
     <>
       <KakaoSdkScript onStatusChange={setStatus} />
       <div
-        className="h-[24rem] w-full overflow-hidden rounded-lg border border-border sm:h-[28rem]"
+        className="h-[24rem] w-full rounded-lg border border-border sm:h-[28rem]"
         id={FARM_MAP_CONTAINER_ID}
       />
     </>

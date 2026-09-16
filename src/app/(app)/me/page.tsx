@@ -1,16 +1,15 @@
 import type { Metadata } from "next";
 import { SignOutButton } from "@/components/auth/SignOutButton";
 import { AccountPanel } from "@/components/me/AccountPanel";
-import { MeDeleteDock } from "@/components/me/MeDeleteDock";
 import { MeRail } from "@/components/me/MeRail";
 import { ME_SECTIONS } from "@/components/me/meSections";
-import { PlotManagePanel } from "@/components/me/PlotManagePanel";
 import { RecordPanel } from "@/components/me/RecordPanel";
 import { SAMPLE_RECORDS } from "@/components/me/sampleRecords";
+import { ButtonLink } from "@/components/shared/Button";
 import { SectionHeading } from "@/components/shared/SectionHeading";
-import { listManagedPlots } from "@/features/plots/plotStore";
+import { countPlots } from "@/features/plots/plotStore";
 import { requireConsentOrRedirect } from "@/shared/auth/consentGate";
-import { removePlot, updateAccount, updatePlot } from "./actions";
+import { updateAccount } from "./actions";
 
 /**
  * ---------------------------------------------
@@ -51,7 +50,7 @@ export default async function Page({
   const { profile } = await requireConsentOrRedirect();
   const params = await searchParams;
 
-  const plots = await listManagedPlots(profile.id);
+  const plotCount = await countPlots(profile.id);
   const year = parseYear(params.year);
 
   const savedKey = Array.isArray(params.saved) ? params.saved[0] : params.saved;
@@ -107,17 +106,24 @@ export default async function Page({
               />
             </Section>
 
+            {/*
+              텃밭 관리 화면은 `/plots` 하나뿐이다. 여기에도 목록을 그리면 같은
+              기능이 두 벌이 되고, 한쪽만 고쳐지는 순간 같은 밭이 화면마다 다르게
+              보인다. 여기서는 개수만 말하고 그쪽으로 보낸다.
+            */}
             <Section section={ME_SECTIONS[1]}>
-              {errorKey === "plot" && message && (
-                <p className="mb-3 text-sm text-unsuitable" role="alert">
-                  {message}
+              <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-border bg-surface px-5 py-4">
+                <p className="text-fg-muted text-sm">
+                  등록한 텃밭{" "}
+                  <span className="font-mono text-fg tabular-nums">
+                    {plotCount}
+                  </span>
+                  개
                 </p>
-              )}
-              <PlotManagePanel
-                onDelete={removePlot}
-                onSave={updatePlot}
-                plots={plots}
-              />
+                <ButtonLink href="/plots" size="sm" variant="secondary">
+                  텃밭 관리
+                </ButtonLink>
+              </div>
             </Section>
 
             <Section section={ME_SECTIONS[2]}>
@@ -125,9 +131,6 @@ export default async function Page({
             </Section>
           </div>
         </div>
-
-        {/* 폼 바깥이다 — fixed 기준 블록 함정과 제출 값 오염을 함께 피한다. */}
-        <MeDeleteDock />
       </div>
     </main>
   );
