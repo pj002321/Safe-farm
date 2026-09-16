@@ -14,6 +14,7 @@ from app.models.farm.ask_history import AskHistory
 from app.models.farm.auth_user import auth_users
 from app.models.farm.base import FarmBase
 from app.models.farm.crop import Crop
+from app.models.farm.crop_disaster_rule import CropDisasterRule
 from app.models.farm.crop_stage import CropStage
 from app.models.farm.crop_variant import CropVariant
 from app.models.farm.grid import Grid
@@ -27,6 +28,7 @@ from app.models.farm.weather_obs_daily import WeatherObsDaily
 __all__ = [
     "AskHistory",
     "Crop",
+    "CropDisasterRule",
     "CropStage",
     "CropVariant",
     "FarmBase",

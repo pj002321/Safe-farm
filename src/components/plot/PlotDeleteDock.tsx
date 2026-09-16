@@ -2,11 +2,11 @@ import Link from "next/link";
 import { AlertTriangleIcon } from "@/components/icons";
 import { APP_TABS } from "@/components/shared/appTabs";
 import { PAGE_DOCK_ID } from "@/components/shared/pageDock";
-import { ARM_NONE_ID, DELETE_FORM_ID } from "./meSections";
+import { ARM_NONE_ID, DELETE_FORM_ID } from "./plotManage";
 
 /**
  * ---------------------------------------------
- * [Feature]: 마이페이지 하단 독 (탭 ↔ 삭제 확인 변신)
+ * [Feature]: 텃밭 관리 하단 독 (탭 ↔ 삭제 확인 변신)
  *
  * [Description]
  * - 평소에는 앱 탭 다섯이고, **텃밭 삭제를 겨냥하는 순간 확인 바로 바뀐다.**
@@ -18,7 +18,7 @@ import { ARM_NONE_ID, DELETE_FORM_ID } from "./meSections";
  *   붙여 두는 것이 이 독의 존재 이유다 — 목록이 길면 겨냥한 줄이 스크롤 밖으로
  *   나가는데, 그때도 취소와 삭제가 손 닿는 곳에 남는다.
  *
- * - ⚠️ **"몇 개"가 아니라 "하나라도"만 본다.** `group-has-[.arm:checked]/me:` 로
+ * - ⚠️ **"몇 개"가 아니라 "하나라도"만 본다.** `group-has-[.arm:checked]/plots:` 로
  *   클래스를 보는 이유가 이것이다. id 로 보면 밭마다 클래스가 달라져 Tailwind 가
  *   정적으로 읽지 못한다(조용히 사라진다). 밭이 몇 개든 클래스는 한 벌이다.
  * - ⚠️ **독은 밭 이름을 말할 수 없다.** 선택자로 이름을 꺼낼 방법이 없기 때문이다.
@@ -32,23 +32,23 @@ import { ARM_NONE_ID, DELETE_FORM_ID } from "./meSections";
  * [Usage]
  * ```tsx
  * // group/me 안, 폼 바깥에서 한 번만
- * <MeDeleteDock />
+ * <PlotDeleteDock />
  * ```
  * ---------------------------------------------
  */
 
 /** 겨냥됐을 때 사라지는 층(앱 탭). */
 const HIDE_ON_ARM =
-  "group-has-[.arm:checked]/me:invisible group-has-[.arm:checked]/me:translate-y-1 group-has-[.arm:checked]/me:opacity-0";
+  "group-has-[.arm:checked]/plots:invisible group-has-[.arm:checked]/plots:translate-y-1 group-has-[.arm:checked]/plots:opacity-0";
 
 /** 겨냥돼야 나타나는 층(확인 바). */
 const SHOW_ON_ARM =
-  "-translate-y-1 invisible opacity-0 group-has-[.arm:checked]/me:visible group-has-[.arm:checked]/me:translate-y-0 group-has-[.arm:checked]/me:opacity-100";
+  "-translate-y-1 invisible opacity-0 group-has-[.arm:checked]/plots:visible group-has-[.arm:checked]/plots:translate-y-0 group-has-[.arm:checked]/plots:opacity-100";
 
 const LAYER =
   "[grid-area:1/1] flex items-center transition-[opacity,transform,visibility] duration-300 ease-out-expo";
 
-export function MeDeleteDock() {
+export function PlotDeleteDock() {
   return (
     <div
       className="fixed inset-x-0 bottom-0 z-40 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] lg:hidden"
@@ -58,7 +58,7 @@ export function MeDeleteDock() {
         {/* 위험 상태를 색면 하나로도 말한다. 변신했다는 것이 멀리서 읽힌다. */}
         <span
           aria-hidden="true"
-          className="absolute inset-x-0 top-0 block h-0.5 bg-transparent transition-colors duration-300 ease-out-expo group-has-[.arm:checked]/me:bg-unsuitable"
+          className="absolute inset-x-0 top-0 block h-0.5 bg-transparent transition-colors duration-300 ease-out-expo group-has-[.arm:checked]/plots:bg-unsuitable"
         />
 
         <div className="grid p-2">

@@ -84,43 +84,6 @@ export const SAMPLE_TASKS: readonly TaskCardData[] = [
   },
 ];
 
-export interface PlotSummary {
-  id: string;
-  nameKo: string;
-  cropKo: string;
-  /** 파종 후 며칠째. */
-  dayLabelKo: string;
-  stageKo: string;
-  areaKo: string;
-}
-
-export const SAMPLE_PLOTS: readonly PlotSummary[] = [
-  {
-    id: "cabbage",
-    nameKo: "낙동강변 배추밭",
-    cropKo: "가을배추",
-    dayLabelKo: "D+20",
-    stageKo: "생육기",
-    areaKo: "약 200평",
-  },
-  {
-    id: "persimmon",
-    nameKo: "뒷밭 감나무",
-    cropKo: "단감",
-    dayLabelKo: "D+142",
-    stageKo: "성숙기",
-    areaKo: "약 90평",
-  },
-  {
-    id: "rice",
-    nameKo: "아랫논",
-    cropKo: "벼",
-    dayLabelKo: "D+118",
-    stageKo: "등숙기",
-    areaKo: "약 600평",
-  },
-];
-
 export interface DayForecast {
   labelKo: string;
   dateKo: string;

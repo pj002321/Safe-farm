@@ -2,8 +2,10 @@ import { FieldIcon, SproutIcon } from "@/components/icons";
 import { Button } from "@/components/shared/Button";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { Field } from "@/components/shared/Field";
-import type { PlotManageItem } from "@/features/plots/domain/plotSummary";
-import { ARM_CLASS, ARM_NONE_ID, DELETE_FORM_ID } from "./meSections";
+import type { PlotCard } from "@/features/plots/domain/plotSummary";
+import { cropById } from "./crops";
+import { plotFaceClass } from "./plotFace";
+import { ARM_CLASS, ARM_NONE_ID, DELETE_FORM_ID } from "./plotManage";
 
 /**
  * ---------------------------------------------
@@ -41,8 +43,8 @@ import { ARM_CLASS, ARM_NONE_ID, DELETE_FORM_ID } from "./meSections";
  * ---------------------------------------------
  */
 
-interface PlotManagePanelProps {
-  plots: readonly PlotManageItem[];
+interface PlotManageListProps {
+  plots: readonly PlotCard[];
   onSave: (formData: FormData) => Promise<void>;
   onDelete: (formData: FormData) => Promise<void>;
 }
@@ -54,11 +56,11 @@ function areaKo(areaM2: number | null): string {
   return `${Math.round(areaM2).toLocaleString("ko-KR")}㎡ · 약 ${pyeong.toLocaleString("ko-KR")}평`;
 }
 
-export function PlotManagePanel({
+export function PlotManageList({
   plots,
   onSave,
   onDelete,
-}: PlotManagePanelProps) {
+}: PlotManageListProps) {
   if (plots.length === 0) {
     return (
       <EmptyState
@@ -112,12 +114,12 @@ function PlotRow({
   plot,
   onSave,
 }: {
-  plot: PlotManageItem;
+  plot: PlotCard;
   onSave: (formData: FormData) => Promise<void>;
 }) {
   const armId = `arm-${plot.id}`;
   const cropsKo =
-    plot.crops.length > 0 ? plot.crops.join(" · ") : "작물 미지정";
+    plot.cropIds.length > 0 ? plot.cropIds.join(" · ") : "작물 미지정";
 
   return (
     // 겨냥되면 줄 전체가 물든다. `has-[:checked]` 는 이 <li> 가 겨냥 라디오의
@@ -134,18 +136,20 @@ function PlotRow({
       />
 
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-5 py-4">
+        {/* 홈 카드와 **같은 얼굴**이다. 화면이 달라도 같은 밭은 같게 보여야
+            "아까 그 밭"이라는 것이 한눈에 붙는다. */}
         <span
           aria-hidden="true"
-          className="grid size-9 shrink-0 place-items-center rounded-full bg-accent-subtle text-accent"
+          className={`grid size-9 shrink-0 place-items-center rounded-full ${plotFaceClass(plot.id)}`}
         >
-          <FieldIcon />
+          {cropById(plot.cropIds[0])?.icon ?? <FieldIcon />}
         </span>
         <div className="min-w-0 flex-1">
           <p className="truncate font-medium text-fg">
             {plot.nameKo ?? "이름 없는 밭"}
           </p>
           <p className="mt-0.5 truncate text-fg-muted text-xs">
-            {plot.addressKo}
+            {plot.regionKo}
           </p>
         </div>
         <p className="font-mono text-fg-muted text-xs tabular-nums">

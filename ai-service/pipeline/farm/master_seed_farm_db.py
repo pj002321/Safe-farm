@@ -20,7 +20,7 @@ from sqlalchemy import select
 
 from app.core.config import DATA_DIR
 from app.core.db import get_engine, new_session
-from app.models.farm import Crop, CropStage, CropVariant, Grid, Station
+from app.models.farm import Crop, CropDisasterRule, CropStage, CropVariant, Grid, Station
 from pipeline.prep import check
 from pipeline.prep.seeding import count_rows, read_all, report, require_tables
 from pipeline.prep.table import key_dict, upsert
@@ -35,6 +35,7 @@ TABLES = [
     "crops",
     "crop_variants",
     "crop_stages",
+    "crop_disaster_rules",
     "grids",
     "stations",
 ]
@@ -44,6 +45,8 @@ UNIQUE = [
     ("crops", ["name"]),
     ("crop_variants", ["crop_name", "maturity_type"]),
     ("crop_stages", ["crop_name", "maturity_type", "stage_order"]),
+    # DB 의 UNIQUE 는 crop_id 로 걸리지만 CSV 는 자연키라 crop_name 으로 본다
+    ("crop_disaster_rules", ["crop_name", "rule_kind", "stage_name", "severity"]),
     ("grids", ["nx", "ny"]),
     ("stations", ["station_code"]),
 ]
@@ -58,6 +61,9 @@ REFS = [
         "crop_variants",
         ["crop_name", "maturity_type"],
     ),
+    # 단계별 규칙이지만 부모는 crops 다 — stage_name 이 crop_stages 와 글자가
+    # 다를 수 있어서(원문 표기 그대로) variant 를 거치지 않는다
+    ("crop_disaster_rules", ["crop_name"], "crops", ["name"]),
 ]
 
 
@@ -192,6 +198,28 @@ def load(db, data: dict[str, list[dict]]) -> dict[str, int]:
         for r in data["crop_stages"]
     ]
     done["crop_stages"] = upsert(db, CropStage, rows, ["variant_id", "stage_order"])
+
+    rows = [
+        {
+            "crop_id": crop_id[r["crop_name"]],
+            "hazard": r["hazard"],
+            "rule_kind": r["rule_kind"],
+            # read_csv 가 빈 칸을 None 으로 주는데, UNIQUE 가 NULL 끼리를 서로 다르게
+            # 보아 같은 규칙이 몇 번이고 다시 들어간다. 빈 문자열로 맞춘다
+            "stage_name": r["stage_name"] or "",
+            "metric": r["metric"],
+            "op": r["op"],
+            "threshold_c": r["threshold_c"],
+            "duration_days": r["duration_days"],
+            # stage_name 과 같은 까닭으로 빈 문자열로 맞춘다 — UNIQUE 에 들어가는
+            # 칸이라 NULL 로 두면 등급 없는 규칙이 적재할 때마다 새 행이 된다
+            "severity": r["severity"] or "",
+        }
+        for r in data["crop_disaster_rules"]
+    ]
+    done["crop_disaster_rules"] = upsert(
+        db, CropDisasterRule, rows, ["crop_id", "rule_kind", "stage_name", "severity"]
+    )
 
     # 컬럼이 nx, ny 뿐이라 갱신할 것이 없다. 충돌하면 건너뛴다
     done["grids"] = upsert(db, Grid, data["grids"], ["nx", "ny"])
