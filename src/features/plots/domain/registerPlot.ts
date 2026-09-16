@@ -77,11 +77,11 @@ export function parsePlotRegistration(
   };
 }
 
-function str(value: FormDataEntryValue | null): string {
+export function str(value: FormDataEntryValue | null): string {
   return typeof value === "string" ? value.trim() : "";
 }
 
-function toAreaM2(formData: FormData): number | null {
+export function toAreaM2(formData: FormData): number | null {
   const raw = Number(formData.get("areaM2"));
   if (!Number.isFinite(raw) || raw <= 0) return null;
   return formData.get("areaUnit") === "m2" ? raw : raw * PYEONG_TO_M2;

@@ -123,3 +123,44 @@ export async function recordConsent(input: {
 
   await recordConsentForUser(supabase, user.id, input);
 }
+
+/**
+ * 사용자가 직접 고칠 수 있는 값만 고친다.
+ *
+ * **화이트리스트를 여기서 다시 적지 않는다** — `USER_EDITABLE_PROFILE_FIELDS` 가
+ * 이미 목록이고, 이 함수의 매개변수 타입이 그 목록에서 파생된다. 두 벌로 두면
+ * 컬럼을 하나 늘렸을 때 한쪽만 고쳐진다.
+ *
+ * 방어선이 둘이다. RLS 의 `profiles_update_own` 이 `role`·`email` 을 with-check
+ * 동일성으로 잠그고, 이 함수가 **보낼 컬럼 자체를 제한한다.** 둘 중 하나만 믿지
+ * 않는다 — 정책이 한 번 헐거워지면 그 순간 권한 상승 경로가 되기 때문이다.
+ * (`signup_provider` 는 RLS 가 막지 않지만 여기서 보내지 않으므로 바뀌지 않는다.)
+ *
+ * `created_at`·동의 시각은 애초에 보내지 않고, 동의 시각은 DB 트리거
+ * `keep_consent_timestamps` 가 한 번 더 막는다.
+ */
+export async function updateProfile(input: {
+  fullName: string | null;
+  marketingOptIn: boolean;
+}): Promise<void> {
+  const supabase = await getSupabaseServer();
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("UNAUTHENTICATED");
+
+  const { data, error } = await supabase
+    .from(PROFILES_TABLE)
+    .update({
+      full_name: input.fullName,
+      marketing_opt_in: input.marketingOptIn,
+    })
+    .eq("id", user.id)
+    // 갱신된 행을 돌려받아 **정말 써졌는지** 확인한다. update 는 조건에 맞는 행이
+    // 없어도 오류가 아니라 0건으로 조용히 끝난다.
+    .select("id");
+
+  if (error) throw error;
+  if (!data || data.length === 0) throw new Error("PROFILE_NOT_FOUND");
+}

@@ -51,18 +51,27 @@ describe("public/theme-init.js 와의 계약", () => {
     expect(source).toContain(`"${THEME_STORAGE_KEY}"`);
   });
 
-  it("기본값이 DEFAULT_THEME 과 같다", () => {
-    // 스크립트는 `stored === "light" ? "light" : "dark"` 로 기본값을 정한다.
-    // 즉 명시적 "light" 만 라이트고 나머지는 전부 기본값이다.
-    // 이 테스트가 깨지면 theme.ts 와 스크립트의 기본값이 어긋난 것이다.
-    expect(DEFAULT_THEME).toBe("dark");
-    expect(source).toContain(`: "${DEFAULT_THEME}"`);
+  it("저장된 선택이 없으면 OS 설정을 따른다", () => {
+    // 기본값이 "system" 이라는 말은, 스크립트가 고정 색을 칠하는 대신
+    // prefers-color-scheme 을 읽어야 한다는 뜻이다. 이 테스트가 깨지면
+    // theme.ts 의 계약과 스크립트의 실제 동작이 어긋난 것이다.
+    expect(DEFAULT_THEME).toBe("system");
+    expect(source).toContain("prefers-color-scheme: dark");
+    // 명시적으로 고른 값은 그대로 쓴다(둘 다 인정해야 토글이 양방향으로 산다).
     expect(source).toContain('stored === "light"');
+    expect(source).toContain('stored === "dark"');
+  });
+
+  it("고른 값이 없을 때만 OS 변경을 구독한다", () => {
+    // 토글로 고른 값을 OS 설정이 덮으면 안 된다. 구독이 조건 없이 걸려 있으면
+    // 사용자가 라이트를 골라도 OS 가 다크로 바뀌는 순간 화면이 뒤집힌다.
+    expect(source).toMatch(/if\s*\(!chosen/);
+    expect(source).toMatch(/addEventListener\(\s*"change"/);
   });
 
   it("속성을 항상 세팅하고 절대 지우지 않는다", () => {
-    // 속성을 지우면 globals.css 의 prefers-color-scheme 이 이겨서
-    // 라이트 OS 사용자가 기본 다크를 못 본다. 기본값 다크가 무력화되는 경로다.
+    // 속성을 지우고 CSS 의 prefers-color-scheme 에 맡기면 토글이 현재 테마를
+    // 읽을 곳이 없어진다. 부트스트랩이 OS 선호를 값으로 박아 두는 편이 낫다.
     // 포매터가 인자를 줄바꿈할 수 있으므로 정규식으로 본다 — 계약은
     // "data-theme 을 세팅한다"이지 "한 줄로 쓴다"가 아니다.
     expect(source).toMatch(/setAttribute\(\s*"data-theme"/);

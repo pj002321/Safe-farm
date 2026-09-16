@@ -53,6 +53,11 @@ declare namespace kakao.maps {
     constructor(container: HTMLElement, options: MapOptions);
     setCenter(position: LatLng): void;
     getCenter(): LatLng;
+    /** 지도를 부드럽게 이동시킨다(점프하지 않는다). */
+    panTo(position: LatLng): void;
+    setLevel(level: number): void;
+    /** 여러 좌표가 전부 보이도록 중심·배율을 한 번에 맞춘다. */
+    setBounds(bounds: LatLngBounds): void;
     /**
      * 컨테이너 크기가 바뀐 뒤 부른다. `display:none` 상태에서 만들어진 지도는
      * 크기를 0으로 잡아 회색 네모로 남는데, 보이게 한 직후 이걸 부르면 살아난다.
@@ -60,7 +65,74 @@ declare namespace kakao.maps {
     relayout(): void;
   }
 
+  /** 여러 좌표를 담아 "이걸 다 보여줘"라고 지도에 넘기는 상자. */
+  class LatLngBounds {
+    extend(latlng: LatLng): void;
+  }
+
+  interface MarkerOptions {
+    position: LatLng;
+    /** 생략하면 지도에 붙지 않은 마커가 만들어진다. 나중에 setMap 으로 붙인다. */
+    map?: Map;
+  }
+
+  class Marker {
+    constructor(options: MarkerOptions);
+    setPosition(position: LatLng): void;
+    /** null 을 넘기면 지도에서 뗀다. 마커를 지우는 공식 방법이다. */
+    setMap(map: Map | null): void;
+  }
+
+  interface CustomOverlayOptions {
+    position: LatLng;
+    /** 마커 대신 얹을 실제 HTML 문자열. React 조각을 문자열로 굳혀 넘긴다. */
+    content: string | HTMLElement;
+    map?: Map;
+    /** 좌표가 콘텐츠의 어디에 오는지. 1이면 바닥 중앙(핀처럼). 기본은 중앙(0.5). */
+    yAnchor?: number;
+  }
+
+  /** 이미지 한 장뿐인 Marker 와 달리 원하는 HTML(아이콘+글자)을 그대로 지도 위에 얹는다. */
+  class CustomOverlay {
+    constructor(options: CustomOverlayOptions);
+    setMap(map: Map | null): void;
+  }
+
+  interface PolygonOptions {
+    /** 경계선 좌표. 시군구처럼 구멍 없는 단순 다각형 하나만 쓴다(외곽 고리 하나). */
+    path: LatLng[] | LatLng[][];
+    strokeWeight?: number;
+    strokeColor?: string;
+    strokeOpacity?: number;
+    fillColor?: string;
+    fillOpacity?: number;
+  }
+
+  /** 시군구 색칠 지도(choropleth)처럼 면을 채우는 다각형. */
+  class Polygon {
+    constructor(options: PolygonOptions);
+    setMap(map: Map | null): void;
+    setOptions(options: Partial<PolygonOptions>): void;
+  }
+
+  /** 지도 클릭 시 핸들러가 받는 값. 우리가 쓰는 건 좌표 하나뿐이다. */
+  interface MouseEvent {
+    latLng: LatLng;
+  }
+
   namespace event {
+    /** 지도 클릭. `mouseEvent.latLng` 에 클릭 지점이 담긴다. */
+    function addListener(
+      target: Map,
+      type: "click",
+      handler: (mouseEvent: MouseEvent) => void,
+    ): void;
+    /** 폴리곤 클릭. Map 과 별개로 도형 자체에도 리스너를 붙일 수 있다(SDK 공통 동작). */
+    function addListener(
+      target: Polygon,
+      type: "click",
+      handler: (mouseEvent: MouseEvent) => void,
+    ): void;
     /**
      * 지도의 이동·확대가 **멎었을 때** 한 번 온다. 드래그하는 내내 오지 않으므로
      * 중앙 핀 방식이 이걸 듣는다 — 손을 뗀 순간에만 좌표를 갱신하면 된다.

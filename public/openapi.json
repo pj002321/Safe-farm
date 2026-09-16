@@ -1,0 +1,54 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Safe Farm AI API",
+    "version": "1.0.0"
+  },
+  "paths": {
+    "/api/plots": {
+      "get": {
+        "summary": "로그인한 사용자의 텃밭 목록 조회",
+        "responses": {
+          "200": {
+            "description": "텃밭 목록",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "plots": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": { "type": "string" },
+                          "nameKo": { "type": "string", "nullable": true },
+                          "latitude": { "type": "number" },
+                          "longitude": { "type": "number" },
+                          "cropId": { "type": "string", "nullable": true },
+                          "sowingDate": { "type": "string", "nullable": true },
+                          "sowingUnknown": { "type": "boolean" }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "description": "로그인하지 않음" }
+        }
+      }
+    },
+    "/api/ai/status": {
+      "get": {
+        "summary": "ai-service 연결 상태 확인 (관리자 전용)",
+        "responses": {
+          "200": { "description": "정상 또는 미설정" },
+          "404": { "description": "관리자가 아님" },
+          "502": { "description": "ai-service 장애" }
+        }
+      }
+    }
+  }
+}

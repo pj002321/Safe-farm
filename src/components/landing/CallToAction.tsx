@@ -82,7 +82,7 @@ export function CallToAction() {
             */}
             <div className="[&>a:hover]:border-telemetry [&>a:hover]:text-telemetry [&>a]:border-space-border [&>a]:text-space-fg">
               <ButtonLink href="#today" size="lg" variant="outline">
-                오늘 상주 다시 보기
+                오늘의 값 다시 보기
               </ButtonLink>
             </div>
           </div>

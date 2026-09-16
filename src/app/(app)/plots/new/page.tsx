@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { CropCards } from "@/components/plot/CropCards";
 import { PlotInfoFields } from "@/components/plot/PlotInfoFields";
 import { PlotLocationStep } from "@/components/plot/PlotLocationStep";
+import { PlotWizardDock } from "@/components/plot/PlotWizardDock";
 import { SowingFields } from "@/components/plot/SowingFields";
 import { WizardNav } from "@/components/plot/WizardNav";
 import { SectionHeading } from "@/components/shared/SectionHeading";
@@ -53,6 +54,9 @@ export const metadata: Metadata = {
  * `rail` 과 `panel` 이 **완성된 클래스 문자열**이어야 한다(위 주석 참고).
  * 조각을 이어 붙이면 Tailwind 가 못 읽고 그 단계만 조용히 안 보이게 된다.
  */
+/** 독의 제출 버튼이 폼 밖에서 `form` 속성으로 이 폼을 가리킨다. 지우면 제출이 죽는다. */
+const FORM_ID = "plot-form";
+
 const STEPS = [
   {
     no: 1,
@@ -119,87 +123,108 @@ export default function PlotRegisterPage() {
         </Link>
       </div>
 
-      <form action={registerPlot} className="group/wizard mt-6">
-        {/* 화면 상태를 들고 있는 라디오 넷. sr-only 지만 실제 포커스를 받으므로
-            **키보드 화살표로 단계가 넘어간다.** group-has 로 읽으므로 위치는
-            자유롭지만, 폼 안에 있어야 한다(group 이 폼이다). */}
-        {STEPS.map((step) => (
-          <input
-            aria-label={`${step.no}단계 ${step.labelKo}`}
-            className="sr-only"
-            defaultChecked={step.no === 1}
-            id={step.id}
-            key={step.id}
-            name="__step"
-            type="radio"
-          />
-        ))}
+      {/*
+        ⚠️ `group/wizard` 가 **폼이 아니라 이 div** 에 있다. 하단 독이 폼 **밖**에
+           있어야 하는데(PlotWizardDock 주석 참고: fixed + backdrop-filter 함정),
+           `group-has` 는 조상에서 내려다보는 방식이라 폼과 독을 **함께** 감싸는
+           것이 그룹을 들어야 양쪽이 같은 라디오를 본다.
+        ⚠️ 폼의 `id` 는 장식이 아니다. 독의 제출 버튼이 폼 밖에 있어서 `form`
+           속성으로 잇는데, 이게 없으면 버튼의 form 소유자가 null 이라
+           **아무 일도 없이 조용히 제출이 안 된다.**
+      */}
+      <div className="group/wizard mt-6">
+        <form action={registerPlot} className="flex flex-col" id={FORM_ID}>
+          {/* 화면 상태를 들고 있는 라디오 넷. sr-only 지만 실제 포커스를 받으므로
+              **키보드 화살표로 단계가 넘어간다.** `group-has` 로 읽으므로 위치는
+              자유롭지만 **그룹 div 안**에 있어야 한다(그룹은 이 폼의 부모다).
+              fieldset 으로 묶는 이유: 라디오 넷이 이름 없이 흩어져 있으면
+              스크린리더가 "4개 중 2번째"만 읽고 무엇의 4개인지 말하지 않는다. */}
+          <fieldset>
+            <legend className="sr-only">등록 단계</legend>
+            {STEPS.map((step) => (
+              <input
+                aria-label={`${step.no}단계 ${step.labelKo}`}
+                className="sr-only"
+                defaultChecked={step.no === 1}
+                id={step.id}
+                key={step.id}
+                name="__step"
+                type="radio"
+              />
+            ))}
+          </fieldset>
 
-        {/* ── 단계 레일 ─────────────────────────────
+          {/* ── 단계 레일 ─────────────────────────────
             각 칸이 `<label>` 이라 눌러서 바로 그 단계로 간다. */}
-        <ol className="flex flex-wrap items-center gap-x-2 gap-y-3">
-          {STEPS.map((step, index) => (
-            <li className="flex items-center gap-2" key={step.id}>
-              <label
-                className={`inline-flex cursor-pointer items-center gap-2 rounded-full border border-border px-3.5 py-1.5 font-medium text-fg-subtle text-sm transition-colors duration-200 ease-out-expo hover:border-accent hover:text-fg ${step.rail}`}
-                htmlFor={step.id}
-              >
-                <span
-                  aria-hidden="true"
-                  className={`grid size-5 place-items-center rounded-full bg-surface-2 font-mono text-[0.7rem] text-fg-subtle ${step.railNo}`}
+          {/*
+          좁은 화면에서는 숨긴다. 실측하면 알약 하나가 109.83px 라 375·390 양쪽에서
+          **2줄로 깨지고**(80px 의 군더더기), 터치 타깃이 34px 로 같은 화면 독 탭
+          (53.84px)의 63% 였다. 그 폭에서 단계 이동은 독이 맡고, 지금 어느 단계인지는
+          독의 "2/4 텃밭 정보" 와 패널 제목이 말한다. 건너뛰기는 넓은 화면 전용이다.
+        */}
+          <ol className="hidden flex-wrap items-center gap-x-2 gap-y-3 lg:flex">
+            {STEPS.map((step, index) => (
+              <li className="flex items-center gap-2" key={step.id}>
+                <label
+                  className={`inline-flex cursor-pointer items-center gap-2 rounded-full border border-border px-3.5 py-1.5 font-medium text-fg-subtle text-sm transition-colors duration-200 ease-out-expo hover:border-accent hover:text-fg ${step.rail}`}
+                  htmlFor={step.id}
                 >
-                  {step.no}
-                </span>
-                {step.labelKo}
-              </label>
-              {index < STEPS.length - 1 && (
-                <span
-                  aria-hidden="true"
-                  className="hidden h-px w-5 bg-border-strong sm:block"
-                />
-              )}
-            </li>
-          ))}
-        </ol>
+                  <span
+                    aria-hidden="true"
+                    className={`grid size-5 place-items-center rounded-full bg-surface-2 font-mono text-[0.7rem] text-fg-subtle ${step.railNo}`}
+                  >
+                    {step.no}
+                  </span>
+                  {step.labelKo}
+                </label>
+                {index < STEPS.length - 1 && (
+                  <span
+                    aria-hidden="true"
+                    className="hidden h-px w-5 bg-border-strong sm:block"
+                  />
+                )}
+              </li>
+            ))}
+          </ol>
 
-        {/* ── 단계별 패널 ───────────────────────────
-            보이지 않는 패널의 입력도 DOM 에 남아 있으므로, 단계를 오가도
-            먼저 적은 값이 사라지지 않고 제출에 함께 실린다.
+          {/* ── 단계별 패널 ───────────────────────────
+              보이지 않는 패널의 입력도 DOM 에 남아 있으므로, 단계를 오가도
+              먼저 적은 값이 사라지지 않고 제출에 함께 실린다.
 
-            :경고: **높이를 고정한다.** 단계마다 내용 높이가 달라서 아래 이동 버튼이
-            매번 다른 자리로 튀었다. 다음을 연달아 누르는 화면에서 버튼이 움직이면
-            누르려던 자리에 다른 것이 와 있게 된다. 짧은 단계에서는 아래가 비지만,
-            버튼이 제자리에 있는 편이 낫다.
+              높이 하한이 **넓은 화면에만** 남아 있다. 단계마다 내용 높이가 달라서
+              아래 이동 버튼이 튀는 문제 때문인데, 좁은 화면에서는 그 버튼이 이제
+              `fixed` 독으로 빠져나가 **흐름에 없으므로** 하한을 걸 이유가 없다.
+              예전에는 세 벌(38/40/32rem)을 손으로 재서 맞췄고, 그 탓에 1단계에서
+              빈 칸 127px 를 스크롤해야 했다(375x812 실측). 그게 사라졌다.
 
-            값은 실측한 **가장 높은 단계**에 맞췄다(눈대중하지 말고 다시 잴 것).
-            단이 셋인 이유는 높이를 바꾸는 지점이 둘이기 때문이다:
-              ~sm   지도 19rem, 세로 배치 → 3단계 605px  → 38rem
-              sm~lg 지도 22rem, 아직 세로 → 1단계 630px  → 40rem
-              lg~   지도 22rem, 가로 배치 → 1단계 509px  → 32rem
-            처음에 `lg` 한 곳만 나눴다가 **태블릿 폭에서 22px 어긋났다** —
-            지도가 sm 에서 커지는데 그리드는 lg 에서야 갈라지기 때문이다. */}
-        <div className="mt-7 min-h-[38rem] sm:min-h-[40rem] lg:min-h-[32rem]">
-          {STEPS.map((step) => (
-            <StepPanel key={step.id} step={step}>
-              {step.no === 1 && <PlotLocationStep />}
-              {step.no === 2 && <PlotInfoFields />}
-              {step.no === 3 && (
-                <fieldset>
-                  <legend className="sr-only">재배할 작물</legend>
-                  <CropCards defaultSelected={["cabbage"]} />
-                </fieldset>
-              )}
-              {step.no === 4 && (
-                <div className="max-w-md">
-                  <SowingFields />
-                </div>
-              )}
-            </StepPanel>
-          ))}
-        </div>
+              lg 값만 남긴다: 지도 22rem · 가로 배치에서 가장 높은 1단계가 509px →
+              32rem. 패널 내용을 바꾸면 **눈대중하지 말고 다시 잴 것.** */}
+          <div className="mt-7 lg:min-h-[32rem]">
+            {STEPS.map((step) => (
+              <StepPanel key={step.id} step={step}>
+                {step.no === 1 && <PlotLocationStep />}
+                {step.no === 2 && <PlotInfoFields />}
+                {step.no === 3 && (
+                  <fieldset>
+                    <legend className="sr-only">재배할 작물</legend>
+                    <CropCards defaultSelected={["cabbage"]} />
+                  </fieldset>
+                )}
+                {step.no === 4 && (
+                  <div className="max-w-md">
+                    <SowingFields />
+                  </div>
+                )}
+              </StepPanel>
+            ))}
+          </div>
 
-        <WizardNav />
-      </form>
+          <WizardNav />
+        </form>
+
+        {/* 폼 **밖**이다. 이유는 PlotWizardDock 주석 참고(fixed 기준 블록 + 제출 값). */}
+        <PlotWizardDock formId={FORM_ID} />
+      </div>
     </main>
   );
 }

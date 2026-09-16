@@ -17,6 +17,19 @@ from app.models.document import Document
 
 
 def main() -> None:
+    """
+    # summary
+    조각이 하나도 없는 문서를 잘라 chunks 에 넣는다. load_data 가 바뀐 문서의 조각을
+    지워두므로 이 조건 하나로 새 문서와 바뀐 문서가 모두 잡힌다. 벡터는 만들지 않는다.
+    --rebuild 면 전부 지우고 다시 자른다 — 청킹 규칙을 바꿨을 때 쓴다.
+
+    # params
+    없다. 옵션은 argv 에서 읽는다 — --rebuild<br>
+
+    # examples
+        py -3.12 -m pipeline.doc.chunk
+        py -3.12 -m pipeline.doc.chunk --rebuild
+    """
     rebuild = "--rebuild" in sys.argv  # 청킹 규칙을 바꿨을 때
     db = new_session()
     try:
