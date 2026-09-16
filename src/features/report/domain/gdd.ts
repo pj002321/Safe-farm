@@ -27,13 +27,39 @@ import type { DailyObservation } from "./observations";
  *
  * 작물은 기준온도 아래에서 자라지 않을 뿐 **거꾸로 줄지 않는다.** 음수를 그대로
  * 더하면 추운 날이 지난 성장을 되돌리는 꼴이 되어 누적값이 실제보다 작아진다.
+ *
+ *     상한 없음 — Standard
+ *         GDD = max((Tmax + Tmin)/2 − Tbase, 0)
+ *
+ *     상한 있음 — Modified (Tmax·Tmin 개별 클램프)
+ *         Tmax' = min(Tmax, Tupper) · Tmin' = max(Tmin, Tbase)
+ *         GDD   = max((Tmax' + Tmin')/2 − Tbase, 0)
+ *
+ * 왜 각각 자르나: 평균을 먼저 내고 자르면 **더운 낮의 정체가 서늘한 밤에 가려진다.**
+ * Tmax 36℃ 여도 Tmin 이 낮으면 평균이 상한 아래라 안 잘린다.
+ * 옥수수 폭염일(36/24)에 이 식은 17, 평균을 먼저 자르면 20 — 한 철이면 15% 갈린다.
+ *
+ * ⚠ Tmin 클램프는 **상한이 있을 때만** 건다. 상한 없이 Tmin 만 자르면 일반 GDD 와
+ * 어긋난다 (상추 18/2 → 6 이 아니라 7). 두 줄을 분기 밖으로 빼지 말 것.
+ *
+ * ⚠ **역산과 운영은 반드시 같은 식이어야 한다.** gdd_target 은 이 식으로 역산해
+ * 만든 값이다. 여기만 바꾸면 목표값이 통째로 어긋난다.
+ * 근거는 safefarm-crop-data 의 GDD_작업인계.md §1-1 · §1-1a (두 번 뒤집힌 판단이다).
  */
 export function dailyGdd(
   tempMaxC: number,
   tempMinC: number,
   baseTempC: number,
+  upperTempC?: number,
 ): number {
-  return Math.max(0, (tempMaxC + tempMinC) / 2 - baseTempC);
+  if (upperTempC === undefined) {
+    return Math.max(0, (tempMaxC + tempMinC) / 2 - baseTempC);
+  }
+  return Math.max(
+    0,
+    (Math.min(tempMaxC, upperTempC) + Math.max(tempMinC, baseTempC)) / 2 -
+      baseTempC,
+  );
 }
 
 /** 기준일 이후 관측만 골라 적산온도를 더한다. */
