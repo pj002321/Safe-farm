@@ -13,7 +13,8 @@ from sqlalchemy.orm import Session
 from app.core.db import get_db
 from app.core.security import require_service_token
 from app.knowledge.retriever import retrieve_with_score
-from app.schemas.ask import AskRequest,AskMatch,AskResponse
+from app.schemas.ask import AskRequest,AskMatch,AskResponse,NO_MATCH_DISTANCE
+from app.domain.guardrail import BLOCKED_MESSAGE, is_blocked_topic
 
 router = APIRouter(prefix="/v1", tags=["ask"])
 
@@ -27,10 +28,14 @@ def ask(request: AskRequest, db: Session = Depends(get_db)) -> AskResponse:
     이력, 사용량 제한)가 필요해지면 그때 요청 모양에 사용자 식별자를 추가한다.
     """
     matches = retrieve_with_score(db, request.question)
+    if is_blocked_topic(request.question):
+        return AskResponse(matches=[], message=BLOCKED_MESSAGE)
+
     matches = retrieve_with_score(db, request.question)
     return AskResponse(
         matches=[
             AskMatch(body=chunk.body, distance=dist, source_title=chunk.document.title)
             for chunk, dist in matches
+            if dist < NO_MATCH_DISTANCE
         ]
     )

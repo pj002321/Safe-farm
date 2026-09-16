@@ -5,6 +5,8 @@
 """
 
 from pydantic import BaseModel, Field
+NO_MATCH_DISTANCE = 1.0
+
 class AskRequest(BaseModel):
     """사용자 질문 한 건. FastAPI가 이 모양대로 body JSON을 검증한다.
 
@@ -21,6 +23,7 @@ class AskMatch(BaseModel):
 
 class AskResponse(BaseModel):
     """`/ask` 가 돌려주는 모양. matches 가 비어 있으면 관련 조각을 하나도 못 찾은 것이다
-    (V1-78 에서 이 경우를 "근거 부족" 응답으로 따로 처리한다).
+    (V1-78). message 는 가드레일(V1-77)처럼 검색 대신 고정 문구로 답할 때만 채워진다.
     """
     matches: list[AskMatch]
+    message: str | None = None
