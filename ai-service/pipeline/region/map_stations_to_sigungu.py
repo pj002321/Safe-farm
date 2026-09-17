@@ -16,7 +16,7 @@ import json
 import math
 
 from app.core.config import DATA_DIR
-from pipeline.region.asos import asos_only
+from pipeline.region.asos import with_normals
 
 SIGUNGU_PATH = DATA_DIR / "ref" / "sigungu.geojson"
 STATIONS_PATH = DATA_DIR / "stations.csv"
@@ -71,10 +71,11 @@ def main() -> None:
     with STATIONS_PATH.open(encoding="utf-8-sig") as f:
         stations = list(csv.DictReader(f))
 
-    # 평년값을 기대할 수 있는 관측소(ASOS)만 후보로 쓴다. AWS 를 후보에 넣으면 평년값이
-    # 없어 지도가 회색이 되고, 반대로 normals 테이블로 이 판단을 하면 순환이 된다 —
-    # 둘 다 겪은 뒤의 자리다. 이유 전체는 pipeline/region/asos.py 의 docstring.
-    candidates = asos_only(stations)
+    # 평년값을 실제로 받아 둔 관측소만 후보로 쓴다. AWS 를 넣으면 평년값이 없어 지도가
+    # 회색이 되고, normals 테이블로 이 판단을 하면 순환이 되며, ASOS 번호만 보면
+    # 공항·레이더·신설 관측소가 섞여 250개 중 76개가 회색이 된다 — 셋 다 겪은 뒤의 자리다.
+    # 이유 전체는 pipeline/region/asos.py 의 docstring.
+    candidates = with_normals(stations)
 
     rows = []
     unmatched = []
