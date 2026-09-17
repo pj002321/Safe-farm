@@ -8,7 +8,14 @@ import {
 } from "@/components/icons";
 import { Badge } from "@/components/shared/Badge";
 import type { SigunguWarnFeatureCollection } from "@/shared/aiService/client";
-import { GDD_DEFAULT_COLOR, type Layer } from "./sigunguLayers";
+import {
+  GDD_DEFAULT_COLOR,
+  type GddProperties,
+  type Layer,
+  type RainProperties,
+  type WarnProperties,
+  type WindProperties,
+} from "./sigunguLayers";
 
 /**
  * ---------------------------------------------
@@ -45,19 +52,28 @@ const WARN_KIND_ICONS: Record<string, typeof AlertTriangleIcon> = {
   폭염: SunIcon,
 };
 
-/** 전국에서 지금 발효 중인 특보 종류를 중복 없이 뽑아 아이콘 배지로 보여준다. */
-export function WarningIconRow({
-  data,
-}: {
-  data: SigunguWarnFeatureCollection;
-}) {
+/**
+ * 지금 발효 중인 특보 종류를 중복 없이 뽑아 배지로 보여준다.
+ *
+ * **하나도 없을 때 아무것도 안 그리면 안 된다.** 특보 레이어는 특보가 없는 날
+ * 폴리곤을 한 장도 칠하지 않아서, 말이 없으면 빈 지도가 고장으로 읽힌다.
+ * 대부분의 날이 그 상태다.
+ */
+export function WarnSummary({ data }: { data: SigunguWarnFeatureCollection }) {
   const kinds: string[] = [];
   for (const feature of data.features) {
     for (const kind of feature.properties.warnings ?? []) {
       if (!kinds.includes(kind)) kinds.push(kind);
     }
   }
-  if (kinds.length === 0) return null;
+
+  if (kinds.length === 0) {
+    return (
+      <p className="text-fg-muted text-sm">
+        현재 발효 중인 기상특보가 없습니다.
+      </p>
+    );
+  }
 
   return (
     <div className="flex flex-wrap gap-2">
@@ -145,3 +161,37 @@ export function Legend({
  * 들고 있고 값은 매 렌더에 현재 데이터에서 찾으므로, 폴링으로 값이 새로 와도
  * 카드가 옛 숫자를 계속 보여주는 일이 없다.
  */
+export function RegionInfo({
+  layer,
+  properties,
+}: {
+  layer: Layer;
+  properties: GddProperties | WarnProperties | RainProperties | WindProperties;
+}) {
+  return (
+    <div className="rounded-lg border border-border bg-surface px-4 py-3 text-sm">
+      <p className="font-medium text-fg">{properties.name}</p>
+      <p className="mt-0.5 text-fg-muted">{detail(layer, properties)}</p>
+    </div>
+  );
+}
+
+/** 레이어마다 다른 한 줄. 값이 없으면 "데이터 없음"으로 정직하게 적는다. */
+function detail(
+  layer: Layer,
+  p: GddProperties | WarnProperties | RainProperties | WindProperties,
+): string {
+  if (layer === "gdd") {
+    const g = p as GddProperties;
+    if (g.deviationPct == null) return g.label ?? "데이터 없음";
+    const sign = g.deviationPct > 0 ? "+" : "";
+    return `누적 ${g.actualGdd}GDD (평년 ${g.normalGdd}GDD, ${sign}${g.deviationPct}%) · ${g.label}`;
+  }
+  if (layer === "warn") return (p as WarnProperties).label ?? "특보 없음";
+  if (layer === "rain") {
+    const r = p as RainProperties;
+    return `${r.rainMm != null ? `${r.rainMm}mm` : "데이터 없음"} · ${r.label}`;
+  }
+  const w = p as WindProperties;
+  return `${w.windMax != null ? `${w.windMax}m/s` : "데이터 없음"} · ${w.label}`;
+}

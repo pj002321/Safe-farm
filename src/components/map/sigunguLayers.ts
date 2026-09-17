@@ -19,6 +19,15 @@ import type {
 export const MAP_CONTAINER_ID = "sigungu-layer-map-canvas";
 export const NATIONWIDE_LEVEL = 13;
 export const NATIONWIDE_CENTER = { lat: 36.4, lng: 127.9 };
+/**
+ * 밭을 중심에 두고 열 때의 배율(축척 약 2km).
+ *
+ * 예전 텃밭 지도는 4(약 100m)였다. 필지는 잘 보이지만 시군구 폴리곤이
+ * 화면을 통째로 덮어 색이 무슨 뜻인지 알 수 없다. 반대로 전국(13)에서는
+ * 시군구 250개 중 227개가 44px 미만이라 손가락으로 고를 수 없다.
+ * 8은 마을과 내 밭 핀이 같이 보이면서 옆 시군구 색까지 들어오는 지점이다.
+ */
+export const PLOT_VIEW_LEVEL = 8;
 export const GDD_DEFAULT_COLOR = "#d1d5db";
 export const POLL_MS = 5 * 60 * 1000;
 
