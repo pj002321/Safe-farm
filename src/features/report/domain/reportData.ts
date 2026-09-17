@@ -47,6 +47,12 @@ import {
 export const CABBAGE = {
   nameKo: "가을배추",
   baseTempC: 5,
+  /**
+   * 이 위로는 발육이 더 빨라지지 않는다. 확정표 §B-2 (호냉성 25℃).
+   *
+   * ⚠ 한계온도(그 위로 죽는다)와 다른 개념이다. 배추는 국내표도 논문도 25 다.
+   */
+  upperTempC: 25,
   /** 씨뿌림 → 수확까지 총 적산온도 */
   totalTargetGdd: 797,
   /** 속이 차기 시작하는 지점 */
@@ -87,9 +93,19 @@ export const PERSIMMON_FIT = [
 
 export type FitVerdict = (typeof PERSIMMON_FIT)[number]["verdict"];
 
-const observedGdd = accumulateGdd(RECENT_DAYS, SOWING_DATE, CABBAGE.baseTempC);
+const observedGdd = accumulateGdd(
+  RECENT_DAYS,
+  SOWING_DATE,
+  CABBAGE.baseTempC,
+  CABBAGE.upperTempC,
+);
 const accumulatedGdd = roundTenth(observedGdd + GDD_BEFORE_WINDOW);
-const perDayGdd = recentDailyGdd(RECENT_DAYS, 7, CABBAGE.baseTempC);
+const perDayGdd = recentDailyGdd(
+  RECENT_DAYS,
+  7,
+  CABBAGE.baseTempC,
+  CABBAGE.upperTempC,
+);
 const rain7Mm = rainfallOverLastDays(RECENT_DAYS, 7);
 const today = RECENT_DAYS[RECENT_DAYS.length - 1];
 

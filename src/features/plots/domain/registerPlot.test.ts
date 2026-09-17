@@ -37,10 +37,6 @@ describe("parsePlotRegistration", () => {
         addressKo: "경북 상주시 낙양동",
         regionCode: "4725011000",
         regionKo: "경상북도 상주시 낙양동",
-        crops: [],
-        sowingDate: null,
-        sowingUnknown: false,
-        sowingMethod: "seed",
       },
     });
   });
@@ -57,12 +53,5 @@ describe("parsePlotRegistration", () => {
       formData({ ...VALID_LOCATION, areaM2: "50", areaUnit: "m2" }),
     );
     expect(result.ok && result.value.areaM2).toBe(50);
-  });
-
-  it("작물은 여러 개 담긴다", () => {
-    const result = parsePlotRegistration(
-      formData({ ...VALID_LOCATION, crops: ["cabbage", "rice"] }),
-    );
-    expect(result.ok && result.value.crops).toEqual(["cabbage", "rice"]);
   });
 });

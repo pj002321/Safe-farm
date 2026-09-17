@@ -104,6 +104,17 @@ export function HailIcon(props: IconProps) {
   );
 }
 
+/** 중심으로 말려드는 두 갈래 나선 (태풍) */
+export function TyphoonIcon(props: IconProps) {
+  return (
+    <svg {...ICON_BASE} aria-hidden="true" {...props}>
+      <path d="M12 3a9 9 0 1 0-8.5 12" />
+      <path d="M12 21a9 9 0 1 0 8.5-12" />
+      <circle cx="12" cy="12" fill="currentColor" r="1.1" stroke="none" />
+    </svg>
+  );
+}
+
 /** 물결선 아래로 잠긴 집 (침수·홍수) */
 export function FloodIcon(props: IconProps) {
   return (

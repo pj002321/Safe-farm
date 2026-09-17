@@ -316,3 +316,23 @@ export function overallProgress(calendar: CropCalendar, day: number): number {
   if (calendar.totalDays <= 0) return 1;
   return clamp01(day / calendar.totalDays);
 }
+
+/**
+ * 한글 작물 이름으로 달력을 찾는다.
+ *
+ * 화면이 들고 있는 작물 식별자가 슬러그(`"cabbage"`)에서 작물 마스터의 이름
+ * (`crops.name` = `"배추"`)으로 바뀌었다. 여기 키는 아직 슬러그라 이름으로 훑는다
+ * — 달력이 다섯 개뿐이라 선형 탐색으로 충분하다.
+ *
+ * 마스터에는 있는데 달력이 없는 작물(고추·감자·무·오이·가지, 그리고 "방울토마토"
+ * 는 여기 "토마토" 와 이름이 달라 안 걸린다)은 `undefined` 다. 호출자는 생육
+ * 단계를 생략한다.
+ */
+export function findCalendarByNameKo(
+  nameKo: string | null,
+): CropCalendar | undefined {
+  if (!nameKo) return undefined;
+  return Object.values(CROP_CALENDARS).find(
+    (calendar) => calendar.nameKo === nameKo,
+  );
+}
