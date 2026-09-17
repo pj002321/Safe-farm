@@ -103,6 +103,9 @@ export interface PlotDetail {
   areaM2: number | null;
   latitude: number;
   longitude: number;
+  /** 기상청 격자. 예보(`weather_forecast`)가 이걸로 갈린다. 좌표로 다시 계산하지 않는다. */
+  gridX: number;
+  gridY: number;
 }
 
 /** 상세가 읽어 오는 plots 한 행. */
@@ -114,6 +117,8 @@ export interface PlotDetailRow {
   area_m2: number | string | null;
   latitude: number | string;
   longitude: number | string;
+  grid_x: number;
+  grid_y: number;
 }
 
 export function toPlotDetail(row: PlotDetailRow): PlotDetail {
@@ -126,6 +131,8 @@ export function toPlotDetail(row: PlotDetailRow): PlotDetail {
     areaM2: Number.isFinite(area) ? area : null,
     latitude: Number(row.latitude),
     longitude: Number(row.longitude),
+    gridX: row.grid_x,
+    gridY: row.grid_y,
   };
 }
 

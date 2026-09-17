@@ -152,7 +152,7 @@ export async function getPlotDetail(
 
   const { data, error } = await supabase
     .from("plots")
-    .select("id, name, region_ko, area_m2, latitude, longitude")
+    .select("id, name, region_ko, area_m2, latitude, longitude, grid_x, grid_y")
     .eq("user_id", userId)
     .eq("id", plotId)
     .is("deleted_at", null)
@@ -161,6 +161,27 @@ export async function getPlotDetail(
   if (error) throw new Error(error.message);
 
   return data ? toPlotDetail(data) : null;
+}
+
+/**
+ * 좌표·격자가 필요한 화면이 읽는 밭 전체. 날씨(`/weather`)가 쓴다.
+ *
+ * `listPlotCards()` 와 나눈 이유는 그쪽이 작물을 같이 끌고 오기 때문이다 —
+ * 날씨는 작물을 안 보고, 대신 `getPlotDetail()` 과 같은 컬럼이 필요하다.
+ */
+export async function listPlotDetails(userId: string): Promise<PlotDetail[]> {
+  const supabase = await getSupabaseServer();
+
+  const { data, error } = await supabase
+    .from("plots")
+    .select("id, name, region_ko, area_m2, latitude, longitude, grid_x, grid_y")
+    .eq("user_id", userId)
+    .is("deleted_at", null)
+    .order("created_at", { ascending: true });
+
+  if (error) throw new Error(error.message);
+
+  return (data ?? []).map(toPlotDetail);
 }
 
 /**
