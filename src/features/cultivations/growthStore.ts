@@ -1,5 +1,7 @@
 import "server-only";
 
+import { nearestStation } from "@/shared/geo/nearestStation";
+import { listStations } from "@/shared/geo/stationStore";
 import type { DailyTemp } from "@/shared/growth/gdd";
 import { getSupabaseServer } from "@/shared/supabase/server";
 import type { CultivationCard } from "./domain/cultivationCard";
@@ -8,7 +10,6 @@ import {
   type GrowthGauge,
   type StageRow,
 } from "./domain/growthGauge";
-import { nearestStation, type StationPoint } from "./domain/nearestStation";
 
 /**
  * ---------------------------------------------
@@ -56,33 +57,6 @@ function num(value: number | string | null): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-/** 관측소 전부. 열 곳 안쪽이라 전량 읽고 거리 비교는 메모리에서 한다. */
-async function listStations(): Promise<StationPoint[]> {
-  const supabase = await getSupabaseServer();
-
-  const { data, error } = await supabase
-    .from("stations")
-    .select("station_code, name, latitude, longitude");
-
-  if (error) throw new Error(error.message);
-
-  return (data ?? []).flatMap((row) => {
-    const lat = num(row.latitude);
-    const lon = num(row.longitude);
-    // 좌표가 깨진 관측소는 후보에서 뺀다. 0,0 으로 두면 적도 한가운데가 되어
-    // 늘 "가장 먼 곳"이 되거나, 다른 값이 깨졌을 때 뽑혀 버린다.
-    if (lat === null || lon === null) return [];
-    return [
-      {
-        stationCode: row.station_code,
-        nameKo: row.name,
-        latitude: lat,
-        longitude: lon,
-      },
-    ];
-  });
-}
-
 /**
  * 한 관측소의 일통계. `fromDate` 이후만.
  *
@@ -90,7 +64,7 @@ async function listStations(): Promise<StationPoint[]> {
  * 계산되는데, 아예 없는 것으로 두면 `coveredDays` 가 줄어 화면이 "관측 누락"을
  * 말할 수 있다.
  */
-async function listObservations(
+export async function listObservations(
   stationCode: string,
   fromDate: string,
 ): Promise<DailyTemp[]> {
@@ -114,7 +88,7 @@ async function listObservations(
 }
 
 /** 품종별 단계표. 여러 품종을 한 번에 읽고 호출자가 나눠 쓴다. */
-async function listStages(
+export async function listStages(
   variantIds: readonly number[],
 ): Promise<Map<number, StageRow[]>> {
   const grouped = new Map<number, StageRow[]>();
