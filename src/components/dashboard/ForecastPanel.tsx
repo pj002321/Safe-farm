@@ -1,4 +1,5 @@
 import { SatelliteScan } from "@/components/shared/SatelliteScan";
+import { selectPlot } from "@/features/plots/domain/plotSelection";
 import { listPlots } from "@/features/plots/plotStore";
 import { splitWeek } from "@/features/weather/domain/weekSplit";
 import { aiService } from "@/shared/aiService/client";
@@ -58,11 +59,10 @@ export async function ForecastPanel({
       </div>
     );
   }
-  if (plots.length === 0) return null;
-
-  // 목록에 없는 id 는 없는 것으로 친다(지운 밭·남의 밭). 그때는 최신 밭.
-  const selected =
-    plots.find((plot) => plot.id === requestedPlotId) ?? plots[0];
+  // 고르는 규칙은 `selectPlot` 에 있다. 특보 배너가 같은 규칙을 써야 해서
+  // 한 곳에 뒀다 — 각자 고르면 어느 날 배너와 예보가 다른 밭을 말하게 된다.
+  const selected = selectPlot(plots, requestedPlotId);
+  if (!selected) return null;
 
   const result = await aiService.plotForecast(
     selected.latitude,
