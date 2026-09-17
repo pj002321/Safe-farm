@@ -1,4 +1,5 @@
 import "server-only";
+import { normalizePlotForecast } from "./plotForecastShape";
 
 /**
  * ---------------------------------------------
@@ -319,11 +320,22 @@ export const aiService = {
    * 밭 좌표의 7일 예보. `plotId` 를 주면 최근 14일 하루치 GDD(growthSeries)와
    * 작물 기준 해석(cropImpact)까지 함께 온다.
    */
-  plotForecast: (lat: number, lon: number, plotId?: string) =>
-    call<PlotForecast>(
+  plotForecast: async (
+    lat: number,
+    lon: number,
+    plotId?: string,
+  ): Promise<AiResult<PlotForecast>> => {
+    const result = await call<PlotForecast>(
       `/v1/weather/plot?lat=${lat}&lon=${lon}${plotId ? `&plot_id=${plotId}` : ""}`,
       { revalidateSec: WEATHER_REVALIDATE_SEC },
-    ),
+    );
+    // ⚠️ 여기서 모양을 맞추는 이유는 `normalizePlotForecast` 에 적어 두었다.
+    //    요약하면: 두 서비스가 따로 배포되므로 **옛 응답이 올 수 있고**, 그때
+    //    선언한 타입은 거짓말이 된다. 컴포넌트마다 방어하지 않고 길목에서 한 번.
+    return result.ok
+      ? { ok: true, data: normalizePlotForecast(result.data) }
+      : result;
+  },
   /**
    * 밭 하나만 즉시 판정해 오늘 할 일 카드를 만든다. 자정 배치를 기다리지 않고
    * 밭 등록·재배 추가 직후 호출한다(registerPlot/addCultivations).

@@ -141,7 +141,19 @@ export function MapWorkspace({ points }: MapWorkspaceProps) {
     onSelect: setSelectedCode,
   });
 
-  const failed = current === "error";
+  /**
+   * 실패는 **둘**이다. 예전에는 레이어 데이터 실패만 봤다.
+   *
+   * ⚠️ 카카오 SDK 가 죽는 경우(도메인 미등록으로 401, 광고 차단기·사내 프록시가
+   *    dapi.kakao.com 을 막음, 카카오 CDN 장애)에는 같은 출처인 `/api/map/*` 는
+   *    멀쩡히 성공한다. 그래서 `current` 는 정상이고 `failed` 는 false 인 채로
+   *    `status` 만 "error" 가 되는데, 그러면 `loading` 이 **영원히 true** 라
+   *    위성 스캔 애니메이션이 지도 자리를 덮은 채 끝나지 않았다. 오류 문구도
+   *    없고 누를 것도 없다. 같은 로더를 쓰는 `PlotLocationStep` 은 이 값을
+   *    이미 처리하고 있었다 — 여기만 빠뜨렸다.
+   */
+  const sdkFailed = status === "error";
+  const failed = current === "error" || sdkFailed;
   const ready = current !== null && current !== "error" ? current : null;
   // SDK 가 아직이거나 이 레이어 데이터가 안 왔을 때만 로더를 띄운다.
   // **실패는 로더가 아니다** — 계속 돌면 고장인지 느린 건지 알 수 없다.
@@ -198,18 +210,27 @@ export function MapWorkspace({ points }: MapWorkspaceProps) {
           <div className="absolute inset-0 z-30 grid place-items-center rounded-xl border border-border bg-surface/95 p-6 text-center backdrop-blur-sm">
             <div>
               <p className="font-medium text-fg">
-                {LAYER_LABEL[layer]} 지도를 불러오지 못했습니다
+                {sdkFailed
+                  ? "지도를 불러오지 못했습니다"
+                  : `${LAYER_LABEL[layer]} 지도를 불러오지 못했습니다`}
               </p>
               <p className="mt-1 text-fg-muted text-sm">
-                잠시 후 다시 시도해 주세요.
+                {sdkFailed
+                  ? "지도 서비스에 연결하지 못했습니다. 광고 차단 확장을 끄고 새로고침해 주세요."
+                  : "잠시 후 다시 시도해 주세요."}
               </p>
-              <button
-                className="mt-4 inline-flex min-h-11 items-center rounded-md border border-border-strong px-4 font-medium text-fg text-sm transition-colors duration-200 ease-out-expo hover:border-accent hover:text-accent"
-                onClick={retry}
-                type="button"
-              >
-                다시 시도
-              </button>
+              {/* SDK 가 죽은 경우에는 버튼을 안 준다 — 다시 시도는 레이어 데이터만
+                  다시 받으므로 눌러도 아무것도 나아지지 않는다. 할 수 없는 일을
+                  버튼으로 권하지 않는다. */}
+              {!sdkFailed && (
+                <button
+                  className="mt-4 inline-flex min-h-11 items-center rounded-md border border-border-strong px-4 font-medium text-fg text-sm transition-colors duration-200 ease-out-expo hover:border-accent hover:text-accent"
+                  onClick={retry}
+                  type="button"
+                >
+                  다시 시도
+                </button>
+              )}
             </div>
           </div>
         )}

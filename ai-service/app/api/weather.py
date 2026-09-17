@@ -78,8 +78,10 @@ def plot_forecast(
     if plot_id is not None:
         plot = db.get(Plot, plot_id)
         if plot:
-            # 특보는 관측소가 없어도 낼 수 있다 — 밭의 행정구역 코드만 있으면 된다.
-            status, as_of = plot_warning(db, plot.region_code)
+            # 특보는 관측소가 없어도 낼 수 있다 — 좌표만 있으면 된다.
+            # ⚠️ plot.region_code 를 넘기지 말 것. 법정동 코드라 특보 표의 통계청
+            #    코드와 체계가 다르다(warn_region.plot_warning 주석 참고).
+            status, as_of = plot_warning(db, lat, lon)
             if status and status.get("warnings"):
                 alert = {
                     "warnings": status["warnings"],

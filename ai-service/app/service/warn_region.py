@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 from app.core.config import DATA_DIR
 from app.domain.warn_region import active_wrn_kinds, ancestors, classify_warning
 from app.models.alert import OfficialAlert
+from app.service.sigungu_ref import sigungu_code_at
 
 # 참조 CSV. 예전엔 api/map.py 가 들고 있었는데, 특보를 보는 곳이 지도 말고
 # 밭 예보(/v1/weather/plot)에도 생기면서 라우터 모듈에 둘 이유가 없어졌다.
@@ -81,10 +82,19 @@ def sigungu_warning_status(
     return out, as_of
 
 
-def plot_warning(db: Session, region_code: str) -> tuple[dict | None, datetime | None]:
-    """밭 한 곳에 지금 걸려 있는 특보. (없으면 warnings 가 빈 리스트인 dict)
+def plot_warning(db: Session, lat: float, lon: float) -> tuple[dict | None, datetime | None]:
+    """밭 좌표에 지금 걸려 있는 특보. 좌표가 어느 시군구에도 안 걸리면 (None, 시각).
 
-    `plots.region_code` 는 법정동 10자리이고 시군구는 그 **앞 5자리**다.
+    ⚠️ **`plots.region_code` 앞 5자리를 쓰지 말 것.** 한 번 그렇게 냈다가 고쳤다.
+       `region_code` 는 카카오의 **법정동 코드**이고 특보 표의 키는
+       **통계청 행정구역코드**라, 두 공간은 겹치지 않는다:
+         · 법정동 41000~50999(경기~제주, 사실상 전 농지)는 통계청 표에 아예 없다
+           → `.get()` 이 조용히 None → 호우경보가 떠 있어도 카드가 안 뜬다.
+         · 울산(법정동 31xxx)은 통계청의 경기도(31xxx)와 **겹친다**
+           → 울산 밭에 과천·오산·의왕 특보가 붙는다. 예외도 로그도 없다.
+       재해 경보 화면에서 이건 "경보 없음"으로 읽히므로 실제 피해로 이어진다.
+       코드로 잇지 말고 좌표로 찾는다(`sigungu_ref.sigungu_code_at`).
+
     전국 250개를 다 계산한 뒤 하나만 꺼내는 이유: 특보 스냅샷 조회는 어차피 한 번이고
     나머지는 메모리 위 루프라, 시군구 하나만 도는 경로를 따로 두면 같은 판정 로직이
     둘이 된다(그 둘이 어긋나면 지도와 날씨 화면이 서로 다른 말을 하게 된다).
@@ -92,4 +102,7 @@ def plot_warning(db: Session, region_code: str) -> tuple[dict | None, datetime |
     status_by_code, as_of = sigungu_warning_status(
         db, list(sigungu_warn_regions()), warn_region_up_by_id()
     )
-    return status_by_code.get(region_code[:5]), as_of
+    code = sigungu_code_at(lat, lon)
+    if code is None:
+        return None, as_of
+    return status_by_code.get(code), as_of
