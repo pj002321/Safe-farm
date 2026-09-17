@@ -125,6 +125,17 @@ export interface SigunguWindFeatureCollection {
   }>;
 }
 
+/** 밭 좌표 기준 7일 예보. `/weather` 탭이 그대로 목록으로 그린다. */
+export interface PlotForecast {
+  days: Array<{
+    date: string;
+    tempMax: number | null;
+    tempMin: number | null;
+    rainfallMm: number | null;
+    windMax: number | null;
+  }>;
+}
+
 export type AiResult<T> =
   | { ok: true; data: T }
   | { ok: false; reason: AiFailure; detail?: string };
@@ -234,4 +245,7 @@ export const aiService = {
     call<SigunguWindFeatureCollection>("/v1/map/sigungu-wind", {
       timeoutMs: 15_000,
     }),
+  /** 밭 좌표 기준 7일 예보(기온·강수·최대풍속). Open-Meteo 를 그때그때 불러온다. */
+  plotForecast: (lat: number, lon: number) =>
+    call<PlotForecast>(`/v1/weather/plot?lat=${lat}&lon=${lon}`),
 };

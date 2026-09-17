@@ -15,14 +15,12 @@ grid_id 는 CSV 에 없다. 이미 들어간 마스터에서 조회해 채운다
 
 import sys
 
-from sqlalchemy import func, select
-
 from app.core.config import DATA_DIR
 from app.core.db import get_engine, new_session
-from app.models.farm import Grid, WeatherForecast, WeatherObsDaily
+from app.models.farm import WeatherObsDaily
 from pipeline.prep import check
 from pipeline.prep.seeding import count_rows, read_all, report, require_tables
-from pipeline.prep.table import key_dict, upsert
+from pipeline.prep.table import upsert
 
 DUMMY_DIR = DATA_DIR / "dummy"    # 런타임 대체용 가짜 (weather_*)
 MASTER_DIR = DATA_DIR / "master"  # 실측 마스터. 넣지 않고 자연키 검사에만 읽는다
@@ -30,16 +28,13 @@ MASTER_HINT = "py -3.12 -m pipeline.farm.master_seed_farm_db"
 
 # 넣는 순서. 부모가 먼저다
 TABLES = [
-    "weather_forecast",
     "weather_obs_daily",
 ]
 
 # 넣지 않는다. 자연키가 맞는지 보려고 읽기만 한다
-MASTER_TABLES = ["grids", "stations"]
+MASTER_TABLES = ["stations"]
 
-# grid_id 는 CSV 에 없고 적재 때 조회해 채우므로, 검사도 자연키인 nx·ny 로 한다
 REFS = [
-    ("weather_forecast", ["nx", "ny"], "grids", ["nx", "ny"]),
     ("weather_obs_daily", ["station_code"], "stations", ["station_code"]),
 ]
 
@@ -47,8 +42,7 @@ REFS = [
 def load(db, data: dict[str, list[dict]]) -> dict[str, int]:
     """
     # summary
-    TABLES 순서대로 upsert 한다. grid_id 는 이미 적재된 마스터에서 조회해 채운다.
-    마스터가 비어 있으면 무엇을 먼저 돌려야 하는지 알리고 멈춘다.
+    TABLES 순서대로 upsert 한다.
 
     # params
     db: 세션<br>
@@ -59,32 +53,10 @@ def load(db, data: dict[str, list[dict]]) -> dict[str, int]:
     upsert 라 "반영" 은 새로 넣은 것과 갱신한 것을 합친 수다
 
     # examples
-        load(db, data)  -> {'weather_forecast': 12, 'weather_obs_daily': 17}
+        load(db, data)  -> {'weather_obs_daily': 17}
     """
     done: dict[str, int] = {}
 
-    grid_id = key_dict(db, select(Grid.nx, Grid.ny, Grid.grid_id), cast=str)
-    if not grid_id:
-        raise SystemExit(f"마스터가 비어 있습니다. 먼저 실행하세요: {MASTER_HINT}")
-
-    rows = [
-        {
-            "grid_id": grid_id[(r["nx"], r["ny"])],
-            "fcst_date": r["fcst_date"],
-            "temp_max": r["temp_max"],
-            "temp_min": r["temp_min"],
-            "rainfall_mm": r["rainfall_mm"],
-        }
-        for r in data["weather_forecast"]
-    ]
-    # 예보를 덮어쓰면 수집 시각도 지금으로 바꾼다
-    done["weather_forecast"] = upsert(
-        db,
-        WeatherForecast,
-        rows,
-        ["grid_id", "fcst_date"],
-        override_update={"fetched_at": func.now()},
-    )
     done["weather_obs_daily"] = upsert(
         db, WeatherObsDaily, data["weather_obs_daily"], ["station_code", "obs_date"]
     )

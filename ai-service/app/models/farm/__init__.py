@@ -23,7 +23,6 @@ from app.models.farm.profile import Profile
 from app.models.farm.station import Station
 from app.models.farm.terms import Terms
 from app.models.farm.user_agreement import UserAgreement
-from app.models.farm.weather_forecast import WeatherForecast
 from app.models.farm.weather_obs_daily import WeatherObsDaily
 
 __all__ = [
@@ -41,7 +40,6 @@ __all__ = [
     "Station",
     "Terms",
     "UserAgreement",
-    "WeatherForecast",
     "WeatherObsDaily",
     "auth_users",
 ]
