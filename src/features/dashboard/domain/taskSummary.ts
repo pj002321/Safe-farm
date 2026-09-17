@@ -15,6 +15,8 @@ export type Priority = "high" | "mid" | "low";
 
 export interface TaskCardData {
   id: string;
+  /** 어느 밭의 일인가. 홈이 밭별로 묶고, 밭 상세로 링크하는 데 쓴다. */
+  plotId: string;
   titleKo: string;
   /** 왜 이 작업이 나왔는가. 스펙상 **근거 없는 작업은 카드로 만들지 않는다.** */
   reasonKo: string;
@@ -34,16 +36,26 @@ export interface TaskCardData {
    * "오늘 생성분"만 거르면 아직 해야 하는 일이 화면에서 사라진다.
    */
   daysOpen: number;
+  /**
+   * 안 하고 넘어간 카드인가.
+   *
+   * 배치가 닫은 것이다(ai-service `expire_stale_tasks`). 닫아야 같은 제목의 새
+   * 카드가 다시 나온다 — 열어 둔 채로 홈에서만 내리면 생성이 영영 막힌다.
+   * 이력 화면이 "안 함"으로 표시한다.
+   */
+  expired: boolean;
 }
 
 /** plot_tasks 한 행 + 조인한 plots.name. */
 export interface TaskRow {
   id: string;
+  plot_id: string;
   title: string;
   reason: string;
   priority: string;
   done: boolean;
   done_at: string | null;
+  expired_at: string | null;
   generated_at: string;
   plots: { name: string | null } | null;
 }
@@ -58,6 +70,10 @@ const PRIORITY_RANK: Record<Priority, number> = { high: 0, mid: 1, low: 2 };
  * 일이 아래로 밀리고, 그러면 목록 자체를 안 보게 된다.
  */
 export const CARRY_OVER_DAYS = 3;
+// ⚠️ ai-service 의 EXPIRE_AFTER_DAYS 와 **같은 값이어야 한다**
+//    (app/service/plot_tasks.py). 두 언어라 타입으로 묶을 수 없어 양쪽에 테스트를
+//    두고 값을 박아 뒀다. 어긋나면 화면에서 사라진 카드가 생성을 계속 막거나,
+//    화면에 남아 있는 카드 옆에 같은 제목이 하나 더 뜬다.
 
 /**
  * KST 기준 시각 계산.
@@ -99,6 +115,7 @@ export function daysOpenOf(generatedAt: Date, now: Date): number {
 export function toTaskCard(row: TaskRow, now: Date): TaskCardData {
   return {
     id: row.id,
+    plotId: row.plot_id,
     titleKo: row.title,
     reasonKo: row.reason,
     // priority 는 DB check 제약(priority in ('high','mid','low'))이 값을 보증한다.
@@ -107,6 +124,7 @@ export function toTaskCard(row: TaskRow, now: Date): TaskCardData {
     done: row.done,
     doneAtKo: row.done_at ? formatDoneAt(row.done_at) : undefined,
     daysOpen: daysOpenOf(new Date(row.generated_at), now),
+    expired: row.expired_at !== null,
   };
 }
 

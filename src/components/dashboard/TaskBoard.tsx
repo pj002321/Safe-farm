@@ -1,9 +1,7 @@
-import {
-  ArrowUpRightIcon,
-  CheckIcon,
-  ChevronDownIcon,
-} from "@/components/icons";
+import Link from "next/link";
+import { ArrowUpRightIcon, CheckIcon } from "@/components/icons";
 import { Badge } from "@/components/shared/Badge";
+import type { PlotTaskGroup } from "@/features/dashboard/domain/taskGrouping";
 import type {
   Priority,
   TaskCardData,
@@ -23,20 +21,20 @@ import type {
  *   app)이 거꾸로 된다. 그래서 `page.tsx` 가 액션을 읽어 prop 으로 내려준다.
  *   **"하단으로 이동"은 로직**이라 여기서는 완료된 카드를 아래 묶음에 따로 그려
  *   그 결과 모습만 보여 준다.
- * - 기본 3건 + 더보기도 **마크업만**이다. `<details>` 로 열고 닫아 JS 없이
- *   동작하게 했다 — 퍼블 단계에서 열린 모습과 닫힌 모습을 둘 다 볼 수 있다.
+ * - **밭별로 나눠 그린다.** 밭이 둘 이상이면 "이 물 주기가 어느 밭 얘기지"를 카드
+ *   마다 읽어야 했다. 묶는 규칙(밭 정렬·빈 밭 처리)은 로직이라
+ *   `features/dashboard/domain/taskGrouping.ts` 가 정하고, 여기는 그리기만 한다.
+ * - "3건 + 더보기"는 뺐다. 밭별로 갈리면 한 밭당 두세 건이라 접을 이유가 없고,
+ *   접으면 오히려 밭마다 여는 동작이 생긴다.
  * - 우선순위를 **색으로만** 구분하지 않는다. 배지에 글자가 함께 들어가야 색을
  *   구분하기 어려운 사용자도 급한 일을 안다.
  *
  * [Usage]
  * ```tsx
- * <TaskBoard tasks={tasks} toggleTaskAction={toggleTask} />
+ * <TaskBoard groups={groupTasksByPlot(tasks, plots)} toggleTaskAction={toggleTask} />
  * ```
  * ---------------------------------------------
  */
-
-/** 기본으로 펼쳐 둘 개수. 스펙의 "기본 3건 표시 후 더보기". */
-const VISIBLE_COUNT = 3;
 
 const PRIORITY: Record<
   Priority,
@@ -48,65 +46,91 @@ const PRIORITY: Record<
 };
 
 interface TaskBoardProps {
-  tasks: readonly TaskCardData[];
+  /** 밭별로 묶인 오늘의 카드. `groupTasksByPlot` 이 만든다. */
+  groups: readonly PlotTaskGroup[];
   /** 완료 체크 제출을 받는 Server Action. page.tsx 가 내려준다. */
   toggleTaskAction: (formData: FormData) => Promise<void>;
 }
 
-export function TaskBoard({ tasks, toggleTaskAction }: TaskBoardProps) {
-  if (tasks.length === 0) return <EmptyTasks />;
-
-  const open = tasks.filter((task) => !task.done);
-  const done = tasks.filter((task) => task.done);
-  const shown = open.slice(0, VISIBLE_COUNT);
-  const rest = open.slice(VISIBLE_COUNT);
+export function TaskBoard({ groups, toggleTaskAction }: TaskBoardProps) {
+  // 밭은 있는데 오늘 할 일이 하나도 없는 경우. 밭별로 "없음"을 늘어놓으면
+  // 화면만 길어지므로 한 장으로 합쳐서 알린다.
+  if (groups.every((group) => group.open.length + group.done.length === 0)) {
+    return <EmptyTasks />;
+  }
 
   return (
-    <div className="flex flex-col gap-3">
-      {shown.map((task) => (
-        <TaskCard
-          key={task.id}
-          task={task}
+    <div className="flex flex-col gap-5">
+      {groups.map((group) => (
+        <PlotSection
+          group={group}
+          key={group.plotId}
           toggleTaskAction={toggleTaskAction}
         />
       ))}
-
-      {rest.length > 0 && (
-        <details className="group">
-          <summary className="flex cursor-pointer items-center justify-center gap-1.5 rounded-md border border-border border-dashed py-2.5 font-medium text-fg-muted text-sm transition-colors hover:border-accent hover:text-accent">
-            {/* 열리면 화살표가 뒤집힌다. 여는 쪽인지 닫는 쪽인지 형태로 알린다. */}
-            <ChevronDownIcon className="transition-transform group-open:rotate-180" />
-            할 일 {rest.length}건 더 보기
-          </summary>
-          <div className="mt-3 flex flex-col gap-3">
-            {rest.map((task) => (
-              <TaskCard
-                key={task.id}
-                task={task}
-                toggleTaskAction={toggleTaskAction}
-              />
-            ))}
-          </div>
-        </details>
-      )}
-
-      {done.length > 0 && (
-        <section className="mt-2 border-border border-t pt-4">
-          <h3 className="font-mono text-[0.65rem] text-fg-subtle uppercase tracking-[0.14em]">
-            오늘 끝낸 일 {done.length}
-          </h3>
-          <div className="mt-3 flex flex-col gap-3">
-            {done.map((task) => (
-              <TaskCard
-                key={task.id}
-                task={task}
-                toggleTaskAction={toggleTaskAction}
-              />
-            ))}
-          </div>
-        </section>
-      )}
     </div>
+  );
+}
+
+/**
+ * 밭 한 곳의 묶음.
+ *
+ * 할 일이 없는 밭은 **카드 없이 한 줄로 축약한다.** 밭이 다섯이면 빈 카드가
+ * 다섯 장 쌓여 정작 할 일이 있는 밭이 스크롤 아래로 밀린다. 그렇다고 아예 빼면
+ * 사용자는 밭을 빠뜨린 줄 안다.
+ */
+function PlotSection({
+  group,
+  toggleTaskAction,
+}: {
+  group: PlotTaskGroup;
+  toggleTaskAction: (formData: FormData) => Promise<void>;
+}) {
+  const quiet = group.open.length === 0 && group.done.length === 0;
+
+  return (
+    <section aria-labelledby={`plot-tasks-${group.plotId}`}>
+      <div className="mb-2 flex items-baseline justify-between gap-3">
+        {/* 밭 이름에서 바로 상세로 간다. 카드를 보다 "이 밭 상태가 어떻지"가
+            자연스럽게 따라오는 동선이다. */}
+        <Link
+          className="font-semibold text-fg text-sm hover:text-accent hover:underline underline-offset-2"
+          href={`/plots/${group.plotId}`}
+          id={`plot-tasks-${group.plotId}`}
+        >
+          {group.plotKo}
+        </Link>
+        <span className="font-mono text-[0.68rem] text-fg-subtle">
+          {quiet
+            ? "할 일 없음"
+            : [
+                group.open.length > 0 ? `할 일 ${group.open.length}` : null,
+                group.done.length > 0 ? `완료 ${group.done.length}` : null,
+              ]
+                .filter(Boolean)
+                .join(" · ")}
+        </span>
+      </div>
+
+      {quiet ? null : (
+        <div className="flex flex-col gap-2.5">
+          {group.open.map((task) => (
+            <TaskCard
+              key={task.id}
+              task={task}
+              toggleTaskAction={toggleTaskAction}
+            />
+          ))}
+          {group.done.map((task) => (
+            <TaskCard
+              key={task.id}
+              task={task}
+              toggleTaskAction={toggleTaskAction}
+            />
+          ))}
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -180,10 +204,20 @@ export function TaskCard({
             {/* 이월된 미완료에만 붙인다. 오늘 생긴 카드(daysOpen 0)에 "1일째"를
                 붙이면 전부 배지를 달게 되어 구분이 사라진다. 완료 카드에도 안
                 붙인다 — 끝난 일이 며칠 걸렸는지는 여기서 할 얘기가 아니다. */}
-            {!task.done && task.daysOpen > 0 && (
+            {/* 배치가 닫은 카드. 이력 화면에만 나타난다 — 홈은 살아 있는 카드만
+                보여 준다. "며칠째"와 같이 붙이지 않는다: 이미 끝난 일에 경과일을
+                세는 것은 의미가 없고, 배지가 둘이면 어느 쪽이 상태인지 흐려진다. */}
+            {task.expired ? (
               <Badge size="sm" tone="neutral">
-                {task.daysOpen + 1}일째
+                안 함
               </Badge>
+            ) : (
+              !task.done &&
+              task.daysOpen > 0 && (
+                <Badge size="sm" tone="neutral">
+                  {task.daysOpen + 1}일째
+                </Badge>
+              )
             )}
             <span className="font-mono text-[0.68rem] text-fg-subtle">
               {task.plotKo}
