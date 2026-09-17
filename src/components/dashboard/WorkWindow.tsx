@@ -55,7 +55,10 @@ export function WorkWindow({
     <div className="group/work">
       <fieldset className="mb-3">
         <legend className="sr-only">평일과 주말 중 볼 구간</legend>
-        {/* sr-only 지만 실제 포커스를 받으므로 키보드 화살표로 전환된다. */}
+        {/* sr-only 지만 실제 포커스를 받으므로 키보드 화살표로 전환된다.
+            ⚠️ 다만 **포커스 링은 여기 그리면 안 보인다.** sr-only 는 `clip-path:
+               inset(50%)` 라 outline 까지 잘라낸다. 그래서 아래 라벨로 옮겨
+               그린다 — `PlotWizardDock`·`meSections` 가 같은 이유로 쓰는 방식이다. */}
         <input
           className="sr-only"
           defaultChecked
@@ -72,13 +75,13 @@ export function WorkWindow({
 
         <div className="inline-flex rounded-lg border border-border p-1">
           <label
-            className="inline-flex min-h-9 cursor-pointer items-center rounded-md px-3 font-medium text-fg-muted text-sm transition-colors duration-200 ease-out-expo group-has-[#work-window-weekday:checked]/work:bg-accent group-has-[#work-window-weekday:checked]/work:text-accent-on"
+            className="inline-flex min-h-9 cursor-pointer items-center rounded-md px-3 font-medium text-fg-muted text-sm transition-colors duration-200 ease-out-expo group-has-[#work-window-weekday:checked]/work:bg-accent group-has-[#work-window-weekday:checked]/work:text-accent-on group-has-[#work-window-weekday:focus-visible]/work:outline group-has-[#work-window-weekday:focus-visible]/work:outline-2 group-has-[#work-window-weekday:focus-visible]/work:outline-ring group-has-[#work-window-weekday:focus-visible]/work:outline-offset-2"
             htmlFor={WEEKDAY_ID}
           >
             평일
           </label>
           <label
-            className="inline-flex min-h-9 cursor-pointer items-center rounded-md px-3 font-medium text-fg-muted text-sm transition-colors duration-200 ease-out-expo group-has-[#work-window-weekend:checked]/work:bg-accent group-has-[#work-window-weekend:checked]/work:text-accent-on"
+            className="inline-flex min-h-9 cursor-pointer items-center rounded-md px-3 font-medium text-fg-muted text-sm transition-colors duration-200 ease-out-expo group-has-[#work-window-weekend:checked]/work:bg-accent group-has-[#work-window-weekend:checked]/work:text-accent-on group-has-[#work-window-weekend:focus-visible]/work:outline group-has-[#work-window-weekend:focus-visible]/work:outline-2 group-has-[#work-window-weekend:focus-visible]/work:outline-ring group-has-[#work-window-weekend:focus-visible]/work:outline-offset-2"
             htmlFor={WEEKEND_ID}
           >
             주말

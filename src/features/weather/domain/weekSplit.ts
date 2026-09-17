@@ -66,7 +66,15 @@ export function workability(
   day: Day,
   impact: CropImpact,
 ): { workableKo: string; icon: WorkDay["icon"] } {
-  if (day.tempMin === null && day.tempMax === null && day.rainfallMm === null) {
+  // 판단에 쓰는 값이 하나도 없으면 아무 말도 하지 않는다.
+  const known = [
+    day.tempMin,
+    day.tempMax,
+    day.rainfallMm,
+    day.rainChance,
+    day.windMax,
+  ].filter((value) => value !== null && value !== undefined);
+  if (known.length === 0) {
     return { workableKo: "예보가 없습니다", icon: "sun" };
   }
 
@@ -104,6 +112,13 @@ export function workability(
       workableKo: `한낮이 덥습니다(${Math.round(day.tempMax)}℃) — 이른 아침에 하세요`,
       icon: "sun",
     };
+  }
+
+  // ⚠️ 여기까지 왔다는 건 "넘은 임계가 없다"일 뿐 "좋다"가 아니다. 기온을 모르는
+  //    날은 서리·고온 판정 자체가 불가능했으므로 좋다고 단정하면 안 된다 —
+  //    이 파일이 내건 "근거가 없으면 판단을 보류한다"를 정반대로 어기게 된다.
+  if (day.tempMin === null || day.tempMax === null) {
+    return { workableKo: "기온 예보가 없어 판단을 보류합니다", icon: "sun" };
   }
 
   return { workableKo: "야외 작업하기 좋습니다", icon: "sun" };

@@ -20,8 +20,9 @@ import { WorkWindow } from "./WorkWindow";
  *   그걸로 화면을 죽이면 안 된다.
  * - 예보 호출은 1시간 캐시다(`plotForecast`). 밭을 오가며 눌러도 같은 밭은 다시
  *   부르지 않는다.
- * - 실패하면 이 칸만 안내로 바뀐다. 홈의 나머지(할 일·텃밭)는 그대로 뜬다 —
- *   페이지가 `<Suspense>` 로 이 칸을 흘려보내기 때문이다.
+ * - 실패하면 이 칸만 안내로 바뀐다. 홈의 나머지(할 일·텃밭)는 그대로 뜬다.
+ *   ⚠️ 그건 `<Suspense>` 덕이 **아니다** — Suspense 는 기다림을 다루지 던지는 것을
+ *      잡지 않는다. 아래에서 조회와 호출을 각각 직접 막기 때문이다.
  * ---------------------------------------------
  */
 
@@ -41,7 +42,22 @@ export async function ForecastPanel({
   /** `?plot=` 로 들어온 값. 신뢰하지 않고 내 밭 목록에서 찾아 확인한다. */
   requestedPlotId?: string;
 }) {
-  const plots = await listPlots(userId);
+  // ⚠️ `<Suspense>` 는 **던지는 것을 잡지 않는다.** 감싸지 않으면 밭 목록 조회가
+  //    실패하는 순간 (app) 경계가 받아서 홈이 통째로 오류 화면이 된다 — 바로 위
+  //    문단에서 "이 칸만 바뀐다"고 약속한 것과 반대다. 대시보드 페이지가 같은
+  //    테이블을 같은 이유로 이미 감싸고 있다.
+  let plots: Awaited<ReturnType<typeof listPlots>> = [];
+  try {
+    plots = await listPlots(userId);
+  } catch (error) {
+    console.error("[dashboard] 예보용 밭 목록 조회 실패", error);
+    return (
+      <div className="rounded-lg border border-border border-dashed bg-surface-2/40 p-4 text-fg-muted text-sm">
+        밭 목록을 불러오지 못해 예보를 낼 수 없습니다. 잠시 후 다시
+        확인해주세요.
+      </div>
+    );
+  }
   if (plots.length === 0) return null;
 
   // 목록에 없는 id 는 없는 것으로 친다(지운 밭·남의 밭). 그때는 최신 밭.

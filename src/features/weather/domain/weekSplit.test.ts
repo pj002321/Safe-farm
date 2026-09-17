@@ -63,6 +63,36 @@ describe("workability — 급한 것부터 본다", () => {
     );
   });
 
+  it("기온을 모르면 '좋습니다'라고 단정하지 않는다 — 서리·고온 판정 자체가 불가능한 날이다", () => {
+    const r = workability(
+      day({ tempMin: null, tempMax: null, rainfallMm: 0, rainChance: 5 }),
+      CABBAGE,
+    );
+    expect(r.workableKo).toBe("기온 예보가 없어 판단을 보류합니다");
+  });
+
+  it("바람만 알아도 그 판정은 한다 — 아는 것까지 지우지 않는다", () => {
+    const r = workability(
+      day({
+        tempMin: null,
+        tempMax: null,
+        rainfallMm: null,
+        rainChance: null,
+        windMax: 14,
+      }),
+      CABBAGE,
+    );
+    expect(r.icon).toBe("wind");
+  });
+
+  it("실제 예보값(m/s)으로 흔한 바람은 강풍이 아니다", () => {
+    // ⚠️ Open-Meteo 기본 단위는 km/h 다. 단위를 안 박으면 이 값들이 3~4 m/s 인데
+    //    9 를 넘겨 전부 강풍이 된다. ai-service 가 wind_speed_unit=ms 를 지정한다.
+    for (const windMax of [3.2, 4.1, 5.5]) {
+      expect(workability(day({ windMax }), CABBAGE).icon).not.toBe("wind");
+    }
+  });
+
   it("값이 전부 없으면 지어내지 않고 '예보 없음'이다", () => {
     const r = workability(
       day({
