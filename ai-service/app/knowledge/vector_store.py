@@ -124,8 +124,10 @@ def search_with_score(
     #   우리는 뒤에 reranker 가 순서를 다시 잡으므로 그 정확도를 살 이유가 없다.
     #   set **local** 이라 이 트랜잭션에서만 산다 — 다른 요청·배치에 안 샌다.
     #   (pgvector 0.8.0+ 기능. 우리 서버는 0.8.2)
-    if crops or on_date is not None:
-        db.execute(text("set local hnsw.iterative_scan = relaxed_order"))
+    #   2026-09-17 추가: 필터가 없어도 켠다. 꺼진 채 LIMIT 50 을 돌리면 인덱스가 ef_search(40)개에서
+    #   멈춰 **40행만 돌아온다**(실측). 후보를 50개 받는 지금은 작물 없는 질문("8월에 조심할
+    #   병해충")이 그 함정에 든다. 켜 두는 비용은 필터 쿼리 +10 ms — 40개로 잘리는 것보다 싸다
+    db.execute(text("set local hnsw.iterative_scan = relaxed_order"))
 
     # 정렬 키와 반환 값이 같은 식이어야 순서와 숫자가 어긋나지 않음
     distance = Chunk.embedding.cosine_distance(query_vector)
@@ -180,4 +182,50 @@ def search_with_score(
     # relaxed_order 는 거리 순서를 조금 흐릴 수 있다.
     # 정렬 키와 반환값이 같은 식이어야 순서가 어긋나지 않는다
     return sorted(((chunk, float(dist)) for chunk, dist in rows), key=lambda x: x[1])
+
+
+def neighbors(
+    db: Session, matches: list[tuple[Chunk, float]], width: int = 1
+) -> list[tuple[Chunk, float]]:
+    """
+    # summary
+    뽑힌 조각과 같은 문서의 앞뒤 width 조각을 가져온다. 이미 뽑힌 조각은 뺀다.
+    "방울토마토 물" 의 정답(doc 5424 의 4번 조각)은 후보 21위라 top-5 에 못 드는데, 같은 문서
+    5번 조각이 1위로 들어와 있었다 — 옆 조각을 딸려 보내면 재임베딩 없이 근거에 들어온다.
+    골든 실측 hint@5 29→31, hit 은 같은 소스라 그대로. 본문은 1.8배로 는다.
+
+    # params
+    db: 세션<br>
+    matches: (Chunk, 거리) — 리랭크까지 끝난 최종 근거<br>
+    width: 앞뒤로 몇 조각. 1 이면 조각 하나에 최대 둘이 붙는다.
+        2 는 hint 가 같고 글자만 2.4배라 쓰지 않는다<br>
+
+    # returns
+    (이웃 Chunk, 그 문서에서 가장 가까운 조각의 거리). 문서·조각 순. matches 가 비면 빈 리스트.
+    쿼리 1번(실측 58 ms)
+
+    # examples
+        neighbors(db, [(index 4 조각, 0.51)])  -> [(index 3 조각, 0.51), (index 5 조각, 0.51)]
+    """
+    if not matches:
+        return []
+    picked = {chunk.id for chunk, _ in matches}
+    dist: dict[int, float] = {}
+    for chunk, d in matches:
+        dist[chunk.document_id] = min(d, dist.get(chunk.document_id, d))
+    near = or_(*[
+        and_(
+            Chunk.document_id == chunk.document_id,
+            Chunk.chunk_index.between(chunk.chunk_index - width, chunk.chunk_index + width),
+        )
+        for chunk, _ in matches
+    ])
+    rows = (
+        db.query(Chunk)
+        .options(joinedload(Chunk.document))
+        .filter(near)
+        .order_by(Chunk.document_id, Chunk.chunk_index)
+        .all()
+    )
+    return [(row, dist[row.document_id]) for row in rows if row.id not in picked]
 

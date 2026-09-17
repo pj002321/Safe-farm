@@ -16,7 +16,65 @@ from app.models.chunk import Chunk
 # 마스터를 다시 시딩했으면 프로세스를 다시 띄운다 — 연 1회라 그 편이 싸다
 _crop_names: set[str] | None = None
 
-def retrieve_with_score(db: Session, question: str, top_k: int = 10) -> list[tuple[Chunk, float]]:
+
+def known_crops(db: Session) -> set[str]:
+    """
+    # summary
+    아는 작물 이름 전부. crops·crop_guides·varieties 를 합친다 — 세 곳의 목록이 다르다
+    (crops 133 · crop_guides 147 · varieties 43, 합쳐서 207쯤).
+
+    # params
+    db: 세션<br>
+
+    # returns
+    작물 이름 집합. 모듈에 캐시된다
+
+    # examples
+        known_crops(db)  -> {'감자', '고추', '마늘', ...}
+    """
+    global _crop_names
+    if _crop_names is None:
+        _crop_names = {
+            row[0]
+            for row in db.execute(text(
+                "select name from crops "
+                "union select crop_name from crop_guides "
+                "union select crop_name from varieties"
+            ))
+            if row[0]
+        }
+    return _crop_names
+
+
+def retrieve(
+    db: Session, question: str, top_k: int = 10, crops: Collection[str] | None = None
+) -> list[Chunk]:
+    """
+    # summary
+    질문을 임베딩해 가까운 조각을 찾음. 색인과 같은 embed_texts 를 쓰므로
+    질의와 문서가 같은 벡터 공간에 있음.
+
+    # params
+    db: 세션<br>
+    question: 사용자 질문<br>
+    top_k: 가져올 개수<br>
+
+    # returns
+    가까운 순서의 Chunk 목록. 임베딩된 조각이 하나도 없으면 빈 리스트
+
+    # examples
+        retrieve(db, "상추 발아기 물주기", top_k=3)  -> [Chunk(id=7), ...]
+    """
+    return [chunk for chunk, _ in retrieve_with_score(db, question, top_k)]
+
+
+def retrieve_with_score(
+    db: Session,
+    question: str,
+    top_k: int = 10,
+    crops: Collection[str] | None = None,
+    on_date: date | None = None,
+) -> list[tuple[Chunk, float]]:
     """
     # summary
     거리까지 같이. 검색이 제대로 되는지 눈으로 보려면 거리가 있어야 함 —
