@@ -2,7 +2,7 @@ import { AlertTriangleIcon, CheckIcon } from "@/components/icons";
 import {
   ObservationChart,
   type ObservationChartSeries,
-} from "@/components/landing/chart/ObservationChart";
+} from "@/components/monitoring/chart/ObservationChart";
 import { Card } from "@/components/shared/Card";
 import { Reveal } from "@/components/shared/Reveal";
 import { SectionHeading } from "@/components/shared/SectionHeading";

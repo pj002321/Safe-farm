@@ -6,6 +6,7 @@ import { EmptyState } from "@/components/shared/EmptyState";
 import { SectionHeading } from "@/components/shared/SectionHeading";
 import { PlotForecastRow } from "@/components/weather/PlotForecastRow";
 import { PlotRowSkeleton } from "@/components/weather/PlotRowSkeleton";
+import { SatellitePanel } from "@/components/weather/SatellitePanel";
 import { summarizeWeather } from "@/features/monitoring/domain/weatherSeries";
 import { loadWeatherSeries } from "@/features/monitoring/weatherStore";
 import { listPlots } from "@/features/plots/plotStore";
@@ -34,6 +35,9 @@ import { kstDateString } from "@/shared/utils/kstDate";
  */
 
 export const metadata: Metadata = { title: "날씨" };
+
+/** NDVI·NDMI 조회 구간(일). Sentinel-2 재방문 주기(5일)+구름을 감안해 넉넉히 잡는다. */
+const SATELLITE_WINDOW_DAYS = 90;
 
 /** 차트 위에 붙는 한 줄. 스크린리더가 읽는 문장이기도 하다. */
 function summaryKo(
@@ -98,6 +102,8 @@ export default async function Page() {
                   // 그러려면 밭 전체 예보를 먼저 기다려야 해서, 밭별 Suspense 로
                   // 흘려보내는 이 구조가 무너진다.
                   defaultOpen={index === 0}
+                  gridX={plot.gridX}
+                  gridY={plot.gridY}
                   latitude={plot.latitude}
                   longitude={plot.longitude}
                   nameKo={plot.nameKo ?? "이름 없는 밭"}
@@ -123,6 +129,8 @@ export default async function Page() {
 async function PlotForecast({
   latitude,
   longitude,
+  gridX,
+  gridY,
   nameKo,
   cropNameKo,
   plotId,
@@ -131,6 +139,8 @@ async function PlotForecast({
 }: {
   latitude: number;
   longitude: number;
+  gridX: number;
+  gridY: number;
   nameKo: string;
   cropNameKo: string | null;
   plotId: string;
@@ -142,14 +152,24 @@ async function PlotForecast({
   //
   // 관측 계열은 **예보와 나란히** 받는다. 둘은 서로를 기다릴 이유가 없고, 이 밭의
   // 경계 안이라 느려도 다른 밭을 붙잡지 않는다.
-  const [result, weather] = await Promise.all([
+  const satelliteFrom = kstDateString(
+    new Date(Date.now() - SATELLITE_WINDOW_DAYS * 86_400_000),
+  );
+
+  const [result, weather, satellite] = await Promise.all([
     aiService.plotForecast(latitude, longitude, plotId),
-    loadWeatherSeries({ id: plotId, latitude, longitude }, todayIso).catch(
+    loadWeatherSeries({ latitude, longitude, gridX, gridY }, todayIso).catch(
       (error) => {
         // 관측이 없어도 예보는 보여 준다 — 차트 하나 때문에 줄 전체를 죽이지 않는다.
         console.error("[weather] 관측 계열 조회 실패", error);
         return null;
       },
+    ),
+    aiService.satelliteObservations(
+      latitude,
+      longitude,
+      satelliteFrom,
+      todayIso,
     ),
   ]);
 
@@ -158,6 +178,11 @@ async function PlotForecast({
       series={weather.series}
       summary={summaryKo(nameKo, summarizeWeather(weather.series))}
     />
+  ) : null;
+
+  // 위성도 실패해도 줄 전체를 죽이지 않는다 — 예보·기상 관측과 같은 원칙.
+  const satelliteChart = satellite.ok ? (
+    <SatellitePanel points={satellite.data.points} />
   ) : null;
 
   if (result.ok) {
@@ -170,6 +195,7 @@ async function PlotForecast({
         forecast={result.data}
         nameKo={nameKo}
         plotId={plotId}
+        satelliteChart={satelliteChart}
         todayIso={todayIso}
       />
     );
@@ -186,6 +212,7 @@ async function PlotForecast({
         forecast={stale.data}
         nameKo={nameKo}
         plotId={plotId}
+        satelliteChart={satelliteChart}
         todayIso={todayIso}
       />
     );
