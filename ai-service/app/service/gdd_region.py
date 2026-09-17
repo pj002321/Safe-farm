@@ -14,6 +14,11 @@ from app.domain.gdd import classify_deviation, daily_gdd, station_plot_id
 from app.models.normal import Normal
 from app.models.weather import WeatherDaily
 
+# 평년값 기준 우선순위. 앞엣것이 이긴다 — 'kma'(1991~2020) 가 기본이고 'kma-1981'
+# (1981~2010) 은 관측소 이전으로 새 기준이 끊긴 곳(143 대구·146 전주)의 폴백이다.
+# 'open-meteo-era5' 는 여기 없다 — 기상청 평년값과 산출 방식이 달라 섞지 않는다.
+NORMAL_PRIORITY = ("kma", "kma-1981")
+
 
 def _actual_gdd_by_station(
     db: Session, stations: list[str], start: date, end: date
@@ -46,19 +51,37 @@ def _normal_gdd_by_station(
     """normals(월/일 365개 고정행)에서 관측소별 평년 누적 GDD.
 
     날짜 범위만큼 (월,일)로 골라 더한다.
+
+    기준연도가 둘이다 — 'kma'(1991~2020) 를 쓰고, 그 관측소에 없을 때만
+    'kma-1981'(1981~2010) 로 내려간다. 관측소 이전으로 새 기준이 끊긴 곳
+    (143 대구·146 전주)이 있는데, 인근 관측소로 대신하면 지리 차이가 1.6~2.2℃ 라
+    기준 차이(0.3℃)보다 훨씬 크다 — 옛 기준이라도 자기 도시 값이 맞다(2026-09-18 실측).
     """
     rows = db.execute(
         select(
-            Normal.station, Normal.month, Normal.day, Normal.tmax_normal, Normal.tmin_normal
-        ).where(
-            Normal.station.in_(stations), Normal.source == "kma"
-        )
+            Normal.station,
+            Normal.month,
+            Normal.day,
+            Normal.tmax_normal,
+            Normal.tmin_normal,
+            Normal.source,
+        ).where(Normal.station.in_(stations), Normal.source.in_(NORMAL_PRIORITY))
     ).all()
 
     by_station: dict[str, dict[tuple[int, int], tuple[float, float]]] = {}
-    for stn, month, day, tmax, tmin in rows:
-        if tmax is not None and tmin is not None:
-            by_station.setdefault(stn, {})[(month, day)] = (tmax, tmin)
+    쓴기준: dict[str, str] = {}
+    for stn, month, day, tmax, tmin, source in rows:
+        if tmax is None or tmin is None:
+            continue
+        # 한 관측소에 두 기준이 다 있으면 앞선 것(새 기준)만 쓴다. 날짜별로 섞으면
+        # 같은 관측소 안에서도 잣대가 갈려 누적 GDD 가 조용히 어긋난다
+        기존 = 쓴기준.get(stn)
+        if 기존 is None or NORMAL_PRIORITY.index(source) < NORMAL_PRIORITY.index(기존):
+            by_station[stn] = {}
+            쓴기준[stn] = source
+        elif source != 기존:
+            continue
+        by_station[stn][(month, day)] = (tmax, tmin)
 
     totals: dict[str, float] = {}
     for stn, by_month_day in by_station.items():
