@@ -14,9 +14,7 @@ from langchain_core.language_models import BaseChatModel
 from langgraph.graph import END
 
 from app.domain.suitability import CropProfile, WeatherWindow, rank_crops
-from app.graph.state import RecommendationState  # GraphState
-
-# from app.knowledge.retriever import retrieve as retrieve_chunks # 찐빠 나서 제외함
+from app.graph.state import RecommendationState
 
 WeatherFetcher = Callable[[str], Awaitable[WeatherWindow]]
 """농지 id로 기상 요약을 가져오는 함수. 구현은 호스트가 주입한다."""
@@ -32,24 +30,6 @@ EXPLAIN_SYSTEM_PROMPT = (
 )
 
 
-# 얘네 찐빠라 주석 처리함
-# def retrieve(state: GraphState) -> dict:
-#     docu = retrieve_chunks(state["db"], state["question"])
-#     return {"documents": docu}
-
-# def generate(state: GraphState) -> dict:
-#     """TODO: state["documents"]를 근거로 LLM 호출해서 답변 생성"""
-#     raise NotImplementedError
-
-
-'''
-## graph.py - build_graph() 중 일부
-> builder.add_node("collect_weather", ...) # 노드를 추가하는 코드
->> 문제는 이 node는 인자로 state밖에 받지 못한다. -> 즉, 인자를 하나밖에 호출 못함.
->> 그래서 make_collect*()함수는 내부에서 async func(State) 함수를 만들어서 리턴하고, 
->> 그 함수 안에는 실제로 그래프에서 돌 "날씨를 가져오는 방법"을 미리 심어둔다
->> 내가 원하는, 의도한 상태의 날씨를 가져오는 게 주입된 함수를 호출한다.
-'''
 def make_collect_weather_node(fetch_weather: WeatherFetcher) -> AsyncNode:
     """
     # summary

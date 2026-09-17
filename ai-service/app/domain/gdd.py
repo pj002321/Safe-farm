@@ -24,7 +24,8 @@ NO_DATA_COLOR = "#d1d5db"
 def station_plot_id(stn: str) -> str:
     """weather_daily 는 plot_id 로 키가 잡혀 있어 텃밭 전용이다. 관측소 자체 데이터를
     담을 테이블을 새로 만드는 대신 이 합성 키로 같은 테이블을 재사용한다
-    (pipeline/fetch_region_weather.py 가 적재, app/service/gdd_region.py 가 조회할 때 둘 다 이 규칙을 쓴다).
+    (pipeline/fetch_region_weather.py 가 적재, app/service/gdd_region.py 가 조회할 때
+    둘 다 이 규칙을 쓴다).
     """
     return f"stn:{stn}"
 

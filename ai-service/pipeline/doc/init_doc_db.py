@@ -1,4 +1,6 @@
-"""documents·chunks 등 core.db.Base 소속 테이블과 pgvector 확장을 만든다. farm 쪽은 init_farm_db.py 가 맡는다.
+"""documents·chunks 등 core.db.Base 소속 테이블과 pgvector 확장을 만든다.
+
+farm 쪽은 init_farm_db.py 가 맡는다.
 
 몇 번을 돌려도 안전하고, 지우는 것은 없다.
 
