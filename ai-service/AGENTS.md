@@ -6,7 +6,8 @@
 
 작물 추천 · 질의응답 AI 서버. Python 3.10+ · LangGraph.
 설치·명령은 `README.md`, 설계 배경과 미결정 사항은 `archi_base.md`.
-레포 전체 규칙(브랜치 · Supabase)은 루트 `AGENTS.md`.
+**코딩 컨벤션 정본은 `docs/CONVENTIONS.md`** — 여기 적힌 건 요약이고, 어긋나면
+그쪽이 맞다. 레포 전체 규칙(브랜치 · Supabase)은 루트 `AGENTS.md`.
 
 ## Overview
 프로젝트에 필요한 임베딩 및 LLM 기능 구축
@@ -70,12 +71,11 @@ def refs(data: dict[str, list[dict]]) -> list[Ref]:
 
 ```
 app/
-├── core/           # 설정, DB 연결 (공통 인프라)
-├── models/         # SQLAlchemy 테이블 정의 (Document, Chunk)
-├── repo/           # DB 쿼리. 가공하지 않고 값만 넘긴다
-├── domain/         # 프레임워크 무관 순수 로직 (작물 적합도 판정 등)
-├── service/        # repo 와 domain 이 만나는 지점. 합친 결과를 api 로 올린다
-├── knowledge/      # RAG 런타임 로직 (chunk 분리, 임베딩 호출, 벡터 저장/검색)
+├── core/           # 설정, DB 연결, 서비스 토큰 검증 (공통 인프라)
+├── models/         # SQLAlchemy 테이블 정의. farm/ 은 Next.js 와 공유하는 테이블
+├── domain/         # 프레임워크 무관 순수 로직 (적합도·GDD·가드레일·대화 맥락)
+├── service/        # 쿼리와 domain 을 합쳐 api 로 올린다
+├── knowledge/      # RAG 런타임 (청킹 · 임베딩 · 벡터/키워드 검색 · 생성)
 ├── graph/          # LangGraph 오케스트레이션 (state, node, edge)
 ├── api/, schemas/  # FastAPI 엔드포인트 + 요청/응답 스키마
 └── main.py         # FastAPI 앱 진입점
@@ -88,13 +88,15 @@ tests/              # pytest
 `repo` 는 쿼리만, `domain` 은 가공만 한다. 둘을 합치는 코드는 `service` 에만 둔다.
 `graph/` 는 독립된 층이 아니라 service 가 쓰는 수단 중 하나다.
 
+- **`app/repo/` 는 아직 없다.** 쿼리가 `service/` 안에 있다. 한 파일이 쿼리와
+  가공을 같이 하게 될 때 떼어 낸다 — 빈 칸을 채우려고 미리 나누지 않는다.
 - `graph/` 는 환경변수를 읽지 않는다. DB 세션·LLM 같은 외부 의존은 state 나 인자로 받는다.
 - 점수 로직(`domain/suitability.py`)은 프론트에도 한 벌 더 있다. 정본 미정.
 
-### 아직 빈 파일 (0줄)
+### 결정을 미룬 규칙은 `_{n}` 으로 둔다
 
-`app/api/` · `app/schemas/` · `app/models/` · `app/repo/` · `app/service/` · `app/ai/` ·
-`pipeline/` 전부.
-내용이 있는 건 `app/domain/` · `app/graph/` · `app/knowledge/` · `app/core/` · `app/main.py`.
+근거가 없을 때 억지로 하나를 고르지 않는다. 같은 모양의 함수를 `_1`·`_2` 로 두고
+모듈 상수 한 줄(`SCORE_RULE`, `HISTORY_RULE`)로 갈아 끼운다.
+자세한 규칙은 `docs/CONVENTIONS.md` §5.
 
 ## Logging

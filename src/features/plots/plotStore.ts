@@ -4,8 +4,10 @@ import { getSupabaseServer } from "@/shared/supabase/server";
 import type { PlotEditInput } from "./domain/editPlot";
 import {
   type PlotCard,
+  type PlotDetail,
   type PlotMapPoint,
   toPlotCard,
+  toPlotDetail,
   toPlotMapPoint,
 } from "./domain/plotSummary";
 import type { PlotRegistrationInput } from "./domain/registerPlot";
@@ -91,7 +93,8 @@ export async function countPlots(userId: string): Promise<number> {
   const { count, error } = await supabase
     .from("plots")
     .select("id", { count: "exact", head: true })
-    .eq("user_id", userId);
+    .eq("user_id", userId)
+    .is("deleted_at", null);
 
   if (error) throw new Error(error.message);
   return count ?? 0;
@@ -106,10 +109,8 @@ export async function listPlots(userId: string): Promise<PlotMapPoint[]> {
     .select(`id, name, latitude, longitude, ${CULTIVATION_SELECT}`)
     // RLS가 자기 밭만 보이게 하지만, profileStore.ts처럼 where도 명시한다.
     .eq("user_id", userId)
-    // ⚠️ 정렬을 명시하지 않으면 Postgres 가 순서를 보장하지 않는다. 날씨 화면이
-    //    "첫 밭을 펼쳐 둔다"는 규칙을 쓰므로, 순서가 흔들리면 새로 고칠 때마다
-    //    다른 밭이 펴진다. `listPlotCards` 와 같은 정렬로 맞춘다.
-    .order("created_at", { ascending: false });
+    .is("deleted_at", null)
+    .is("cultivations.deleted_at", null);
 
   if (error) throw new Error(error.message);
 
@@ -128,11 +129,59 @@ export async function getPlot(
     .select(`id, name, latitude, longitude, ${CULTIVATION_SELECT}`)
     .eq("user_id", userId)
     .eq("id", plotId)
+    .is("deleted_at", null)
+    .is("cultivations.deleted_at", null)
     .maybeSingle();
 
   if (error) throw new Error(error.message);
 
   return data ? toPlotMapPoint(data) : null;
+}
+
+/**
+ * 밭 상세 화면이 읽는 밭 한 행. 없거나 남의 밭이면 null.
+ *
+ * `getPlot()` 과 나눈 이유는 상세가 지역·넓이를 쓰고 작물은 안 쓰기 때문이다.
+ * 지도용 반환 모양을 넓히면 `map/page.tsx` 가 같이 흔들린다.
+ */
+export async function getPlotDetail(
+  userId: string,
+  plotId: string,
+): Promise<PlotDetail | null> {
+  const supabase = await getSupabaseServer();
+
+  const { data, error } = await supabase
+    .from("plots")
+    .select("id, name, region_ko, area_m2, latitude, longitude, grid_x, grid_y")
+    .eq("user_id", userId)
+    .eq("id", plotId)
+    .is("deleted_at", null)
+    .maybeSingle();
+
+  if (error) throw new Error(error.message);
+
+  return data ? toPlotDetail(data) : null;
+}
+
+/**
+ * 좌표·격자가 필요한 화면이 읽는 밭 전체. 날씨(`/weather`)가 쓴다.
+ *
+ * `listPlotCards()` 와 나눈 이유는 그쪽이 작물을 같이 끌고 오기 때문이다 —
+ * 날씨는 작물을 안 보고, 대신 `getPlotDetail()` 과 같은 컬럼이 필요하다.
+ */
+export async function listPlotDetails(userId: string): Promise<PlotDetail[]> {
+  const supabase = await getSupabaseServer();
+
+  const { data, error } = await supabase
+    .from("plots")
+    .select("id, name, region_ko, area_m2, latitude, longitude, grid_x, grid_y")
+    .eq("user_id", userId)
+    .is("deleted_at", null)
+    .order("created_at", { ascending: true });
+
+  if (error) throw new Error(error.message);
+
+  return (data ?? []).map(toPlotDetail);
 }
 
 /**
@@ -148,6 +197,8 @@ export async function listPlotCards(userId: string): Promise<PlotCard[]> {
     .from("plots")
     .select(`id, name, area_m2, region_ko, created_at, ${CULTIVATION_SELECT}`)
     .eq("user_id", userId)
+    .is("deleted_at", null)
+    .is("cultivations.deleted_at", null)
     .order("created_at", { ascending: false });
 
   if (error) throw new Error(error.message);
@@ -177,6 +228,7 @@ export async function updatePlotBasics(
     .update({ name: input.name, area_m2: input.areaM2 })
     .eq("id", input.plotId)
     .eq("user_id", userId)
+    .is("deleted_at", null)
     .select("id");
 
   if (error) throw new Error(error.message);
@@ -184,48 +236,64 @@ export async function updatePlotBasics(
 }
 
 /**
- * 텃밭을 지운다. 되돌릴 수 없다.
+ * 텃밭을 숨긴다. 행은 남는다(soft delete).
  *
- * `cultivations`·`plot_tasks` 는 `plots.id` 를 `on delete cascade` 로
- * 참조하지만, DB 의 cascade 에 맡기지 않고 여기서 먼저 지운다 — cascade 가
- * 도는 시점엔 이 plots 행이 이미 지워진 것으로 보여, "내 밭인가"를 plots 에
- * 다시 조회하는 두 테이블의 RLS 정책이 항상 막는다(밭 삭제 자체가 실패한다).
- * plots 행이 아직 있을 때 먼저 지우면 그 조회가 정상적으로 통과한다.
- * // ponytail: 하드 삭제. 되살리기가 필요해지면 deleted_at 컬럼 + 모든 읽기
- * //           경로의 필터로 올린다(정책 수정이 같이 따라온다).
+ * 이름이 `delete` 가 아닌 이유는 실제로 도는 쿼리가 update 라서다. 사용자에게는
+ * 삭제지만 DB 에는 `deleted_at` 이 찍힐 뿐이고, 그 차이를 이름이 감추면 다음
+ * 사람이 "지웠는데 왜 아직 조회되나"를 쿼리 로그에서 찾게 된다.
+ *
+ * 하드 삭제로 안 가는 이유는 `20260917000000_soft_delete.sql` 에 적었다 —
+ * 관찰 기록이 cascade 로 함께 사라진다.
+ *
+ * 딸린 재배도 같이 숨긴다. **밭을 먼저 찍고 재배를 나중에 찍는다** — 반대로 하다
+ * 중간에 실패하면 작물만 사라진 멀쩡한 밭이 남는다. 이 순서면 밭이 이미 안 보여
+ * 딸린 재배가 어디에도 안 뜬다.
  *
  * 0건이면 던지는 이유는 `updatePlotBasics` 와 같다. 남의 밭 id 를 보냈거나 이미
  * 지워진 뒤인데, 조용히 성공으로 넘기면 화면만 지워진 것처럼 보인다.
  */
-export async function deletePlot(
+export async function softDeletePlot(
   userId: string,
   plotId: string,
 ): Promise<void> {
   if (!plotId) throw new Error("PLOT_NOT_FOUND");
 
   const supabase = await getSupabaseServer();
+  const deletedAt = new Date().toISOString();
 
+  const { data, error } = await supabase
+    .from("plots")
+    .update({ deleted_at: deletedAt })
+    .eq("id", plotId)
+    .eq("user_id", userId)
+    // 이미 지운 밭을 다시 지우면 시각이 덮어써져 "언제 지웠나"가 틀어진다.
+    .is("deleted_at", null)
+    .select("id");
+
+  if (error) throw new Error(error.message);
+  if (!data || data.length === 0) throw new Error("PLOT_NOT_FOUND");
+
+  // `cultivations` 는 features/cultivations 소관이지만 여기서 직접 찍는다.
+  // features 끼리 import 하는 것이 규칙 위반이고, 둘을 한 트랜잭션처럼 묶을
+  // 곳이 서버 액션밖에 없는데 그러면 밭 삭제를 부르는 모든 화면이 재배까지
+  // 알아야 한다. RLS 는 plots 를 경유하므로 소유 확인은 그대로 걸린다.
+  const { error: cultivationError } = await supabase
+    .from("cultivations")
+    .update({ deleted_at: deletedAt })
+    .eq("plot_id", plotId)
+    .is("deleted_at", null);
+
+  if (cultivationError) throw new Error(cultivationError.message);
+
+  // 할 일 카드는 **실제로 지운다.** `plot_tasks` 에는 `deleted_at` 이 없고,
+  // 대시보드 조회(`taskStore.listTaskCards`)가 `plots.deleted_at` 을 안 보므로
+  // 남겨 두면 숨긴 밭의 할 일이 그대로 뜬다. 규칙에서 나온 파생 자료라
+  // ai-service 가 다시 만들어 주니 지워도 잃는 자료가 없다
+  // (`20260917000000_plot_tasks_delete.sql` 이 delete 권한을 준 이유).
+  // 되돌릴 수 없는 단계라 밭을 숨긴 뒤 맨 마지막에 둔다.
   const tasksDeleted = await supabase
     .from("plot_tasks")
     .delete()
     .eq("plot_id", plotId);
   if (tasksDeleted.error) throw new Error(tasksDeleted.error.message);
-
-  const cultivationsDeleted = await supabase
-    .from("cultivations")
-    .delete()
-    .eq("plot_id", plotId);
-  if (cultivationsDeleted.error) {
-    throw new Error(cultivationsDeleted.error.message);
-  }
-
-  const { data, error } = await supabase
-    .from("plots")
-    .delete()
-    .eq("id", plotId)
-    .eq("user_id", userId)
-    .select("id");
-
-  if (error) throw new Error(error.message);
-  if (!data || data.length === 0) throw new Error("PLOT_NOT_FOUND");
 }
