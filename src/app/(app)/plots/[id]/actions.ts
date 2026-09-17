@@ -109,12 +109,20 @@ export async function removeCultivation(formData: FormData): Promise<void> {
  *
  * 등록 폼(`plots/new/actions.ts`)의 품종 조회·저장 로직을 그대로 재사용한다 —
  * 두 화면이 같은 `CropCards` 마크업과 `parseCultivationSelections` 를 쓴다.
+ *
+ * `plotId` 는 폼에서 온 값이라 그대로 믿지 않는다. 이 액션은 export 하나가 곧
+ * 공개 POST 라 상세 화면을 거치지 않고도 부를 수 있다. `getPlotDetail` 이
+ * `user_id` 와 `deleted_at is null` 을 같이 보므로 남의 밭과 지운 밭이 한 번에
+ * 걸러진다 — `cultivations_insert_own` 도 `api/tasks.py` 도 지운 밭을 안 본다.
  */
 export async function addCultivations(formData: FormData): Promise<void> {
-  await requireConsent();
+  const { viewer } = await requireConsent();
 
   const plotId = String(formData.get("plotId") ?? "");
   if (!plotId) redirect("/plots");
+
+  const plot = await getPlotDetail(viewer.id, plotId);
+  if (!plot) fail(plotId, "밭을 찾지 못했습니다.");
 
   const selections = parseCultivationSelections(formData);
   const variantIdByCropId = await resolveVariantIds(
