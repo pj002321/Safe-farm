@@ -33,7 +33,7 @@ import { PAGE_DOCK_ID } from "@/components/shared/pageDock";
  *   무관하게 id 로 연결된다.)
  * - ⚠️ 클래스를 **반복문으로 만들 수 없다.** Tailwind 는 클래스 문자열을 정적으로
  *   읽으므로 `group-has-[#wizard-${n}:checked]` 같은 조립은 생성되지 않고 조용히
- *   사라진다. 그래서 네 벌을 **리터럴로** 적는다.
+ *   사라진다. 그래서 세 벌을 **리터럴로** 적는다.
  * - ⚠️ **display 유틸리티 두 개를 겨루게 하지 말 것.** `hidden` 과
  *   `group-has-[…]:flex` 는 특이도가 달라서(:has 안의 id 가 계산된다) 안전하지만,
  *   `group-has` 끼리 붙이면 특이도가 같아 **Tailwind 의 정렬 순서**가 승자를
@@ -56,7 +56,7 @@ import { PAGE_DOCK_ID } from "@/components/shared/pageDock";
 const MENU_ID = "dock-menu";
 
 /**
- * 단계별 한 줄. 네 벌을 다 렌더해 두고 현재 것만 켠다.
+ * 단계별 한 줄. 세 벌을 다 렌더해 두고 현재 것만 켠다.
  * `show` 는 **완성된 클래스 문자열**이어야 한다(위 주석 참고).
  */
 const ROWS = [
@@ -82,21 +82,13 @@ const ROWS = [
     show: "hidden group-has-[#wizard-3:checked]/wizard:flex",
     prevId: "wizard-2",
     prevKo: "텃밭 정보",
-    next: { id: "wizard-4", ko: "다음" },
-  },
-  {
-    no: 4,
-    ko: "재배 정보",
-    show: "hidden group-has-[#wizard-4:checked]/wizard:flex",
-    prevId: "wizard-3",
-    prevKo: "작물 선택",
     next: null,
   },
 ] as const;
 
-/** 독 위 가장자리의 진행 막대. 네 너비 중 현재 단계 하나만 맞는다. */
+/** 독 위 가장자리의 진행 막대. 세 너비 중 현재 단계 하나만 맞는다. */
 const FILL =
-  "group-has-[#wizard-1:checked]/wizard:w-1/4 group-has-[#wizard-2:checked]/wizard:w-2/4 group-has-[#wizard-3:checked]/wizard:w-3/4 group-has-[#wizard-4:checked]/wizard:w-full";
+  "group-has-[#wizard-1:checked]/wizard:w-1/3 group-has-[#wizard-2:checked]/wizard:w-2/3 group-has-[#wizard-3:checked]/wizard:w-full";
 
 /** 메뉴가 열리면 사라지는 층(단계 조작). */
 const HIDE_ON_MENU =
@@ -180,7 +172,7 @@ export function PlotWizardDock({ formId }: { formId: string }) {
                   */}
                   <span className="flex min-w-0 flex-1 items-center justify-center gap-1.5">
                     <span className="font-mono text-fg-subtle text-xs tabular-nums">
-                      {row.no}/4
+                      {row.no}/3
                     </span>
                     <span className="truncate font-medium text-fg text-sm">
                       {row.ko}

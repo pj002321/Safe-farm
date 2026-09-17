@@ -156,6 +156,16 @@ export function LoaderIcon(props: IconProps) {
   );
 }
 
+/** 돋보기. 목록 검색·필터 입력 옆에 쓴다. */
+export function SearchIcon(props: IconProps) {
+  return (
+    <svg {...ICON_BASE} aria-hidden="true" {...props}>
+      <circle cx="10.5" cy="10.5" r="6.5" />
+      <path d="m20 20-4.8-4.8" />
+    </svg>
+  );
+}
+
 /** 어깨선 위의 머리. 계정·내 정보. 하단 탭에 쓰려고 추가했다(기존에 사람 아이콘이 없었다). */
 export function UserIcon(props: IconProps) {
   return (

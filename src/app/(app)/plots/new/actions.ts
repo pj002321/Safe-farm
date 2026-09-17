@@ -3,14 +3,18 @@
 import { redirect } from "next/navigation";
 import { resolveVariantIds } from "@/features/crops/cropStore";
 import { insertCultivations } from "@/features/cultivations/cultivationStore";
+import {
+  parseCultivationSelections,
+  toCultivationInputs,
+} from "@/features/cultivations/domain/parseCultivationSelection";
 import { toKmaGrid } from "@/features/monitoring/domain/kmaGrid";
-import { parsePlotRegistration } from "@/features/plots/domain/registerPlot";
-import { insertPlot } from "@/features/plots/plotStore";
-import { requireUser } from "@/shared/auth/session";
 import {
   PLOT_LOCATION_MESSAGE,
   validatePlotLocation,
 } from "@/features/monitoring/domain/plotLocation";
+import { parsePlotRegistration } from "@/features/plots/domain/registerPlot";
+import { insertPlot } from "@/features/plots/plotStore";
+import { requireUser } from "@/shared/auth/session";
 /**
  * ---------------------------------------------
  * [Feature]: 텃밭 등록 제출
@@ -61,18 +65,15 @@ export async function registerPlot(formData: FormData): Promise<void> {
   });
 
   // 폼은 작물까지만 고른다. 재배 행은 품종을 가리키므로 여기서 한 번 바꿔 준다.
-  const variantIds = await resolveVariantIds(parsed.value.cropIds);
+  // 작물마다 파종일·방식이 다를 수 있어(배추 8월, 무 9월) 폼도 작물별로 받는다.
+  const selections = parseCultivationSelections(formData);
+  const variantIdByCropId = await resolveVariantIds(
+    selections.map((selection) => selection.cropId),
+  );
 
   await insertCultivations(
     plotId,
-    variantIds.map((variantId) => ({
-      variantId,
-      // 폼의 "아직 안 심었어요" 가 곧 PLANNED 다. 파종일이 없어도 들어간다.
-      status: parsed.value.sowingUnknown ? "PLANNED" : "GROWING",
-      sowingDate: parsed.value.sowingUnknown ? null : parsed.value.sowingDate,
-      sowingType:
-        parsed.value.sowingMethod === "seedling" ? "SEEDLING" : "SEED",
-    })),
+    toCultivationInputs(selections, variantIdByCropId),
   );
 
   redirect("/dashboard");
