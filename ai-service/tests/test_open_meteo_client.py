@@ -90,3 +90,18 @@ def test_normalize_hourly_handles_short_tail():
 def test_normalize_hourly_empty_when_missing():
     assert normalize_hourly(None, "2026-09-17T09:00") == []
     assert normalize_hourly({}, "2026-09-17T09:00") == []
+
+
+def test_forecast_request_pins_wind_unit_to_ms():
+    """풍속 단위를 요청에 **박아 둔다**.
+
+    Open-Meteo 기본은 km/h 다. 이 파라미터가 빠지면 값은 그대로 오고 타입도 맞아서
+    아무도 못 알아채는데, m/s 임계와 비교하는 쪽이 전부 오판한다(7일 중 6일이
+    강풍으로 뜬 적이 있다). 그래서 응답이 아니라 **요청**을 검사한다.
+    """
+    import inspect
+
+    from pipeline import open_meteo_client
+
+    source = inspect.getsource(open_meteo_client.fetch_forecast)
+    assert '"wind_speed_unit": "ms"' in source

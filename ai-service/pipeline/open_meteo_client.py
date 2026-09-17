@@ -31,6 +31,13 @@ def fetch_forecast(lat, lon, days=7):
             "current": "temperature_2m,relative_humidity_2m,precipitation,wind_speed_10m",
             "hourly": "temperature_2m,precipitation,precipitation_probability",
             "daily": "temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_probability_max,wind_speed_10m_max,relative_humidity_2m_mean",
+            # ⚠️ **반드시 지정한다.** Open-Meteo 의 풍속 기본 단위는 km/h 다.
+            #    빼먹으면 5.6 이 나오는데 실제로는 1.56 m/s 라, m/s 임계와 비교하는
+            #    쪽(작업 가능 판정·방제 기준)이 **전부 "바람 셈"으로 판정된다.**
+            #    실제로 그 버그를 냈다 — 7일 중 6일이 강풍으로 뜨고, 그 판정이
+            #    비 안내보다 먼저라 진짜 비 오는 날의 안내가 묻혔다.
+            #    docs/DOMAIN_REF.md:674 가 이미 경고해 둔 것이다.
+            "wind_speed_unit": "ms",
             "timezone": "Asia/Seoul",
             "forecast_days": days,
         },
