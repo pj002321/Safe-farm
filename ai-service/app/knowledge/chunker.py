@@ -11,7 +11,6 @@ from app.core.config import EMBED_TOKENIZER
 from app.models.chunk import Chunk
 from app.models.document import Document
 
-
 CHUNK_SIZE = 480  # 토큰
 CHUNK_OVERLAP = 48  # 경계에서 잘린 문맥을 다음 조각이 이어받는 분량
 # 한국어는 공백이 문장 경계를 잘 안 알려준다. 종결어미('다'/'요')를 경계 후보로 넣는다.

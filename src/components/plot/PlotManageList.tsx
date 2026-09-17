@@ -214,11 +214,11 @@ function PlotRow({
           <strong className="font-semibold">
             &ldquo;{plot.nameKo ?? "이름 없는 밭"}&rdquo;
           </strong>
-          을 삭제합니다. 위치·작물·파종일이 함께 사라지고{" "}
+          을 삭제합니다. 위치·작물·파종일을 더 볼 수 없고{" "}
           <strong className="font-semibold text-unsuitable">
             되돌릴 수 없습니다.
           </strong>{" "}
-          지난 재배 기록은 남습니다.
+          이 밭에 심은 작물도 함께 사라집니다.
         </p>
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <Button

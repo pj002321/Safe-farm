@@ -1,6 +1,13 @@
 import "server-only";
 
 import { getSupabaseServer } from "@/shared/supabase/server";
+import {
+  type CultivationCard,
+  type CultivationCardRow,
+  sortCultivationCards,
+  toCultivationCard,
+} from "./domain/cultivationCard";
+import type { FailureReasonCode } from "./domain/failureReason";
 
 /**
  * ---------------------------------------------
@@ -56,24 +63,174 @@ export async function insertCultivations(
 }
 
 /**
- * 재배 한 건을 수확 완료로 바꾼다.
+ * 밭 상세의 작물 카드가 읽는 컬럼.
  *
- * `GROWING` 인 것만 겨냥한다(`.eq("status", "GROWING")`) — 이미 수확했거나
- * 실패 처리된 건을 다시 누르면 0건으로 끝나 아래에서 던진다. 소유자 확인은
- * `insertCultivations` 와 같은 이유로 여기서 하지 않는다: RLS 가
- * `plots.user_id` 를 타고 막는다.
+ * `crop_variants → crops` 까지 타고 내려가는 이유는 이름이 작물에 있고 목표
+ * GDD 는 품종에 있어서다. 둘 다 없으면 카드도 게이지도 못 그린다.
  */
-export async function markHarvested(cultivationId: string): Promise<void> {
+const CARD_SELECT = `
+  id, variant_id, alias, status, sowing_date, sowing_type,
+  start_stage_order, harvested_at, failed_at, failure_reason, created_at,
+  crop_variants(
+    maturity_type, gdd_target, days_to_harvest,
+    crops(name, base_temp, upper_temp)
+  )
+`;
+
+/**
+ * 밭 하나에 심은 것 전부. 진행 중인 것이 위로 온다.
+ *
+ * `user_id` 를 받지 않는다 — `cultivations` 에는 그 컬럼이 없고, RLS 가
+ * `plots` 를 경유해 소유자를 확인한다(마이그레이션의 `cultivations_select_own`).
+ * 남의 밭 id 를 넣으면 오류가 아니라 **빈 배열**이 돌아온다. 호출자는 그 전에
+ * `getPlot()` 으로 밭 자체를 확인하므로 여기서 다시 막지 않는다.
+ */
+export async function listCultivationCards(
+  plotId: string,
+): Promise<CultivationCard[]> {
+  const supabase = await getSupabaseServer();
+
+  const { data, error } = await supabase
+    .from("cultivations")
+    .select(CARD_SELECT)
+    .eq("plot_id", plotId)
+    .is("deleted_at", null);
+
+  if (error) throw new Error(error.message);
+
+  const rows = (data ?? []) as unknown as CultivationCardRow[];
+  return sortCultivationCards(rows.map(toCultivationCard));
+}
+
+/**
+ * 재배 한 건만 읽는다. 재배 상세 화면이 쓴다.
+ *
+ * `plot_id` 를 같이 거는 이유는 `markHarvested` 와 같다 — RLS 가 막지만 경로가
+ * 가리키는 밭과 실제 소유가 어긋난 상태를 여기서 한 번 더 끊는다.
+ * 없으면 던지지 않고 null 이다. 상세 화면은 이걸 받아 `notFound()` 를 부른다.
+ */
+export async function getCultivationCard(
+  plotId: string,
+  cultivationId: string,
+): Promise<CultivationCard | null> {
+  const supabase = await getSupabaseServer();
+
+  const { data, error } = await supabase
+    .from("cultivations")
+    .select(CARD_SELECT)
+    .eq("id", cultivationId)
+    .eq("plot_id", plotId)
+    .is("deleted_at", null)
+    .maybeSingle();
+
+  if (error) throw new Error(error.message);
+  if (!data) return null;
+
+  return toCultivationCard(data as unknown as CultivationCardRow);
+}
+
+/**
+ * 재배를 중단(실패) 처리한다.
+ *
+ * 수확과 나란한 종료다. 지우지 않는 이유도 같다 — "왜 망했나"가 다음 시즌에
+ * 제일 쓸모 있는 기록이다. 사유 코드는 `failureReason.ts` 의 목록과
+ * `ck_cultivations_failure_reason` 제약이 같은 값을 쓴다. 둘이 어긋나면 insert
+ * 가 아니라 여기 update 가 제약에서 막힌다.
+ *
+ * 0건이면 던진다(`markHarvested` 와 같은 이유).
+ */
+export async function markFailed(
+  plotId: string,
+  cultivationId: string,
+  failedAt: string,
+  reason: FailureReasonCode,
+): Promise<void> {
   const supabase = await getSupabaseServer();
 
   const { data, error } = await supabase
     .from("cultivations")
     .update({
-      status: "HARVESTED",
-      harvested_at: new Date().toISOString().slice(0, 10),
+      status: "FAILED",
+      failed_at: failedAt,
+      failure_reason: reason,
     })
     .eq("id", cultivationId)
+    .eq("plot_id", plotId)
+    .is("deleted_at", null)
+    .select("id");
+
+  if (error) throw new Error(error.message);
+  if (!data || data.length === 0) throw new Error("CULTIVATION_NOT_FOUND");
+}
+
+/**
+ * 수확 완료로 바꾼다.
+ *
+ * 행을 지우지 않는다 — "언제 무엇을 거뒀나"가 다음 시즌의 자료다. 상태만 바뀌고
+ * 파종일·품종은 그대로 남으므로 지난 기록 화면이 그대로 읽어 간다.
+ *
+ * 수확일은 **호출부가 정해 넘긴다**(`kstDateString()`). 여기서 `new Date()` 를
+ * 읽으면 UTC 라 KST 00~09시에 누른 수확이 어제 날짜로 찍힌다 — GDD 게이지가
+ * 이 날짜를 기준으로 잡으므로 하루가 통째로 어긋난다.
+ *
+ * `GROWING` 인 것만 겨냥한다 — 이미 수확했거나 실패 처리된 건을 다시 누르면
+ * 0건으로 끝나 아래에서 던진다.
+ *
+ * `plot_id` 를 where 에 같이 넣는 이유는 `plotStore` 의 다른 함수들과 같다.
+ * RLS 가 막지만, 정책이 한 번 헐거워졌을 때 조용히 남의 행을 고치지 않게 한다.
+ *
+ * 0건이면 던진다. update 는 조건에 맞는 행이 없어도 **오류가 아니라 0건으로
+ * 조용히 끝나기** 때문이다 — 그대로 성공으로 넘기면 화면만 수확했다고 말한다.
+ */
+export async function markHarvested(
+  plotId: string,
+  cultivationId: string,
+  harvestedAt: string,
+): Promise<void> {
+  const supabase = await getSupabaseServer();
+
+  const { data, error } = await supabase
+    .from("cultivations")
+    .update({ status: "HARVESTED", harvested_at: harvestedAt })
+    .eq("id", cultivationId)
+    .eq("plot_id", plotId)
     .eq("status", "GROWING")
+    // 지운 재배를 수확 처리하면 숨긴 행이 되살아난 것처럼 보인다.
+    .is("deleted_at", null)
+    .select("id");
+
+  if (error) throw new Error(error.message);
+  if (!data || data.length === 0) throw new Error("CULTIVATION_NOT_FOUND");
+}
+
+/**
+ * 재배 한 건을 숨긴다. 행은 남는다(soft delete).
+ *
+ * 수확한 기록까지 치우려는 게 아니다 — 끝난 재배는 `markHarvested` 로
+ * `HARVESTED` 가 되어 목록에 남는다. 이쪽은 **잘못 등록한 건을 정정**하는 길이다.
+ *
+ * 이름이 `delete` 가 아닌 이유는 도는 쿼리가 update 라서다(`softDeletePlot` 과
+ * 같은 이유). 행을 실제로 지우지 않는 근거는
+ * `20260917000000_soft_delete.sql` 에 적었다.
+ *
+ * 0건이면 던진다. update 는 조건에 맞는 행이 없어도 오류가 아니라 0건으로 끝나,
+ * 그대로 넘기면 화면만 지워진 것처럼 보인다.
+ */
+export async function softDeleteCultivation(
+  plotId: string,
+  cultivationId: string,
+): Promise<void> {
+  if (!cultivationId) throw new Error("CULTIVATION_NOT_FOUND");
+
+  const supabase = await getSupabaseServer();
+
+  const { data, error } = await supabase
+    .from("cultivations")
+    .update({ deleted_at: new Date().toISOString() })
+    .eq("id", cultivationId)
+    .eq("plot_id", plotId)
+    // 두 번 지우면 시각이 덮어써져 "언제 지웠나"가 틀어진다.
+    .is("deleted_at", null)
     .select("id");
 
   if (error) throw new Error(error.message);
@@ -96,6 +253,7 @@ export async function updateCultivationSowing(
 
   const { data, error } = await supabase
     .from("cultivations")
+
     .update({ status: input.status, sowing_date: input.sowingDate })
     .eq("id", cultivationId)
     .select("id");
