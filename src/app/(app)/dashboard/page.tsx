@@ -234,9 +234,18 @@ export default async function DashboardPage({
           </h2>
 
           {/* 예보는 외부 호출이라 느릴 수 있다. 경계를 따로 둬서 할 일·텃밭이
-              이 호출을 기다리지 않게 한다. */}
+              이 호출을 기다리지 않게 한다.
+
+              ⚠️ `key` 가 **핵심이다.** 없으면 밭을 바꿔도 React 가 같은 경계를
+              재사용해, 새 예보가 도착할 때까지 이전 밭 값이 그대로 남는다. 밭마다
+              다른 key 를 주면 경계가 새로 떠서 `ForecastFallback`(위성 스캔
+              애니메이션)이 보이고, 지금 읽는 중임이 드러난다. 예열을 없앤 뒤로는
+              밭을 바꿀 때 실제로 기다림이 생기므로 이 표시가 있어야 한다. */}
           {profile && (
-            <Suspense fallback={<ForecastFallback />}>
+            <Suspense
+              fallback={<ForecastFallback />}
+              key={requestedPlotId ?? "default"}
+            >
               <ForecastPanel
                 requestedPlotId={requestedPlotId}
                 userId={profile.id}
