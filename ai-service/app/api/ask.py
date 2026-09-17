@@ -21,6 +21,7 @@ from app.core.db import get_db
 from app.core.security import require_service_token
 from app.knowledge.retriever import retrieve_with_score
 from app.knowledge.vector_store import neighbors
+from app.domain.ask_suggest import suggest_questions
 from app.domain.diversity import diversify
 from app.schemas.ask import AskFeedbackRequest, AskMatch, AskRequest, AskResponse, NO_MATCH_DISTANCE
 from app.domain.guardrail import BLOCKED_MESSAGE, is_blocked_topic
