@@ -87,8 +87,40 @@ export interface SigunguWarnFeatureCollection {
   }>;
 }
 
+/** 오늘 남은 질문 횟수. 상한은 ai-service 의 `DAILY_ASK_LIMIT` 이 정한다 — 여기서 상수로 두지 않는다. */
+export interface AskQuota {
+  limit: number;
+  used: number;
+  remaining: number;
+}
+
+/**
+ * 초기 화면에 띄울 추천 질문. `basis` 는 이 질문들이 어느 작물·단계에서 나왔는지
+ * 적은 한 줄 — 밭을 안 골랐으면 null 이고 질문도 일반 질문이 된다.
+ */
+export interface AskSuggestions {
+  questions: string[];
+  basis: string | null;
+}
+
+/** `/v1/ask` 에 보내는 값. **`user_id` 는 여기 없다** — 세션에서 채우므로 부르는 쪽이 정하지 못한다. */
+export interface AskInput {
+  question: string;
+  plotId?: string | null;
+}
+
 export type AiResult<T> =
   | { ok: true; data: T }
+  | { ok: false; reason: AiFailure; detail?: string };
+
+/**
+ * 스트리밍 호출의 결과. 본문을 읽지 않고 `Response` 를 그대로 넘긴다 —
+ * SSE 를 여기서 파싱하면 프록시가 한 번, 브라우저가 또 한 번 파싱하게 된다.
+ *
+ * ⚠️ 이 모듈은 `server-only` 다. Response 를 클라이언트로 들고 나가지 말 것.
+ */
+export type AiStreamResult =
+  | { ok: true; response: Response }
   | { ok: false; reason: AiFailure; detail?: string };
 
 /**
@@ -173,6 +205,70 @@ async function call<T>(
   }
 }
 
+/**
+ * 본문을 읽지 않고 응답을 그대로 돌려주는 호출. `/v1/ask` 는 답변을 토큰 단위로
+ * 흘려보내므로 `response.json()` 을 기다리면 스트리밍이 의미를 잃는다.
+ *
+ * ⚠️ 타임아웃이 **전체 수명**에 걸린다. `AbortSignal.timeout` 은 본문을 읽는 동안에도
+ *    계속 세므로, 값이 짧으면 답변이 길어질 때 문장 중간에서 끊긴다. 반대로 없애면
+ *    ai-service 가 멈췄을 때 Next 의 요청이 함께 매달린다 — 그래서 넉넉히 주되 건다.
+ */
+async function stream(
+  path: string,
+  init: RequestInit & { timeoutMs?: number } = {},
+): Promise<AiStreamResult> {
+  const cfg = config();
+  if (!cfg) {
+    return {
+      ok: false,
+      reason: "not-configured",
+      detail:
+        "AI_SERVICE_URL 과 AI_SERVICE_TOKEN 이 필요합니다. Railway 의 Next 서비스 변수를 확인하세요.",
+    };
+  }
+
+  const { timeoutMs = ASK_TIMEOUT_MS, ...rest } = init;
+
+  try {
+    const response = await fetch(`${cfg.baseUrl}${path}`, {
+      ...rest,
+      signal: AbortSignal.timeout(timeoutMs),
+      headers: {
+        "Content-Type": "application/json",
+        "X-Service-Token": cfg.token,
+        ...rest.headers,
+      },
+      cache: "no-store",
+    });
+
+    if (response.status === 401) {
+      return {
+        ok: false,
+        reason: "unauthorized",
+        detail: "양쪽 AI_SERVICE_TOKEN 값이 다릅니다.",
+      };
+    }
+    if (!response.ok) {
+      return {
+        ok: false,
+        reason: "unavailable",
+        detail: `ai-service 가 ${response.status} 를 돌려줬습니다.`,
+      };
+    }
+
+    return { ok: true, response };
+  } catch (error) {
+    if (error instanceof Error && error.name === "TimeoutError") {
+      return { ok: false, reason: "timeout", detail: `${timeoutMs}ms 초과` };
+    }
+    console.error("[ai-service] 스트림 호출 실패", error);
+    return { ok: false, reason: "unavailable" };
+  }
+}
+
+/** 질문 한 건의 한계. 검색 + LLM 생성 + 토큰 스트리밍을 모두 덮어야 한다. */
+const ASK_TIMEOUT_MS = 60_000;
+
 export const aiService = {
   /** 서비스가 살아 있는지, 무엇을 할 수 있는지. */
   status: () => call<AiServiceStatus>("/v1/status"),
@@ -185,5 +281,57 @@ export const aiService = {
   sigunguWarn: () =>
     call<SigunguWarnFeatureCollection>("/v1/map/sigungu-warn", {
       timeoutMs: 15_000,
+    }),
+
+  /**
+   * 오늘 남은 질문 횟수. 화면이 묻기 전에 보여주는 값이라 짧게 끊는다 —
+   * 이게 늦어져서 질문 화면 자체가 늦게 뜨면 손해가 더 크다.
+   */
+  askQuota: (userId: string) =>
+    call<AskQuota>(`/v1/ask/quota?user_id=${encodeURIComponent(userId)}`),
+
+  /**
+   * 현재 생육단계에 맞는 추천 질문 3건. 밭을 안 골랐으면 일반 질문이 온다.
+   *
+   * `userId` 를 함께 보내는 이유는 질문 문장에 작물 이름과 생육단계가 박히기
+   * 때문이다. ai-service 가 그 값으로 밭 소유를 확인한다.
+   */
+  askSuggestions: (userId: string, plotId?: string | null) => {
+    const query = new URLSearchParams({ user_id: userId });
+    if (plotId) query.set("plot_id", plotId);
+    return call<AskSuggestions>(`/v1/ask/suggestions?${query.toString()}`);
+  },
+
+  /**
+   * 질문 한 건. 근거를 찾으면 SSE 로, 못 찾거나 막히면 JSON 으로 온다 —
+   * 부르는 쪽이 `Content-Type` 을 보고 갈라야 한다.
+   *
+   * `userId` 는 **세션에서 확인한 값만** 넘긴다. 브라우저가 보낸 값을 그대로
+   * 실으면 남의 이력에 질문을 쌓고 남의 한도를 태울 수 있다.
+   */
+  ask: (userId: string, input: AskInput) =>
+    stream("/v1/ask", {
+      method: "POST",
+      body: JSON.stringify({
+        question: input.question,
+        user_id: userId,
+        plot_id: input.plotId ?? null,
+      }),
+    }),
+
+  /** 답변 하나에 up/down 평가와 사유를 남긴다. */
+  askFeedback: (
+    historyId: string,
+    userId: string,
+    rating: "up" | "down",
+    reason?: string | null,
+  ) =>
+    call<{ ok: boolean }>(`/v1/ask/${encodeURIComponent(historyId)}/feedback`, {
+      method: "POST",
+      body: JSON.stringify({
+        user_id: userId,
+        rating,
+        reason: reason ?? null,
+      }),
     }),
 };
