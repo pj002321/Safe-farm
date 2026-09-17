@@ -30,26 +30,34 @@ function one<T>(value: Embedded<T> | undefined): T | null {
   return value ?? null;
 }
 
+export type CultivationStatus = "PLANNED" | "GROWING" | "HARVESTED" | "FAILED";
+
 /** 조인해 온 재배 한 건. */
 export interface CultivationRow {
+  id: string;
   variant_id: number;
   sowing_date: string | null;
+  status: CultivationStatus;
   crop_variants: Embedded<{ crops: Embedded<{ name: string }> }>;
 }
 
 /** 재배 한 건을 화면이 쓰는 모양으로 좁힌 것. */
 export interface CultivationSummary {
+  id: string;
   variantId: number;
   cropNameKo: string | null;
   sowingDate: string | null;
+  status: CultivationStatus;
 }
 
 // 행 하나에 crop 여러 개 일 때, 대표 crop 하나만
 function toCultivationSummary(row: CultivationRow): CultivationSummary {
   return {
+    id: row.id,
     variantId: row.variant_id,
     cropNameKo: one(one(row.crop_variants)?.crops)?.name ?? null,
     sowingDate: row.sowing_date,
+    status: row.status,
   };
 }
 
@@ -61,6 +69,8 @@ export interface PlotMapPoint {
   variantId: number | null;
   cropNameKo: string | null;
   sowingDate: string | null;
+  /** 이 밭에서 자라는 것 전부. 상세 화면의 수확 처리가 건별로 골라야 해서 필요하다. */
+  cultivations: CultivationSummary[];
 }
 
 /** plots 테이블 한 행 + 재배 목록. */
@@ -83,6 +93,7 @@ export function toPlotMapPoint(row: PlotRow): PlotMapPoint {
     variantId: lead?.variant_id ?? null,
     cropNameKo: lead ? toCultivationSummary(lead).cropNameKo : null,
     sowingDate: lead?.sowing_date ?? null,
+    cultivations: row.cultivations.map(toCultivationSummary),
   };
 }
 

@@ -1,4 +1,5 @@
-import { SproutIcon } from "@/components/icons";
+import { CalendarIcon, SproutIcon } from "@/components/icons";
+import { SowingStatusOption } from "@/components/plot/CropCards";
 import { Badge } from "@/components/shared/Badge";
 import { Button, ButtonLink } from "@/components/shared/Button";
 import { EmptyState } from "@/components/shared/EmptyState";
@@ -25,10 +26,15 @@ import type { PlotGrowth } from "@/features/cultivations/growthStore";
  * - 삭제는 `PlotManageList` 와 같은 급의 확인을 요구한다(제14조). 다만 겨냥
  *   라디오 대신 `<details>` 를 쓴다 — 카드마다 폼이 따로라 폼 바깥에 라디오를
  *   둘 이유가 없다.
+ * - **파종일도 여기서 고친다.** 등록·작물 추가 때는 한 번만 받고 고칠 길이
+ *   없었다 — GDD 적산 기준점이라 잘못 적으면 게이지가 계속 틀어진다. 재배
+ *   건마다 따로라 밭 화면이 아니라 카드 안에 둔다. 입력은 등록 마법사의
+ *   `SowingStatusOption`(`CropCards.tsx`)을 그대로 쓴다.
  *
  * [Usage]
  * ```tsx
- * <CultivationList cards={cards} growth={growth} onHarvest={…} onDelete={…} />
+ * <CultivationList cards={cards} growth={growth} onHarvest={…} onDelete={…}
+ *   onEditSowing={…} />
  * ```
  * ---------------------------------------------
  */
@@ -41,6 +47,7 @@ interface CultivationListProps {
   today: string;
   onHarvest: (formData: FormData) => Promise<void>;
   onDelete: (formData: FormData) => Promise<void>;
+  onEditSowing: (formData: FormData) => Promise<void>;
 }
 
 const STATUS_LABEL: Record<CultivationStatus, string> = {
@@ -83,6 +90,7 @@ export function CultivationList({
   today,
   onHarvest,
   onDelete,
+  onEditSowing,
 }: CultivationListProps) {
   if (cards.length === 0) {
     return (
@@ -109,6 +117,7 @@ export function CultivationList({
             gauge={gaugeById.get(card.id) ?? null}
             key={card.id}
             onDelete={onDelete}
+            onEditSowing={onEditSowing}
             onHarvest={onHarvest}
             plotId={plotId}
             today={today}
@@ -136,6 +145,7 @@ function CultivationItem({
   today,
   onHarvest,
   onDelete,
+  onEditSowing,
 }: {
   plotId: string;
   card: CultivationCard;
@@ -143,6 +153,7 @@ function CultivationItem({
   today: string;
   onHarvest: (formData: FormData) => Promise<void>;
   onDelete: (formData: FormData) => Promise<void>;
+  onEditSowing: (formData: FormData) => Promise<void>;
 }) {
   const title = cardTitle(card);
   const days = card.sowingDate ? daysSince(card.sowingDate, today) : null;
@@ -204,6 +215,61 @@ function CultivationItem({
               수확 완료
             </Button>
           </form>
+        )}
+
+        {/* 수확·실패 처리된 건은 되돌릴 일이 아니라 수정 칸을 안 보여준다. */}
+        {(card.status === "GROWING" || card.status === "PLANNED") && (
+          <details className="w-full [&_summary]:list-none">
+            <summary className="inline-flex w-fit cursor-pointer items-center gap-1 rounded-md px-3 py-1.5 font-medium text-fg-muted text-sm transition-colors duration-200 ease-out-expo hover:bg-surface-2 hover:text-fg">
+              <CalendarIcon className="size-3.5" />
+              파종일 수정
+            </summary>
+            <form
+              action={onEditSowing}
+              className="group/sowing mt-3 flex flex-col gap-3 rounded-lg bg-surface-2 p-4"
+            >
+              <input name="plotId" type="hidden" value={plotId} />
+              <input name="cultivationId" type="hidden" value={card.id} />
+              <fieldset className="flex flex-col gap-1.5">
+                <legend className="font-medium text-fg text-xs">파종일</legend>
+                <SowingStatusOption
+                  defaultChecked={card.sowingDate !== null}
+                  labelKo="날짜를 압니다"
+                  name="sowingStatus"
+                  value="known"
+                />
+                <SowingStatusOption
+                  defaultChecked={card.sowingDate === null}
+                  labelKo="아직 안 심었어요"
+                  name="sowingStatus"
+                  value="unknown"
+                />
+              </fieldset>
+
+              {/* "날짜를 압니다"를 골랐을 때만 나타난다(CropSowingFields 와 같은 패턴). */}
+              <div className="hidden flex-col gap-1.5 group-has-[input[value=known]:checked]/sowing:flex">
+                <label
+                  className="font-medium text-fg text-xs"
+                  htmlFor={`sowing-date-${card.id}`}
+                >
+                  날짜 선택
+                </label>
+                <input
+                  className="w-full rounded-md border border-border bg-surface px-3 py-2 text-fg text-sm transition-colors hover:border-accent focus:border-accent"
+                  defaultValue={card.sowingDate ?? ""}
+                  id={`sowing-date-${card.id}`}
+                  name="sowingDate"
+                  type="date"
+                />
+              </div>
+
+              <div>
+                <Button size="sm" type="submit">
+                  저장
+                </Button>
+              </div>
+            </form>
+          </details>
         )}
 
         {/* 삭제는 한 번 더 묻는다. 펼치기에 네이티브 details 를 써서 JS 가 0줄이다. */}

@@ -1,9 +1,20 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import {
+  AlertTriangleIcon,
+  CloudRainIcon,
+  SnowflakeIcon,
+  SunIcon,
+  TyphoonIcon,
+  WindIcon,
+} from "@/components/icons";
+import { Badge } from "@/components/shared/Badge";
 import type {
   SigunguGddFeatureCollection,
+  SigunguRainFeatureCollection,
   SigunguWarnFeatureCollection,
+  SigunguWindFeatureCollection,
 } from "@/shared/aiService/client";
 import {
   KakaoSdkScript,
@@ -30,12 +41,17 @@ const MAP_CONTAINER_ID = "sigungu-layer-map-canvas";
 const NATIONWIDE_LEVEL = 13;
 const NATIONWIDE_CENTER = { lat: 36.4, lng: 127.9 };
 const GDD_DEFAULT_COLOR = "#d1d5db";
+const POLL_MS = 5 * 60 * 1000;
 
-type Layer = "gdd" | "warn";
+type Layer = "gdd" | "warn" | "rain" | "wind";
 type GddProperties =
   SigunguGddFeatureCollection["features"][number]["properties"];
 type WarnProperties =
   SigunguWarnFeatureCollection["features"][number]["properties"];
+type RainProperties =
+  SigunguRainFeatureCollection["features"][number]["properties"];
+type WindProperties =
+  SigunguWindFeatureCollection["features"][number]["properties"];
 
 interface Geometry {
   type: "Polygon" | "MultiPolygon";
@@ -54,7 +70,9 @@ function outerRings(geometry: Geometry): number[][][] {
 
 type Selected =
   | { layer: "gdd"; name: string; properties: GddProperties }
-  | { layer: "warn"; name: string; properties: WarnProperties };
+  | { layer: "warn"; name: string; properties: WarnProperties }
+  | { layer: "rain"; name: string; properties: RainProperties }
+  | { layer: "wind"; name: string; properties: WindProperties };
 
 export function SigunguLayerMap() {
   const [status, setStatus] = useState<KakaoSdkStatus>("loading");
@@ -65,21 +83,44 @@ export function SigunguLayerMap() {
   const [warnData, setWarnData] = useState<SigunguWarnFeatureCollection | null>(
     null,
   );
+  const [rainData, setRainData] = useState<SigunguRainFeatureCollection | null>(
+    null,
+  );
+  const [windData, setWindData] = useState<SigunguWindFeatureCollection | null>(
+    null,
+  );
   const [error, setError] = useState(false);
   const [selected, setSelected] = useState<Selected | null>(null);
 
+  // 특보·관측은 배치가 새로 돌면 화면을 안 새로고침해도 바뀐다 — 그 변화를
+  // 실제로 반영해야 "실시간" 이지, 정적으로 한 번 그려두면 흉내일 뿐이다.
+  // 이미 한 번 띄운 뒤엔 주기 조회가 실패해도 에러로 덮지 않는다 — 잠깐의
+  // 네트워크 흔들림 때문에 잘 보이던 지도가 사라지면 안 된다.
   useEffect(() => {
-    Promise.all([
-      fetch("/api/map/sigungu-gdd").then((res) => res.json()),
-      fetch("/api/map/sigungu-warn").then((res) => res.json()),
-    ])
-      .then(([gdd, warn]) => {
-        // ai-service 미연결("not-configured")도 200으로 온다 — features 유무로 가른다.
-        if ("features" in gdd) setGddData(gdd);
-        else setError(true);
-        if ("features" in warn) setWarnData(warn);
-      })
-      .catch(() => setError(true));
+    let loadedOnce = false;
+    const load = () =>
+      Promise.all([
+        fetch("/api/map/sigungu-gdd").then((res) => res.json()),
+        fetch("/api/map/sigungu-warn").then((res) => res.json()),
+        fetch("/api/map/sigungu-rain").then((res) => res.json()),
+        fetch("/api/map/sigungu-wind").then((res) => res.json()),
+      ])
+        .then(([gdd, warn, rain, wind]) => {
+          // ai-service 미연결("not-configured")도 200으로 온다 — features 유무로 가른다.
+          if ("features" in gdd) setGddData(gdd);
+          else if (!loadedOnce) setError(true);
+          if ("features" in warn) setWarnData(warn);
+          if ("features" in rain) setRainData(rain);
+          if ("features" in wind) setWindData(wind);
+          loadedOnce = true;
+        })
+        .catch(() => {
+          if (!loadedOnce) setError(true);
+        });
+
+    load();
+    const interval = setInterval(load, POLL_MS);
+    return () => clearInterval(interval);
   }, []);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: layer 는 재실행 신호다 — 레이어를 바꾸면 이전 선택 정보를 지운다.
@@ -89,7 +130,14 @@ export function SigunguLayerMap() {
 
   useEffect(() => {
     if (status !== "ready") return;
-    const data = layer === "gdd" ? gddData : warnData;
+    const data =
+      layer === "gdd"
+        ? gddData
+        : layer === "warn"
+          ? warnData
+          : layer === "rain"
+            ? rainData
+            : windData;
     if (!data) return;
 
     const container = document.getElementById(MAP_CONTAINER_ID);
@@ -123,19 +171,11 @@ export function SigunguLayerMap() {
       overlays.push(polygon);
 
       sdk.maps.event.addListener(polygon, "click", () => {
-        setSelected(
-          layer === "gdd"
-            ? {
-                layer,
-                name: feature.properties.name,
-                properties: feature.properties as GddProperties,
-              }
-            : {
-                layer,
-                name: feature.properties.name,
-                properties: feature.properties as WarnProperties,
-              },
-        );
+        setSelected({
+          layer,
+          name: feature.properties.name,
+          properties: feature.properties,
+        } as Selected);
       });
     }
 
@@ -144,7 +184,7 @@ export function SigunguLayerMap() {
     return () => {
       for (const overlay of overlays) overlay.setMap(null);
     };
-  }, [status, layer, gddData, warnData]);
+  }, [status, layer, gddData, warnData, rainData, windData]);
 
   if (error) {
     return (
@@ -155,13 +195,24 @@ export function SigunguLayerMap() {
     );
   }
 
-  const asOf = layer === "gdd" ? gddData?.asOf : warnData?.asOf;
+  const asOf =
+    layer === "gdd"
+      ? gddData?.asOf
+      : layer === "warn"
+        ? warnData?.asOf
+        : layer === "rain"
+          ? rainData?.asOf
+          : windData?.asOf;
   const hasWarning = warnData?.features.some((f) => f.properties.color) ?? true;
 
   return (
     <div className="flex flex-col gap-3">
       <KakaoSdkScript onStatusChange={setStatus} />
-      <LayerToggle layer={layer} onChange={setLayer} />
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <LayerToggle layer={layer} onChange={setLayer} />
+        <LiveIndicator />
+      </div>
+      {layer === "warn" && warnData && <WarningIconRow data={warnData} />}
       <div
         className="h-[24rem] w-full overflow-hidden rounded-lg border border-border sm:h-[28rem]"
         id={MAP_CONTAINER_ID}
@@ -173,6 +224,57 @@ export function SigunguLayerMap() {
         </p>
       )}
       {selected && <RegionInfo selected={selected} />}
+    </div>
+  );
+}
+
+/** 정적인 색칠 지도로는 "지금도 갱신되고 있다"는 게 안 느껴져서 붙인 맥박 표시. */
+function LiveIndicator() {
+  return (
+    <span className="inline-flex items-center gap-1.5 text-fg-subtle text-xs">
+      <span className="relative grid size-2 place-items-center">
+        <span className="absolute inset-0 animate-pulse-ring rounded-full bg-telemetry" />
+        <span className="size-1.5 rounded-full bg-telemetry" />
+      </span>
+      실시간 반영 중
+    </span>
+  );
+}
+
+/** 특보 종류마다 아이콘을 붙인다. 못 아는 종류(건조·풍랑 등)는 경고 삼각형으로 받는다. */
+const WARN_KIND_ICONS: Record<string, typeof AlertTriangleIcon> = {
+  태풍: TyphoonIcon,
+  강풍: WindIcon,
+  호우: CloudRainIcon,
+  대설: SnowflakeIcon,
+  한파: SnowflakeIcon,
+  폭염: SunIcon,
+};
+
+/** 전국에서 지금 발효 중인 특보 종류를 중복 없이 뽑아 아이콘 배지로 보여준다. */
+function WarningIconRow({ data }: { data: SigunguWarnFeatureCollection }) {
+  const kinds: string[] = [];
+  for (const feature of data.features) {
+    for (const kind of feature.properties.warnings ?? []) {
+      if (!kinds.includes(kind)) kinds.push(kind);
+    }
+  }
+  if (kinds.length === 0) return null;
+
+  return (
+    <div className="flex flex-wrap gap-2">
+      {kinds.map((kind) => {
+        const Icon = WARN_KIND_ICONS[kind] ?? AlertTriangleIcon;
+        return (
+          <Badge
+            icon={<Icon className="size-3.5" />}
+            key={kind}
+            tone="unsuitable"
+          >
+            {kind} 특보
+          </Badge>
+        );
+      })}
     </div>
   );
 }
@@ -191,6 +293,12 @@ function LayerToggle({
       </ToggleButton>
       <ToggleButton active={layer === "warn"} onClick={() => onChange("warn")}>
         기상특보
+      </ToggleButton>
+      <ToggleButton active={layer === "rain"} onClick={() => onChange("rain")}>
+        강수량
+      </ToggleButton>
+      <ToggleButton active={layer === "wind"} onClick={() => onChange("wind")}>
+        바람
       </ToggleButton>
     </div>
   );
@@ -229,6 +337,25 @@ const GDD_LEGEND_ITEMS = [
 
 const WARN_COLOR = "#dc2626";
 
+// app/domain/weather_region.py 의 강수·바람 등급과 색을 그대로 맞춘다.
+const RAIN_LEGEND_ITEMS = [
+  { color: "#dbeafe", labelKo: "강수 없음" },
+  { color: "#93c5fd", labelKo: "약한 비" },
+  { color: "#3b82f6", labelKo: "보통 비" },
+  { color: "#f97316", labelKo: "강한 비" },
+  { color: "#dc2626", labelKo: "매우 강한 비" },
+  { color: GDD_DEFAULT_COLOR, labelKo: "데이터 없음" },
+];
+
+const WIND_LEGEND_ITEMS = [
+  { color: "#a7f3d0", labelKo: "약함" },
+  { color: "#6ee7b7", labelKo: "약간 강함" },
+  { color: "#fdba74", labelKo: "강함" },
+  { color: "#f97316", labelKo: "강풍주의보 수준" },
+  { color: "#dc2626", labelKo: "강풍경보 수준" },
+  { color: GDD_DEFAULT_COLOR, labelKo: "데이터 없음" },
+];
+
 function Legend({
   layer,
   asOf,
@@ -239,7 +366,11 @@ function Legend({
   const items =
     layer === "gdd"
       ? GDD_LEGEND_ITEMS
-      : [{ color: WARN_COLOR, labelKo: "발효 중인 특보" }];
+      : layer === "warn"
+        ? [{ color: WARN_COLOR, labelKo: "발효 중인 특보" }]
+        : layer === "rain"
+          ? RAIN_LEGEND_ITEMS
+          : WIND_LEGEND_ITEMS;
 
   return (
     <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-fg-muted text-xs">
@@ -274,8 +405,22 @@ function RegionInfo({ selected }: { selected: Selected }) {
             {selected.properties.label ?? "데이터 없음"}
           </p>
         )
-      ) : (
+      ) : selected.layer === "warn" ? (
         <p className="text-fg-muted">{selected.properties.label}</p>
+      ) : selected.layer === "rain" ? (
+        <p className="text-fg-muted">
+          {selected.properties.rainMm != null
+            ? `${selected.properties.rainMm}mm`
+            : "데이터 없음"}{" "}
+          · {selected.properties.label}
+        </p>
+      ) : (
+        <p className="text-fg-muted">
+          {selected.properties.windMax != null
+            ? `${selected.properties.windMax}m/s`
+            : "데이터 없음"}{" "}
+          · {selected.properties.label}
+        </p>
       )}
     </div>
   );

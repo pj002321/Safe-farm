@@ -34,10 +34,6 @@ export interface PlotRegistrationInput {
   addressKo: string;
   regionCode: string;
   regionKo: string;
-  cropIds: number[];
-  sowingDate: string | null;
-  sowingUnknown: boolean;
-  sowingMethod: "seed" | "seedling";
 }
 
 export type ParsePlotRegistrationResult =
@@ -69,14 +65,6 @@ export function parsePlotRegistration(
       addressKo: str(formData.get("addressKo")),
       regionCode,
       regionKo: str(formData.get("regionKo")),
-      cropIds: formData
-        .getAll("cropIds")
-        .map(Number)
-        .filter((id) => Number.isInteger(id) && id > 0),
-      sowingDate: str(formData.get("sowingDate")) || null,
-      sowingUnknown: formData.get("sowingUnknown") === "1",
-      sowingMethod:
-        formData.get("sowingMethod") === "seedling" ? "seedling" : "seed",
     },
   };
 }

@@ -47,12 +47,15 @@ export async function listCropOptions(): Promise<CropOption[]> {
  * 결정적이긴 하지만 농학적 근거는 없다. 폼에 품종 선택을 넣거나 마스터에 대표
  * 품종 표시가 생기면 그때 바꾼다.
  *
- * 품종이 하나도 없는 작물(배추 등 일부는 아직 마스터가 비었다)은 결과에서 빠진다.
+ * `cropId` 로 되돌려 주는 이유는 호출자가 작물별 파종 정보(날짜·방식)와 다시
+ * 이어 붙여야 해서다. 배열로 주면 품종이 없는 작물이 중간에 빠졌을 때 자리가
+ * 밀려 엉뚱한 파종 정보와 짝지어진다. 품종이 하나도 없는 작물(마스터 공백)은
+ * 맵에서 빠진다 — 호출자가 그 작물을 건너뛴다.
  */
 export async function resolveVariantIds(
   cropIds: readonly number[],
-): Promise<number[]> {
-  if (cropIds.length === 0) return [];
+): Promise<Map<number, number>> {
+  if (cropIds.length === 0) return new Map();
 
   const supabase = await getSupabaseServer();
 
@@ -64,14 +67,12 @@ export async function resolveVariantIds(
 
   if (error) throw new Error(error.message);
 
-  const firstByCrop = new Map<number, number>();
+  const variantIdByCropId = new Map<number, number>();
   for (const row of data ?? []) {
-    if (!firstByCrop.has(row.crop_id)) {
-      firstByCrop.set(row.crop_id, row.variant_id);
+    if (!variantIdByCropId.has(row.crop_id)) {
+      variantIdByCropId.set(row.crop_id, row.variant_id);
     }
   }
 
-  return cropIds
-    .map((cropId) => firstByCrop.get(cropId))
-    .filter((id): id is number => id !== undefined);
+  return variantIdByCropId;
 }

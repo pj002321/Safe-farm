@@ -4,19 +4,25 @@ import {
   ChevronDownIcon,
 } from "@/components/icons";
 import { Badge } from "@/components/shared/Badge";
-import type { Priority, TaskCardData } from "./sample";
+import type {
+  Priority,
+  TaskCardData,
+} from "@/features/dashboard/domain/taskSummary";
 
 /**
  * ---------------------------------------------
- * [Feature]: 주말 할 일 — 작업 카드 목록 (마크업 전용)
+ * [Feature]: 오늘 할 일 — 작업 카드 목록
  *
  * [Description]
  * - **근거 없는 작업은 카드로 만들지 않는다**(스펙). 그래서 `reasonKo` 가 선택이
  *   아니라 필수 필드다. 타입에서 막아 두면 나중에 근거 없는 카드가 끼어들 수 없다.
- * - 완료 체크는 네이티브 `<input type="checkbox">` 다. 체크하면 CSS 로 카드가
- *   흐려지고 제목에 취소선이 들어간다 — 상태를 JS 로 들고 있지 않아도 되고,
- *   키보드·스크린리더가 공짜로 따라온다. **"하단으로 이동"은 로직**이라 여기서는
- *   완료된 카드를 아래 묶음에 따로 그려 그 결과 모습만 보여 준다.
+ * - 완료 체크는 `<form action={toggleTaskAction}>` + 제출 버튼이다. 체크박스처럼
+ *   보이지만 실제로는 폼 제출이라 JS 없이도 동작한다 — `plots/actions.ts` 의
+ *   삭제 버튼과 같은 패턴. `toggleTaskAction` 은 Server Action 인데, 여기(`src/
+ *   components/`)에서 `src/app/` 을 직접 import 하면 의존 방향(shared → features →
+ *   app)이 거꾸로 된다. 그래서 `page.tsx` 가 액션을 읽어 prop 으로 내려준다.
+ *   **"하단으로 이동"은 로직**이라 여기서는 완료된 카드를 아래 묶음에 따로 그려
+ *   그 결과 모습만 보여 준다.
  * - 기본 3건 + 더보기도 **마크업만**이다. `<details>` 로 열고 닫아 JS 없이
  *   동작하게 했다 — 퍼블 단계에서 열린 모습과 닫힌 모습을 둘 다 볼 수 있다.
  * - 우선순위를 **색으로만** 구분하지 않는다. 배지에 글자가 함께 들어가야 색을
@@ -24,7 +30,7 @@ import type { Priority, TaskCardData } from "./sample";
  *
  * [Usage]
  * ```tsx
- * <TaskBoard tasks={SAMPLE_TASKS} />
+ * <TaskBoard tasks={tasks} toggleTaskAction={toggleTask} />
  * ```
  * ---------------------------------------------
  */
@@ -43,9 +49,13 @@ const PRIORITY: Record<
 
 interface TaskBoardProps {
   tasks: readonly TaskCardData[];
+  /** 완료 체크 제출을 받는 Server Action. page.tsx 가 내려준다. */
+  toggleTaskAction: (formData: FormData) => Promise<void>;
 }
 
-export function TaskBoard({ tasks }: TaskBoardProps) {
+export function TaskBoard({ tasks, toggleTaskAction }: TaskBoardProps) {
+  if (tasks.length === 0) return <EmptyTasks />;
+
   const open = tasks.filter((task) => !task.done);
   const done = tasks.filter((task) => task.done);
   const shown = open.slice(0, VISIBLE_COUNT);
@@ -54,7 +64,11 @@ export function TaskBoard({ tasks }: TaskBoardProps) {
   return (
     <div className="flex flex-col gap-3">
       {shown.map((task) => (
-        <TaskCard key={task.id} task={task} />
+        <TaskCard
+          key={task.id}
+          task={task}
+          toggleTaskAction={toggleTaskAction}
+        />
       ))}
 
       {rest.length > 0 && (
@@ -66,7 +80,11 @@ export function TaskBoard({ tasks }: TaskBoardProps) {
           </summary>
           <div className="mt-3 flex flex-col gap-3">
             {rest.map((task) => (
-              <TaskCard key={task.id} task={task} />
+              <TaskCard
+                key={task.id}
+                task={task}
+                toggleTaskAction={toggleTaskAction}
+              />
             ))}
           </div>
         </details>
@@ -79,7 +97,11 @@ export function TaskBoard({ tasks }: TaskBoardProps) {
           </h3>
           <div className="mt-3 flex flex-col gap-3">
             {done.map((task) => (
-              <TaskCard key={task.id} task={task} />
+              <TaskCard
+                key={task.id}
+                task={task}
+                toggleTaskAction={toggleTaskAction}
+              />
             ))}
           </div>
         </section>
@@ -88,25 +110,59 @@ export function TaskBoard({ tasks }: TaskBoardProps) {
   );
 }
 
-function TaskCard({ task }: { task: TaskCardData }) {
+/**
+ * 카드가 하나도 없을 때.
+ *
+ * 빈 배열을 그대로 두면 "오늘 할 일" 밑이 그냥 빈 공간이라 서비스가 멈춘
+ * 것처럼 보인다(빈 상태 없는 `PlotStrip` 이 같은 이유로 온보딩을 그리는 것과
+ * 같은 문제). 판정은 매일·밭마다 실제로 도는 것이니, "확인했고 지금은 없다"를
+ * 눈에 보이는 카드 한 장으로 알려준다.
+ */
+function EmptyTasks() {
+  return (
+    <div className="rounded-lg border border-border border-dashed bg-surface-2/40 px-6 py-8 text-center">
+      <span className="mx-auto grid size-11 place-items-center rounded-full bg-telemetry text-accent-on">
+        <CheckIcon strokeWidth={3} />
+      </span>
+      <p className="mt-3 font-semibold text-fg text-sm">
+        오늘은 특별히 할 일이 없습니다
+      </p>
+      <p className="mx-auto mt-1.5 max-w-xs text-balance text-fg-muted text-xs leading-relaxed">
+        강수량과 생육 단계를 매일 다시 판정합니다. 조건이 바뀌면 그 즉시 카드로
+        알려 드릴게요.
+      </p>
+    </div>
+  );
+}
+
+function TaskCard({
+  task,
+  toggleTaskAction,
+}: {
+  task: TaskCardData;
+  toggleTaskAction: (formData: FormData) => Promise<void>;
+}) {
   const priority = PRIORITY[task.priority];
 
   return (
-    // has-[:checked]: 로 카드 전체가 흐려진다. peer-* 는 형제에만 닿아서
-    // 카드 안쪽 요소까지 한 번에 바꾸려면 has 쪽이 맞다.
-    <article className="rounded-lg border border-border bg-surface p-4 transition-[opacity,border-color] duration-200 ease-out-expo has-[:checked]:border-border has-[:checked]:opacity-55">
+    // 체크박스가 아니라 실제 완료 여부(task.done)로 흐림 처리한다 — 더 이상
+    // :checked 의사 클래스가 아니라 서버가 내려준 값을 그린다.
+    <article
+      className={`rounded-lg border border-border bg-surface p-4 transition-[opacity,border-color] duration-200 ease-out-expo ${task.done ? "opacity-55" : ""}`}
+    >
       <div className="flex items-start gap-3">
-        <label className="mt-0.5 shrink-0 cursor-pointer">
-          <span className="sr-only">{task.titleKo} 완료 표시</span>
-          <input
-            className="peer sr-only"
-            defaultChecked={task.done}
-            type="checkbox"
-          />
-          <span className="grid size-[1.375rem] place-items-center rounded-full border border-border-strong bg-surface text-transparent transition-colors duration-150 peer-checked:border-telemetry peer-checked:bg-telemetry peer-checked:text-accent-on peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-ring peer-focus-visible:outline-offset-2">
+        <form action={toggleTaskAction} className="mt-0.5 shrink-0">
+          <input name="taskId" type="hidden" value={task.id} />
+          <input name="done" type="hidden" value={(!task.done).toString()} />
+          <button
+            aria-pressed={task.done}
+            className={`grid size-[1.375rem] place-items-center rounded-full border transition-colors duration-150 focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-2 ${task.done ? "border-telemetry bg-telemetry text-accent-on" : "border-border-strong bg-surface text-transparent"}`}
+            type="submit"
+          >
+            <span className="sr-only">{task.titleKo} 완료 표시</span>
             <CheckIcon className="size-3.5" strokeWidth={3} />
-          </span>
-        </label>
+          </button>
+        </form>
 
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">

@@ -3,11 +3,19 @@
 import { redirect } from "next/navigation";
 import { resolveVariantIds } from "@/features/crops/cropStore";
 import { insertCultivations } from "@/features/cultivations/cultivationStore";
+import {
+  parseCultivationSelections,
+  toCultivationInputs,
+} from "@/features/cultivations/domain/parseCultivationSelection";
 import { toKmaGrid } from "@/features/monitoring/domain/kmaGrid";
+import {
+  PLOT_LOCATION_MESSAGE,
+  validatePlotLocation,
+} from "@/features/monitoring/domain/plotLocation";
 import { parsePlotRegistration } from "@/features/plots/domain/registerPlot";
 import { insertPlot } from "@/features/plots/plotStore";
+import { aiService } from "@/shared/aiService/client";
 import { requireUser } from "@/shared/auth/session";
-
 /**
  * ---------------------------------------------
  * [Feature]: 텃밭 등록 제출
@@ -39,6 +47,14 @@ export async function registerPlot(formData: FormData): Promise<void> {
   const parsed = parsePlotRegistration(formData);
   if (!parsed.ok) throw new Error(parsed.error);
 
+  // 지도 단계의 검사는 클라이언트일 뿐이다. 이 액션은 공개 POST 엔드포인트라
+  // 폼을 거치지 않고 직접 호출될 수 있으므로 국내 좌표인지 여기서 다시 막는다.
+  const locationIssue = validatePlotLocation({
+    lat: parsed.value.latitude,
+    lon: parsed.value.longitude,
+  });
+  if (locationIssue) throw new Error(PLOT_LOCATION_MESSAGE[locationIssue]);
+
   const grid = toKmaGrid({
     lat: parsed.value.latitude,
     lon: parsed.value.longitude,
@@ -50,19 +66,27 @@ export async function registerPlot(formData: FormData): Promise<void> {
   });
 
   // 폼은 작물까지만 고른다. 재배 행은 품종을 가리키므로 여기서 한 번 바꿔 준다.
-  const variantIds = await resolveVariantIds(parsed.value.cropIds);
+  // 작물마다 파종일·방식이 다를 수 있어(배추 8월, 무 9월) 폼도 작물별로 받는다.
+  const selections = parseCultivationSelections(formData);
+  const variantIdByCropId = await resolveVariantIds(
+    selections.map((selection) => selection.cropId),
+  );
 
   await insertCultivations(
     plotId,
-    variantIds.map((variantId) => ({
-      variantId,
-      // 폼의 "아직 안 심었어요" 가 곧 PLANNED 다. 파종일이 없어도 들어간다.
-      status: parsed.value.sowingUnknown ? "PLANNED" : "GROWING",
-      sowingDate: parsed.value.sowingUnknown ? null : parsed.value.sowingDate,
-      sowingType:
-        parsed.value.sowingMethod === "seedling" ? "SEEDLING" : "SEED",
-    })),
+    toCultivationInputs(selections, variantIdByCropId),
   );
+
+  // 자정 배치를 기다리지 않고 등록 직후 오늘 할 일을 채운다. ai-service 가
+  // 죽어 있어도 밭 등록 자체는 끝난 상태라 리다이렉트를 막지 않는다.
+  const generated = await aiService.generateTasks(plotId);
+  if (!generated.ok) {
+    console.error(
+      "[registerPlot] 할 일 카드 생성 실패",
+      generated.reason,
+      generated.detail,
+    );
+  }
 
   redirect("/dashboard");
 }

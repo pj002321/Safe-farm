@@ -103,38 +103,6 @@ export async function listCultivationCards(
 }
 
 /**
- * 수확 완료로 바꾼다.
- *
- * 행을 지우지 않는다 — "언제 무엇을 거뒀나"가 다음 시즌의 자료다. 상태만 바뀌고
- * 파종일·품종은 그대로 남으므로 지난 기록 화면이 그대로 읽어 간다.
- *
- * `plot_id` 를 where 에 같이 넣는 이유는 `plotStore` 의 다른 함수들과 같다.
- * RLS 가 막지만, 정책이 한 번 헐거워졌을 때 조용히 남의 행을 고치지 않게 한다.
- *
- * 0건이면 던진다. update 는 조건에 맞는 행이 없어도 **오류가 아니라 0건으로
- * 조용히 끝나기** 때문이다 — 그대로 성공으로 넘기면 화면만 수확했다고 말한다.
- */
-export async function markHarvested(
-  plotId: string,
-  cultivationId: string,
-  harvestedAt: string,
-): Promise<void> {
-  const supabase = await getSupabaseServer();
-
-  const { data, error } = await supabase
-    .from("cultivations")
-    .update({ status: "HARVESTED", harvested_at: harvestedAt })
-    .eq("id", cultivationId)
-    .eq("plot_id", plotId)
-    // 지운 재배를 수확 처리하면 숨긴 행이 되살아난 것처럼 보인다.
-    .is("deleted_at", null)
-    .select("id");
-
-  if (error) throw new Error(error.message);
-  if (!data || data.length === 0) throw new Error("CULTIVATION_NOT_FOUND");
-}
-
-/**
  * 재배 한 건만 읽는다. 재배 상세 화면이 쓴다.
  *
  * `plot_id` 를 같이 거는 이유는 `markHarvested` 와 같다 — RLS 가 막지만 경로가
@@ -196,6 +164,46 @@ export async function markFailed(
 }
 
 /**
+ * 수확 완료로 바꾼다.
+ *
+ * 행을 지우지 않는다 — "언제 무엇을 거뒀나"가 다음 시즌의 자료다. 상태만 바뀌고
+ * 파종일·품종은 그대로 남으므로 지난 기록 화면이 그대로 읽어 간다.
+ *
+ * 수확일은 **호출부가 정해 넘긴다**(`kstDateString()`). 여기서 `new Date()` 를
+ * 읽으면 UTC 라 KST 00~09시에 누른 수확이 어제 날짜로 찍힌다 — GDD 게이지가
+ * 이 날짜를 기준으로 잡으므로 하루가 통째로 어긋난다.
+ *
+ * `GROWING` 인 것만 겨냥한다 — 이미 수확했거나 실패 처리된 건을 다시 누르면
+ * 0건으로 끝나 아래에서 던진다.
+ *
+ * `plot_id` 를 where 에 같이 넣는 이유는 `plotStore` 의 다른 함수들과 같다.
+ * RLS 가 막지만, 정책이 한 번 헐거워졌을 때 조용히 남의 행을 고치지 않게 한다.
+ *
+ * 0건이면 던진다. update 는 조건에 맞는 행이 없어도 **오류가 아니라 0건으로
+ * 조용히 끝나기** 때문이다 — 그대로 성공으로 넘기면 화면만 수확했다고 말한다.
+ */
+export async function markHarvested(
+  plotId: string,
+  cultivationId: string,
+  harvestedAt: string,
+): Promise<void> {
+  const supabase = await getSupabaseServer();
+
+  const { data, error } = await supabase
+    .from("cultivations")
+    .update({ status: "HARVESTED", harvested_at: harvestedAt })
+    .eq("id", cultivationId)
+    .eq("plot_id", plotId)
+    .eq("status", "GROWING")
+    // 지운 재배를 수확 처리하면 숨긴 행이 되살아난 것처럼 보인다.
+    .is("deleted_at", null)
+    .select("id");
+
+  if (error) throw new Error(error.message);
+  if (!data || data.length === 0) throw new Error("CULTIVATION_NOT_FOUND");
+}
+
+/**
  * 재배 한 건을 숨긴다. 행은 남는다(soft delete).
  *
  * 수확한 기록까지 치우려는 게 아니다 — 끝난 재배는 `markHarvested` 로
@@ -223,6 +231,31 @@ export async function softDeleteCultivation(
     .eq("plot_id", plotId)
     // 두 번 지우면 시각이 덮어써져 "언제 지웠나"가 틀어진다.
     .is("deleted_at", null)
+    .select("id");
+
+  if (error) throw new Error(error.message);
+  if (!data || data.length === 0) throw new Error("CULTIVATION_NOT_FOUND");
+}
+
+/**
+ * 파종일(또는 "아직 안 심었어요")을 고친다.
+ *
+ * 등록·작물 추가 때 잘못 적거나 비워 둔 파종일을 나중에 고칠 방법이 없었다
+ * — 이 값이 GDD 적산의 기준점이라 틀리면 생육 단계·오늘 할 일 판정 전체가
+ * 어긋난다. 수확·실패 처리된 건은 화면(`plots/[id]/page.tsx`)에서 애초에
+ * 수정 칸을 보여주지 않는다 — 여기서는 막지 않는다.
+ */
+export async function updateCultivationSowing(
+  cultivationId: string,
+  input: { status: "PLANNED" | "GROWING"; sowingDate: string | null },
+): Promise<void> {
+  const supabase = await getSupabaseServer();
+
+  const { data, error } = await supabase
+    .from("cultivations")
+
+    .update({ status: input.status, sowing_date: input.sowingDate })
+    .eq("id", cultivationId)
     .select("id");
 
   if (error) throw new Error(error.message);

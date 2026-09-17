@@ -4,8 +4,8 @@ import type { ReactNode } from "react";
 import { CropCards } from "@/components/plot/CropCards";
 import { PlotInfoFields } from "@/components/plot/PlotInfoFields";
 import { PlotLocationStep } from "@/components/plot/PlotLocationStep";
+import { PlotRegisterForm } from "@/components/plot/PlotRegisterForm";
 import { PlotWizardDock } from "@/components/plot/PlotWizardDock";
-import { SowingFields } from "@/components/plot/SowingFields";
 import { WizardNav } from "@/components/plot/WizardNav";
 import { SectionHeading } from "@/components/shared/SectionHeading";
 import { listCropOptions } from "@/features/crops/cropStore";
@@ -20,9 +20,12 @@ import { registerPlot } from "./actions";
  *   `registerPlot` 이 한다. 임시 저장은 아직 없다.
  * - **한 번에 한 단계만 보인다.** 처음에는 네 단계를 모두 펼쳐 뒀는데, 등록 한 번
  *   하려고 화면을 계속 스크롤해야 했다. 정의서도 마법사이므로 한 단계씩이 맞다.
- * - 단계 전환을 **JS 없이** 한다. 숨긴 라디오 넷을 두고
+ * - 단계 전환을 **JS 없이** 한다. 숨긴 라디오 셋을 두고
  *   `group-has-[#아이디:checked]` 로 해당 패널과 레일 칸만 켠다. 이렇게 하면:
- *     · 이 화면의 JS 가 0바이트로 유지된다(로직을 비워 두라는 요구와 맞는다).
+ *     · 단계 전환·폼 제출 자체는 JS 가 0바이트다(로직을 비워 두라는 요구와
+ *       맞는다). 3단계 안의 작물 검색만 예외다 — CSS 로는 타이핑한 문자열을
+ *       형제 카드의 텍스트와 비교할 수 없어 `CropCards` 만 `"use client"` 다
+ *       (그 파일 docstring 참고). 선택·제출은 거기서도 여전히 체크박스가 한다.
  *     · 라디오가 실제로 존재하므로 **키보드 화살표로 단계 이동**이 공짜로 따라온다.
  *     · 단계 레일과 이전/다음 버튼이 전부 `<label>` 이라 같은 상태 하나를 본다.
  * - :경고: `peer-checked/…` 를 먼저 썼다가 **레일이 안 켜져서** 바꿨다. `peer-*` 는
@@ -31,7 +34,7 @@ import { registerPlot } from "./actions";
  *   `group-has-[…]` 는 조상에서 내려다보므로 중첩과 무관하게 닿는다.
  * - :경고: 단계 클래스를 **반복문으로 만들 수 없다.** Tailwind 는 클래스 문자열을
  *   정적으로 읽으므로 `group-has-[#wizard-${i}:checked]` 같은 조립은 생성되지
- *   않는다(조용히 사라진다). 그래서 네 벌을 **리터럴로** 적는다.
+ *   않는다(조용히 사라진다). 그래서 세 벌을 **리터럴로** 적는다.
  * - 라디오의 `name="__step"` 은 화면 상태일 뿐 등록 값이 아니다. 저장 붙일 때
  *   무시하거나 걷어낼 것.
  *
@@ -39,8 +42,10 @@ import { registerPlot } from "./actions";
  * - 지도는 `PlotMapFrame` 의 `PLOT_MAP_CONTAINER_ID` div 에 붙인다. 지도 중심이
  *   곧 밭 좌표다(중앙 핀 방식).
  * - 입력 이름: latitude · longitude · addressKo · regionCode · regionKo ·
- *   name · areaM2 · areaUnit · crops(복수) · sowingDate · sowingUnknown ·
- *   sowingMethod. `registerPlot` 이 이 이름 그대로 읽는다.
+ *   name · areaM2 · areaUnit · cropIds(복수) · sowingDate.<cropId> ·
+ *   sowingUnknown.<cropId> · sowingMethod.<cropId>. 파종 필드는 작물마다
+ *   따로다(`CropCards` 참고) — `registerPlot` 이 `parsePlotRegistration` 과
+ *   `parseCultivationSelections` 둘로 나눠 읽는다.
  * ---------------------------------------------
  */
 
@@ -76,8 +81,7 @@ const STEPS = [
     id: "wizard-2",
     labelKo: "텃밭 정보",
     titleKo: "텃밭 정보",
-    descriptionKo: "나중에 바꿀 수 있습니다. 건너뛰셔도 됩니다.",
-    optional: true,
+    descriptionKo: "면적은 물 주는 양을 가늠하는 데 씁니다.",
     rail: "group-has-[#wizard-2:checked]/wizard:border-accent group-has-[#wizard-2:checked]/wizard:bg-accent-subtle group-has-[#wizard-2:checked]/wizard:text-accent group-has-[#wizard-2:focus-visible]/wizard:outline group-has-[#wizard-2:focus-visible]/wizard:outline-2 group-has-[#wizard-2:focus-visible]/wizard:outline-ring group-has-[#wizard-2:focus-visible]/wizard:outline-offset-2",
     railNo:
       "group-has-[#wizard-2:checked]/wizard:bg-accent group-has-[#wizard-2:checked]/wizard:text-accent-on",
@@ -88,22 +92,12 @@ const STEPS = [
     id: "wizard-3",
     labelKo: "작물 선택",
     titleKo: "작물 선택",
-    descriptionKo: "여러 개 고르실 수 있습니다.",
+    descriptionKo:
+      "여러 개 고르실 수 있습니다. 작물마다 파종일도 함께 입력해 주세요.",
     rail: "group-has-[#wizard-3:checked]/wizard:border-accent group-has-[#wizard-3:checked]/wizard:bg-accent-subtle group-has-[#wizard-3:checked]/wizard:text-accent group-has-[#wizard-3:focus-visible]/wizard:outline group-has-[#wizard-3:focus-visible]/wizard:outline-2 group-has-[#wizard-3:focus-visible]/wizard:outline-ring group-has-[#wizard-3:focus-visible]/wizard:outline-offset-2",
     railNo:
       "group-has-[#wizard-3:checked]/wizard:bg-accent group-has-[#wizard-3:checked]/wizard:text-accent-on",
     panel: "hidden group-has-[#wizard-3:checked]/wizard:block",
-  },
-  {
-    no: 4,
-    id: "wizard-4",
-    labelKo: "재배 정보",
-    titleKo: "재배 정보",
-    descriptionKo: "파종일을 아시면 그날부터 적산온도를 쌓습니다.",
-    rail: "group-has-[#wizard-4:checked]/wizard:border-accent group-has-[#wizard-4:checked]/wizard:bg-accent-subtle group-has-[#wizard-4:checked]/wizard:text-accent group-has-[#wizard-4:focus-visible]/wizard:outline group-has-[#wizard-4:focus-visible]/wizard:outline-2 group-has-[#wizard-4:focus-visible]/wizard:outline-ring group-has-[#wizard-4:focus-visible]/wizard:outline-offset-2",
-    railNo:
-      "group-has-[#wizard-4:checked]/wizard:bg-accent group-has-[#wizard-4:checked]/wizard:text-accent-on",
-    panel: "hidden group-has-[#wizard-4:checked]/wizard:block",
   },
 ] as const;
 
@@ -138,12 +132,12 @@ export default async function PlotRegisterPage() {
            **아무 일도 없이 조용히 제출이 안 된다.**
       */}
       <div className="group/wizard mt-6">
-        <form action={registerPlot} className="flex flex-col" id={FORM_ID}>
-          {/* 화면 상태를 들고 있는 라디오 넷. sr-only 지만 실제 포커스를 받으므로
+        <PlotRegisterForm action={registerPlot} id={FORM_ID}>
+          {/* 화면 상태를 들고 있는 라디오 셋. sr-only 지만 실제 포커스를 받으므로
               **키보드 화살표로 단계가 넘어간다.** `group-has` 로 읽으므로 위치는
               자유롭지만 **그룹 div 안**에 있어야 한다(그룹은 이 폼의 부모다).
-              fieldset 으로 묶는 이유: 라디오 넷이 이름 없이 흩어져 있으면
-              스크린리더가 "4개 중 2번째"만 읽고 무엇의 4개인지 말하지 않는다. */}
+              fieldset 으로 묶는 이유: 라디오 셋이 이름 없이 흩어져 있으면
+              스크린리더가 "3개 중 2번째"만 읽고 무엇의 4개인지 말하지 않는다. */}
           <fieldset>
             <legend className="sr-only">등록 단계</legend>
             {STEPS.map((step) => (
@@ -220,16 +214,11 @@ export default async function PlotRegisterPage() {
                     <CropCards crops={crops} />
                   </fieldset>
                 )}
-                {step.no === 4 && (
-                  <div className="max-w-md">
-                    <SowingFields />
-                  </div>
-                )}
               </StepPanel>
             ))}
           </div>
           <WizardNav />
-        </form>
+        </PlotRegisterForm>
 
         {/* 폼 **밖**이다. 이유는 PlotWizardDock 주석 참고(fixed 기준 블록 + 제출 값). */}
         <PlotWizardDock formId={FORM_ID} />
@@ -253,11 +242,6 @@ function StepPanel({
           id={`step-${step.no}-title`}
         >
           {step.titleKo}
-          {"optional" in step && step.optional && (
-            <span className="ml-2 font-mono font-normal text-fg-subtle text-xs">
-              (건너뛰기 가능)
-            </span>
-          )}
         </h2>
         <p className="mt-1 text-fg-muted text-sm">{step.descriptionKo}</p>
       </div>

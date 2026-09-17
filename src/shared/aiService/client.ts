@@ -109,6 +109,72 @@ export interface AskInput {
   plotId?: string | null;
 }
 
+/** 시군구 경계 + 가장 최근 관측된 일 강수량·색상. `/map` 강수 레이어가 그대로 그린다. */
+export interface SigunguRainFeatureCollection {
+  type: "FeatureCollection";
+  asOf?: string | null;
+  features: Array<{
+    type: "Feature";
+    properties: {
+      code: string;
+      name: string;
+      station?: string;
+      stationName?: string;
+      rainMm?: number | null;
+      color?: string;
+      label?: string;
+    };
+    geometry: { type: "Polygon" | "MultiPolygon"; coordinates: unknown };
+  }>;
+}
+
+/** 시군구 경계 + 가장 최근 관측된 최대풍속·색상. `/map` 바람 레이어가 그대로 그린다. */
+export interface SigunguWindFeatureCollection {
+  type: "FeatureCollection";
+  asOf?: string | null;
+  features: Array<{
+    type: "Feature";
+    properties: {
+      code: string;
+      name: string;
+      station?: string;
+      stationName?: string;
+      windMax?: number | null;
+      color?: string;
+      label?: string;
+    };
+    geometry: { type: "Polygon" | "MultiPolygon"; coordinates: unknown };
+  }>;
+}
+
+/** 밭 좌표 기준 7일 예보. `/weather` 탭이 그대로 목록으로 그린다. */
+export interface PlotForecast {
+  days: Array<{
+    date: string;
+    tempMax: number | null;
+    tempMin: number | null;
+    rainfallMm: number | null;
+    rainChance: number | null;
+    windMax: number | null;
+    humidityPct: number | null;
+  }>;
+  /** 최근접 관측소 기준 누적 강수량(mm). 그 구간에 관측이 없으면 null(판정 보류). */
+  rainfall3d: number | null;
+  rainfall5d: number | null;
+  rainfall7d: number | null;
+  /** 최근 14일 하루치 GDD. 재배 중인 작물이 없으면 null. `/weather` 생육속도 막대(V1-69)가 그린다. */
+  growthSeries: Array<{ date: string; gdd: number }> | null;
+  /** 이 밭 작물의 기온·관수 기준. 기상 수치 옆에 "이게 이 작물에 어떤 의미인지"를
+   * 병기하는 근거(V1-64) — 재배 중인 작물이 없으면 null. */
+  cropImpact: {
+    cropNameKo: string;
+    baseTempC: number;
+    upperTempC: number | null;
+    stageName: string | null;
+    waterNeedMm: number | null;
+  } | null;
+}
+
 export type AiResult<T> =
   | { ok: true; data: T }
   | { ok: false; reason: AiFailure; detail?: string };
@@ -137,6 +203,10 @@ export type AiFailure =
 /** 기본 타임아웃. 상태 조회는 짧게, LLM 호출은 부르는 쪽에서 늘린다. */
 const DEFAULT_TIMEOUT_MS = 5_000;
 
+/** 밭 예보 갱신 주기(초, V1-61). 개발 중 바로 바꿀 수 있게 상수 하나로 둔다.
+ * 개발 서버(`next dev`)는 항상 매 요청 새로 받아온다 — 이 캐시는 배포 환경에서만 보인다. */
+const WEATHER_REVALIDATE_SEC = 60 * 60;
+
 function config(): { baseUrl: string; token: string } | null {
   const baseUrl = process.env.AI_SERVICE_URL?.trim();
   const token = process.env.AI_SERVICE_TOKEN?.trim();
@@ -147,7 +217,7 @@ function config(): { baseUrl: string; token: string } | null {
 
 async function call<T>(
   path: string,
-  init: RequestInit & { timeoutMs?: number } = {},
+  init: RequestInit & { timeoutMs?: number; revalidateSec?: number } = {},
 ): Promise<AiResult<T>> {
   const cfg = config();
   if (!cfg) {
@@ -159,7 +229,7 @@ async function call<T>(
     };
   }
 
-  const { timeoutMs = DEFAULT_TIMEOUT_MS, ...rest } = init;
+  const { timeoutMs = DEFAULT_TIMEOUT_MS, revalidateSec, ...rest } = init;
   // AbortSignal.timeout 은 Node 18+ 에 있다. setTimeout + controller 보다
   // 짧고, 타이머를 걷는 것을 잊을 여지가 없다.
   const signal = AbortSignal.timeout(timeoutMs);
@@ -173,9 +243,12 @@ async function call<T>(
         "X-Service-Token": cfg.token,
         ...rest.headers,
       },
-      // 내부 호출은 캐시하지 않는다. 상태 조회가 캐시되면 "이미 고쳤는데
-      // 화면은 계속 안 된다고 하는" 상황이 된다.
-      cache: "no-store",
+      // 내부 호출은 기본적으로 캐시하지 않는다. 상태 조회가 캐시되면 "이미
+      // 고쳤는데 화면은 계속 안 된다고 하는" 상황이 된다. revalidateSec 을
+      // 준 호출(예: 밭 예보)만 그 주기로 캐시한다.
+      ...(revalidateSec != null
+        ? { next: { revalidate: revalidateSec } }
+        : { cache: "no-store" as const }),
     });
 
     if (response.status === 401) {
@@ -333,5 +406,30 @@ export const aiService = {
         rating,
         reason: reason ?? null,
       }),
+    }),
+  /** 시군구 250개 폴리곤 + 최근 관측 강수량. */
+  sigunguRain: () =>
+    call<SigunguRainFeatureCollection>("/v1/map/sigungu-rain", {
+      timeoutMs: 15_000,
+    }),
+  /** 시군구 250개 폴리곤 + 최근 관측 최대풍속. */
+  sigunguWind: () =>
+    call<SigunguWindFeatureCollection>("/v1/map/sigungu-wind", {
+      timeoutMs: 15_000,
+    }),
+  /** 밭 좌표 기준 7일 예보(기온·강수·최대풍속). Open-Meteo 를 그때그때 불러온다.
+   * plotId 를 주면 최근 14일 하루치 GDD(growthSeries)도 같이 온다. */
+  plotForecast: (lat: number, lon: number, plotId?: string) =>
+    call<PlotForecast>(
+      `/v1/weather/plot?lat=${lat}&lon=${lon}${plotId ? `&plot_id=${plotId}` : ""}`,
+      { revalidateSec: WEATHER_REVALIDATE_SEC },
+    ),
+  /**
+   * 밭 하나만 즉시 판정해 오늘 할 일 카드를 만든다. 자정 배치를 기다리지 않고
+   * 밭 등록·재배 추가 직후 호출한다(registerPlot/addCultivations).
+   */
+  generateTasks: (plotId: string) =>
+    call<{ created: number }>(`/v1/tasks/generate?plot_id=${plotId}`, {
+      method: "POST",
     }),
 };

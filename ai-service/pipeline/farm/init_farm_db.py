@@ -33,6 +33,7 @@ EXTERNAL_TABLES = [
     "terms",
     "user_agreements",
     "ask_history",
+    "plot_tasks"
 ]
 
 

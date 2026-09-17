@@ -15,8 +15,10 @@ function cultivation(
   variantId = nextVariantId++,
 ): CultivationRow {
   return {
+    id: `c${variantId}`,
     variant_id: variantId,
     sowing_date: sowingDate,
+    status: "GROWING",
     crop_variants: nameKo ? { crops: { name: nameKo } } : null,
   };
 }
@@ -93,8 +95,20 @@ describe("toPlotCard", () => {
 
   it("심은 것을 품종째로 전부 넘긴다", () => {
     expect(toPlotCard(row).cultivations).toEqual([
-      { variantId: 3, cropNameKo: "방울토마토", sowingDate: "2026-09-01" },
-      { variantId: 4, cropNameKo: "상추", sowingDate: "2026-09-05" },
+      {
+        id: "c3",
+        variantId: 3,
+        cropNameKo: "방울토마토",
+        sowingDate: "2026-09-01",
+        status: "GROWING",
+      },
+      {
+        id: "c4",
+        variantId: 4,
+        cropNameKo: "상추",
+        sowingDate: "2026-09-05",
+        status: "GROWING",
+      },
     ]);
   });
 

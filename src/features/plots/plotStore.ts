@@ -36,7 +36,7 @@ import type { PlotRegistrationInput } from "./domain/registerPlot";
 
 // 유사 join 쿼리
 const CULTIVATION_SELECT =
-  "cultivations(variant_id, sowing_date, crop_variants(crops(name)))";
+  "cultivations(id, variant_id, sowing_date, status, crop_variants(crops(name)))";
 
 export interface PlotGrid {
   gridX: number;
@@ -284,4 +284,16 @@ export async function softDeletePlot(
     .is("deleted_at", null);
 
   if (cultivationError) throw new Error(cultivationError.message);
+
+  // 할 일 카드는 **실제로 지운다.** `plot_tasks` 에는 `deleted_at` 이 없고,
+  // 대시보드 조회(`taskStore.listTaskCards`)가 `plots.deleted_at` 을 안 보므로
+  // 남겨 두면 숨긴 밭의 할 일이 그대로 뜬다. 규칙에서 나온 파생 자료라
+  // ai-service 가 다시 만들어 주니 지워도 잃는 자료가 없다
+  // (`20260917000000_plot_tasks_delete.sql` 이 delete 권한을 준 이유).
+  // 되돌릴 수 없는 단계라 밭을 숨긴 뒤 맨 마지막에 둔다.
+  const tasksDeleted = await supabase
+    .from("plot_tasks")
+    .delete()
+    .eq("plot_id", plotId);
+  if (tasksDeleted.error) throw new Error(tasksDeleted.error.message);
 }
