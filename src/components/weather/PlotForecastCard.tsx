@@ -21,6 +21,40 @@ import type { PlotForecast } from "@/shared/aiService/client";
 /** 서리 위험 임계값(℃). 이 이하면 경고를 붙인다. */
 const FROST_THRESHOLD_C = 2;
 
+function rainfallLabel(mm: number | null): string {
+  return mm != null ? `${mm}mm` : "관측 없음";
+}
+
+/** 최근 하루치 GDD 막대(V1-69). 높이가 그날 기온이 얼마나 생육에 기여했는지를
+ * 바로 보여줘, 생육 속도가 왜 그런지(더워서/추워서)를 숫자 없이도 읽게 한다. */
+function GrowthSeriesBars({
+  series,
+}: {
+  series: PlotForecast["growthSeries"] & object;
+}) {
+  const maxGdd = Math.max(...series.map((d) => d.gdd), 0.1);
+
+  return (
+    <div className="mt-3 border-border/60 border-t pt-3">
+      <p className="text-fg-muted text-xs">최근 하루치 적산온도(GDD)</p>
+      <div className="mt-2 flex items-end gap-1">
+        {series.map((day) => (
+          <div className="flex flex-col items-center gap-1" key={day.date}>
+            <div
+              className="w-3 rounded-t bg-accent"
+              style={{ height: `${(day.gdd / maxGdd) * 40 + 2}px` }}
+              title={`${day.date}: ${day.gdd}`}
+            />
+            <span className="font-mono text-[0.6rem] text-fg-subtle">
+              {day.date.slice(8)}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 interface PlotForecastCardProps {
   nameKo: string;
   cropNameKo: string | null;
@@ -36,6 +70,17 @@ export function PlotForecastCard({
     <article className="rounded-lg border border-border bg-surface p-4">
       <p className="font-semibold text-fg text-sm">{nameKo}</p>
       <p className="text-fg-muted text-xs">{cropNameKo ?? "작물 미정"}</p>
+
+      <p className="mt-2 flex items-center gap-1.5 font-mono text-fg-muted text-xs tabular-nums">
+        <DropletIcon className="size-3.5 text-info" />
+        누적 강수량 3일 {rainfallLabel(forecast.rainfall3d)} · 5일{" "}
+        {rainfallLabel(forecast.rainfall5d)} · 7일{" "}
+        {rainfallLabel(forecast.rainfall7d)}
+      </p>
+
+      {forecast.growthSeries && forecast.growthSeries.length > 0 && (
+        <GrowthSeriesBars series={forecast.growthSeries} />
+      )}
 
       <div className="mt-3 flex flex-col gap-2">
         {forecast.days.map((day) => {

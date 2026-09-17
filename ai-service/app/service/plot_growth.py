@@ -13,7 +13,7 @@ ask_context.py 의 `_lead` 와 같은 기준이다.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, timedelta
 
 from sqlalchemy.orm import Session
 
@@ -50,6 +50,30 @@ def nearest_station(db: Session, plot: Plot) -> Station | None:
     )
 
 
+def rainfall_totals(
+    db: Session, station_code: str, windows: tuple[int, ...] = (3, 5, 7)
+) -> dict[int, float | None]:
+    """관측소 기준 최근 N일(windows) 누적 강수량. 그 구간에 관측이 하나도 없으면
+    None(판정 보류) — `plot_tasks._recent_rain_mm` 과 같은 방침이다."""
+    today = date.today()
+    since = today - timedelta(days=max(windows))
+    rows = (
+        db.query(WeatherObsDaily.obs_date, WeatherObsDaily.rainfall_mm)
+        .filter(WeatherObsDaily.station_code == station_code, WeatherObsDaily.obs_date >= since)
+        .all()
+    )
+
+    result: dict[int, float | None] = {}
+    for n in windows:
+        values = [
+            float(r.rainfall_mm)
+            for r in rows
+            if r.rainfall_mm is not None and (today - r.obs_date).days < n
+        ]
+        result[n] = sum(values) if values else None
+    return result
+
+
 def _lead_cultivation(db: Session, plot: Plot) -> Cultivation | None:
     """지금 기르는 재배 건 중 대표 한 건(가장 먼저 심은 것). 파종일을 모르는 건은
     GDD 를 못 내므로 후보에서 뺀다 — ask_context.py 의 `_lead` 와 같은 기준이다."""
@@ -81,6 +105,50 @@ def _start_gdd(db: Session, cultivation: Cultivation) -> float:
     return float(stage.gdd_from) if stage is not None else 0.0
 
 
+def _crop_for_cultivation(db: Session, cultivation: Cultivation) -> Crop | None:
+    """재배 건의 작물 마스터. variant 가 없거나 끝의 crop 이 없으면 None."""
+    variant = db.query(CropVariant).filter(CropVariant.variant_id == cultivation.variant_id).first()
+    if variant is None:
+        return None
+    return db.query(Crop).filter(Crop.crop_id == variant.crop_id).first()
+
+
+def daily_gdd_series(
+    db: Session, plot: Plot, station: Station, days: int = 14
+) -> list[dict] | None:
+    """최근 days 일간 하루치 GDD. 생육 속도가 왜 그런지(더워서/추워서)를 막대로
+    보여주는 용도 — 기르는 중인 재배 건이 없으면 None(compute_plot_growth 와 같은 판정)."""
+    cultivation = _lead_cultivation(db, plot)
+    if cultivation is None:
+        return None
+    crop = _crop_for_cultivation(db, cultivation)
+    if crop is None:
+        return None
+
+    since = max(cultivation.sowing_date, date.today() - timedelta(days=days))
+    obs = (
+        db.query(WeatherObsDaily)
+        .filter(
+            WeatherObsDaily.station_code == station.station_code,
+            WeatherObsDaily.obs_date >= since,
+            WeatherObsDaily.temp_max.isnot(None),
+            WeatherObsDaily.temp_min.isnot(None),
+        )
+        .order_by(WeatherObsDaily.obs_date)
+        .all()
+    )
+    upper = float(crop.upper_temp) if crop.upper_temp is not None else None
+    return [
+        {
+            "date": o.obs_date.isoformat(),
+            "gdd": round(
+                daily_gdd(float(o.temp_max), float(o.temp_min), float(crop.base_temp), upper), 1
+            ),
+        }
+        for o in obs
+    ]
+
+
 def compute_plot_growth(db: Session, plot: Plot, station: Station) -> PlotGrowth | None:
     """밭의 대표 재배 건을 골라 파종일부터 오늘까지 GDD 를 누적, 현재 생육단계를
     계산한다. 기르는 중인 재배 건이 없거나 파종일을 모르면 None."""
@@ -88,10 +156,7 @@ def compute_plot_growth(db: Session, plot: Plot, station: Station) -> PlotGrowth
     if cultivation is None:
         return None
 
-    variant = db.query(CropVariant).filter(CropVariant.variant_id == cultivation.variant_id).first()
-    if variant is None:
-        return None
-    crop = db.query(Crop).filter(Crop.crop_id == variant.crop_id).first()
+    crop = _crop_for_cultivation(db, cultivation)
     if crop is None:
         return None
 

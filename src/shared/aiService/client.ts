@@ -135,6 +135,12 @@ export interface PlotForecast {
     rainChance: number | null;
     windMax: number | null;
   }>;
+  /** 최근접 관측소 기준 누적 강수량(mm). 그 구간에 관측이 없으면 null(판정 보류). */
+  rainfall3d: number | null;
+  rainfall5d: number | null;
+  rainfall7d: number | null;
+  /** 최근 14일 하루치 GDD. 재배 중인 작물이 없으면 null. `/weather` 생육속도 막대(V1-69)가 그린다. */
+  growthSeries: Array<{ date: string; gdd: number }> | null;
 }
 
 export type AiResult<T> =
@@ -246,9 +252,12 @@ export const aiService = {
     call<SigunguWindFeatureCollection>("/v1/map/sigungu-wind", {
       timeoutMs: 15_000,
     }),
-  /** 밭 좌표 기준 7일 예보(기온·강수·최대풍속). Open-Meteo 를 그때그때 불러온다. */
-  plotForecast: (lat: number, lon: number) =>
-    call<PlotForecast>(`/v1/weather/plot?lat=${lat}&lon=${lon}`),
+  /** 밭 좌표 기준 7일 예보(기온·강수·최대풍속). Open-Meteo 를 그때그때 불러온다.
+   * plotId 를 주면 최근 14일 하루치 GDD(growthSeries)도 같이 온다. */
+  plotForecast: (lat: number, lon: number, plotId?: string) =>
+    call<PlotForecast>(
+      `/v1/weather/plot?lat=${lat}&lon=${lon}${plotId ? `&plot_id=${plotId}` : ""}`,
+    ),
   /**
    * 밭 하나만 즉시 판정해 오늘 할 일 카드를 만든다. 자정 배치를 기다리지 않고
    * 밭 등록·재배 추가 직후 호출한다(registerPlot/addCultivations).

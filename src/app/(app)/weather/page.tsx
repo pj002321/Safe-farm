@@ -47,6 +47,7 @@ export default async function Page() {
                 const result = await aiService.plotForecast(
                   plot.latitude,
                   plot.longitude,
+                  plot.id,
                 );
                 if (!result.ok) {
                   return (
