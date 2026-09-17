@@ -66,6 +66,7 @@ export default async function Page() {
                 latitude={plot.latitude}
                 longitude={plot.longitude}
                 nameKo={plot.nameKo ?? "이름 없는 밭"}
+                plotId={plot.id}
               />
             </Suspense>
           ))}
@@ -86,13 +87,17 @@ async function PlotForecast({
   longitude,
   nameKo,
   cropNameKo,
+  plotId,
 }: {
   latitude: number;
   longitude: number;
   nameKo: string;
   cropNameKo: string | null;
+  plotId: string;
 }) {
-  const result = await aiService.plotForecast(latitude, longitude);
+  // plotId 를 줘야 서버가 이 밭의 작물을 찾아 하루치 GDD 와 작물 기준 해석까지
+  // 함께 돌려준다. 좌표만 주면 기온·강수 같은 일반 예보만 온다.
+  const result = await aiService.plotForecast(latitude, longitude, plotId);
 
   if (!result.ok) {
     return (
