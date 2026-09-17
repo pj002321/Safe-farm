@@ -8,6 +8,7 @@ DAILY_RESPONSE = {
     "precipitation_sum": [0.0, 12.4],
     "precipitation_probability_max": [10, 80],
     "wind_speed_10m_max": [9.4, 21.6],
+    "relative_humidity_2m_mean": [55, 78],
 }
 
 
@@ -20,6 +21,7 @@ def test_normalize_daily_forecast_maps_columns_by_index():
         "rainfall_mm": 0.0,
         "rain_chance": 10,
         "wind_max": 9.4,
+        "humidity": 55,
     }
     assert rows[1]["date"] == "2026-09-18"
     assert rows[1]["wind_max"] == 21.6

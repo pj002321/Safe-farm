@@ -16,7 +16,7 @@ def fetch_daily_forecast(lat, lon, days=7):
         params={
             "latitude": lat,
             "longitude": lon,
-            "daily": "temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_probability_max,wind_speed_10m_max",
+            "daily": "temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_probability_max,wind_speed_10m_max,relative_humidity_2m_mean",
             "timezone": "Asia/Seoul",
             "forecast_days": days,
         },
@@ -38,6 +38,7 @@ def normalize_daily_forecast(daily):
                 "rainfall_mm": daily["precipitation_sum"][i],
                 "rain_chance": daily["precipitation_probability_max"][i],
                 "wind_max": daily["wind_speed_10m_max"][i],
+                "humidity": daily["relative_humidity_2m_mean"][i],
             }
         )
     return out

@@ -153,6 +153,11 @@ export function PlotForecastCard({
                   {day.rainChance != null && ` (${day.rainChance}%)`}
                 </span>
 
+                <span className="inline-flex items-center gap-1 font-mono text-fg text-xs tabular-nums">
+                  <DropletIcon className="size-3.5 text-info" />
+                  {day.humidityPct != null ? `${day.humidityPct}%` : "–"}
+                </span>
+
                 <span className="ml-auto inline-flex items-center gap-1 font-mono text-fg text-xs tabular-nums">
                   <WindIcon className="size-3.5 text-fg-muted" />
                   {day.windMax != null ? `${day.windMax}m/s` : "–"}

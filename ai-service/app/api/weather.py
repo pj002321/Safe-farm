@@ -49,6 +49,7 @@ def plot_forecast(
             "rainfallMm": row["rainfall_mm"],
             "rainChance": row["rain_chance"],
             "windMax": row["wind_max"],
+            "humidityPct": row["humidity"],
         }
         for row in normalize_daily_forecast(daily)
     ]

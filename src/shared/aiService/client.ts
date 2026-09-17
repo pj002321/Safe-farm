@@ -134,6 +134,7 @@ export interface PlotForecast {
     rainfallMm: number | null;
     rainChance: number | null;
     windMax: number | null;
+    humidityPct: number | null;
   }>;
   /** 최근접 관측소 기준 누적 강수량(mm). 그 구간에 관측이 없으면 null(판정 보류). */
   rainfall3d: number | null;
@@ -170,6 +171,10 @@ export type AiFailure =
 /** 기본 타임아웃. 상태 조회는 짧게, LLM 호출은 부르는 쪽에서 늘린다. */
 const DEFAULT_TIMEOUT_MS = 5_000;
 
+/** 밭 예보 갱신 주기(초, V1-61). 개발 중 바로 바꿀 수 있게 상수 하나로 둔다.
+ * 개발 서버(`next dev`)는 항상 매 요청 새로 받아온다 — 이 캐시는 배포 환경에서만 보인다. */
+const WEATHER_REVALIDATE_SEC = 60 * 60;
+
 function config(): { baseUrl: string; token: string } | null {
   const baseUrl = process.env.AI_SERVICE_URL?.trim();
   const token = process.env.AI_SERVICE_TOKEN?.trim();
@@ -180,7 +185,7 @@ function config(): { baseUrl: string; token: string } | null {
 
 async function call<T>(
   path: string,
-  init: RequestInit & { timeoutMs?: number } = {},
+  init: RequestInit & { timeoutMs?: number; revalidateSec?: number } = {},
 ): Promise<AiResult<T>> {
   const cfg = config();
   if (!cfg) {
@@ -192,7 +197,7 @@ async function call<T>(
     };
   }
 
-  const { timeoutMs = DEFAULT_TIMEOUT_MS, ...rest } = init;
+  const { timeoutMs = DEFAULT_TIMEOUT_MS, revalidateSec, ...rest } = init;
   // AbortSignal.timeout 은 Node 18+ 에 있다. setTimeout + controller 보다
   // 짧고, 타이머를 걷는 것을 잊을 여지가 없다.
   const signal = AbortSignal.timeout(timeoutMs);
@@ -206,9 +211,12 @@ async function call<T>(
         "X-Service-Token": cfg.token,
         ...rest.headers,
       },
-      // 내부 호출은 캐시하지 않는다. 상태 조회가 캐시되면 "이미 고쳤는데
-      // 화면은 계속 안 된다고 하는" 상황이 된다.
-      cache: "no-store",
+      // 내부 호출은 기본적으로 캐시하지 않는다. 상태 조회가 캐시되면 "이미
+      // 고쳤는데 화면은 계속 안 된다고 하는" 상황이 된다. revalidateSec 을
+      // 준 호출(예: 밭 예보)만 그 주기로 캐시한다.
+      ...(revalidateSec != null
+        ? { next: { revalidate: revalidateSec } }
+        : { cache: "no-store" as const }),
     });
 
     if (response.status === 401) {
@@ -266,6 +274,7 @@ export const aiService = {
   plotForecast: (lat: number, lon: number, plotId?: string) =>
     call<PlotForecast>(
       `/v1/weather/plot?lat=${lat}&lon=${lon}${plotId ? `&plot_id=${plotId}` : ""}`,
+      { revalidateSec: WEATHER_REVALIDATE_SEC },
     ),
   /**
    * 밭 하나만 즉시 판정해 오늘 할 일 카드를 만든다. 자정 배치를 기다리지 않고
