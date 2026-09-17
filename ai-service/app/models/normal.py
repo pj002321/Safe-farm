@@ -8,7 +8,9 @@ class Normal(Base):
 
     __tablename__ = "normals"
     __table_args__ = (
-        UniqueConstraint("station", "month", "day", "source", name="uq_normals_station_month_day_source"),
+        UniqueConstraint(
+            "station", "month", "day", "source", name="uq_normals_station_month_day_source"
+        ),
     )
 
     id = Column(Integer, primary_key=True)

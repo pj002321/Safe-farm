@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Float, Integer, String, Date, UniqueConstraint
+from sqlalchemy import Column, Date, Float, Integer, String, UniqueConstraint
 
 from app.core.db import Base
 
@@ -7,7 +7,9 @@ class WeatherDaily(Base):
     """weather_daily. PK 후보 (plot_id, date, source)."""
 
     __tablename__ = "weather_daily"
-    __table_args__ = (UniqueConstraint("plot_id", "date", "source", name="uq_weather_daily_plot_date_source"),)
+    __table_args__ = (
+        UniqueConstraint("plot_id", "date", "source", name="uq_weather_daily_plot_date_source"),
+    )
 
     id = Column(Integer, primary_key=True)
     plot_id = Column(String, nullable=False)

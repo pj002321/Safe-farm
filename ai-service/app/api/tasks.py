@@ -31,8 +31,13 @@ router = APIRouter(prefix="/v1/tasks", tags=["tasks"])
 
 @router.post("/generate", dependencies=[Depends(require_service_token)])
 def generate_for_plot(plot_id: UUID, db: Session = Depends(get_db)) -> dict:
-    """밭 하나만 판정한다. 근거가 없으면 0건일 수 있다 — 정상이다."""
-    plot = db.get(Plot, plot_id)
+    """밭 하나만 판정한다. 근거가 없으면 0건일 수 있다 — 정상이다.
+
+    지운 밭(`deleted_at`)은 없는 밭과 같이 다룬다. 삭제가 soft delete 라
+    행이 그대로 남아 `db.get()` 으로는 그대로 잡힌다 — 그대로 두면
+    숨긴 밭에 `plot_tasks` 가 쌓이고, 그 카드는 지우는 화면이 없다.
+    """
+    plot = db.query(Plot).filter(Plot.id == plot_id, Plot.deleted_at.is_(None)).first()
     if plot is None:
         raise HTTPException(status_code=404, detail="PLOT_NOT_FOUND")
 

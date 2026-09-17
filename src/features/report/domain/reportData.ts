@@ -1,4 +1,11 @@
 import {
+  accumulateGdd,
+  daysToTarget,
+  progressRatio,
+  recentDailyGdd,
+  roundTenth,
+} from "@/shared/growth/gdd";
+import {
   evaluateSprayHours,
   findWindows,
   SPRAY_LIMITS,
@@ -6,13 +13,6 @@ import {
   TODAY_HOURLY,
   toMinutes,
 } from "./drone";
-import {
-  accumulateGdd,
-  daysToTarget,
-  progressRatio,
-  recentDailyGdd,
-  roundTenth,
-} from "./gdd";
 import { evaluateHazards, type FiredHazard, HAZARD_RULES } from "./hazard";
 import {
   GDD_BEFORE_WINDOW,

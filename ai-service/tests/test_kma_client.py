@@ -14,8 +14,11 @@ from pipeline.kma_client import (
 )
 
 WEATHER_DAILY_ROWS = [
-    {"TM": "20260913", "STN_ID": 137, "TA_DAY": -999, "TA_MAX": 28.8, "TA_MIN": 15.0, "RN_DAY": 0, "WS_MAX": 2.7},
-    {"TM": "20260912", "STN_ID": 137, "TA_DAY": 20.6, "TA_MAX": 28.1, "TA_MIN": 15.1, "RN_DAY": 0, "WS_MAX": 1.5},
+    # TA_DAY -999 = 결측. 평균기온이 없어도 최고/최저로 하루를 세운다
+    {"TM": "20260913", "STN_ID": 137, "TA_DAY": -999, "TA_MAX": 28.8,
+     "TA_MIN": 15.0, "RN_DAY": 0, "WS_MAX": 2.7},
+    {"TM": "20260912", "STN_ID": 137, "TA_DAY": 20.6, "TA_MAX": 28.1,
+     "TA_MIN": 15.1, "RN_DAY": 0, "WS_MAX": 1.5},
 ]
 
 ALERT_RECORD = {

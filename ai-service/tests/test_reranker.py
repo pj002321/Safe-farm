@@ -8,7 +8,10 @@ def test_rerank_keeps_order_when_no_overlap_difference():
 
 
 def test_rerank_breaks_tie_by_word_overlap():
-    close = [(Chunk(body="상추 발아기 물주기 방법"), 0.20), (Chunk(body="토마토 병해충 예방"), 0.19)]
+    close = [
+        (Chunk(body="상추 발아기 물주기 방법"), 0.20),
+        (Chunk(body="토마토 병해충 예방"), 0.19),
+    ]
     result = rerank("상추 발아기 물주기", close)
     assert [c.body for c, _ in result] == ["상추 발아기 물주기 방법", "토마토 병해충 예방"]
 

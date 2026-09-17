@@ -36,7 +36,7 @@ FEATURE_SPEC.md 의 F9 는 "전부 TODO 스텁"이라 적혀 있지만 실제로
 | V1-81 | 대화 이력 저장 | 신규 테이블(`conversations`/`messages`) 또는 `graph.py` 의 `checkpointer` 그대로 활용(이미 멀티턴 지원 구조 있음, `create_checkpoint_serde` 참고) | V1-71 |
 | V1-82 | 추천 질문 3건 | 생육단계 기준 — LLM 불필요, `growth/monitoring` 도메인 값으로 규칙 기반 템플릿이면 충분 (F2 의 `growthReport.ts` 방식과 동일) | V1-72 데이터 |
 | V1-83 | 답변 피드백 | 신규 테이블(도움됨/안됨 + 사유) | V1-81 (메시지 단위로 달림) |
-| V1-84 | 사용량 제한 | **표 값(일 5회)과 설명 텍스트(일반 회원 일 10회)가 다름 — 먼저 확인.** 사용자 식별이 필요하므로 Next 서버가 세션에서 viewer.id 를 붙여 ai-service 에 넘기는 구조 필요 (ai-service 는 서비스 토큰만 검증, 사용자 인증 없음) | V1-71 |
+| V1-84 | 사용량 제한 | **일 10회로 확정(2026-09-17).** `core/config.py` 의 `DAILY_ASK_LIMIT` 이 정본이고 env 로 덮는다. 사용자 식별이 필요하므로 Next 서버가 세션에서 viewer.id 를 붙여 ai-service 에 넘기는 구조 필요 (ai-service 는 서비스 토큰만 검증, 사용자 인증 없음) | V1-71 |
 | V1-85 | 민감정보 마스킹 | [`docs/architecture/pii-masking.md`](../../docs/architecture/pii-masking.md) 참고 | V1-72, V1-81 |
 
 ## 권장 순서
@@ -57,4 +57,3 @@ FEATURE_SPEC.md 의 F9 는 "전부 TODO 스텁"이라 적혀 있지만 실제로
 - V1-73/80: 재배매뉴얼·주간농사정보, 지역 병해충 발생정보 — 실제 텍스트/데이터 출처가 아직 없다.
 - V1-72: 개인 컨텍스트를 Next 가 조립해 넘길지, ai-service 가 직접 Supabase 를 볼지.
 - V1-78: 근거 부족 판정 임계값(코사인 거리).
-- V1-84: 일 5회 vs 10회 — 스펙 표 자체의 모순.

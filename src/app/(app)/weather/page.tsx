@@ -1,10 +1,13 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import { CloudRainIcon } from "@/components/icons";
+import { WeatherChart } from "@/components/monitoring/WeatherChart";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { SectionHeading } from "@/components/shared/SectionHeading";
 import { PlotForecastRow } from "@/components/weather/PlotForecastRow";
 import { PlotRowSkeleton } from "@/components/weather/PlotRowSkeleton";
+import { summarizeWeather } from "@/features/monitoring/domain/weatherSeries";
+import { loadWeatherSeries } from "@/features/monitoring/weatherStore";
 import { listPlots } from "@/features/plots/plotStore";
 import { aiService } from "@/shared/aiService/client";
 import {
@@ -12,6 +15,7 @@ import {
   rememberForecast,
 } from "@/shared/aiService/lastGoodForecast";
 import { getCurrentProfile } from "@/shared/auth/profileStore";
+import { kstDateString } from "@/shared/utils/kstDate";
 
 /**
  * ---------------------------------------------
@@ -31,6 +35,19 @@ import { getCurrentProfile } from "@/shared/auth/profileStore";
 
 export const metadata: Metadata = { title: "날씨" };
 
+/** 차트 위에 붙는 한 줄. 스크린리더가 읽는 문장이기도 하다. */
+function summaryKo(
+  nameKo: string,
+  summary: ReturnType<typeof summarizeWeather>,
+): string {
+  if (summary === null) return `${nameKo}: 최근 관측이 없습니다.`;
+  const rain =
+    summary.rainfallMm === null
+      ? "강수량은 모릅니다"
+      : `강수량 합계 ${summary.rainfallMm}mm`;
+  return `${nameKo}: 최근 ${summary.days}일 평균 최고 ${summary.avgTempMaxC}℃, 최저 ${summary.avgTempMinC}℃, ${rain}.`;
+}
+
 export default async function Page() {
   const profile = await getCurrentProfile();
   const plots = profile ? await listPlots(profile.id) : [];
@@ -40,9 +57,7 @@ export default async function Page() {
   // 로케일이 `sv-SE` 인 건 스웨덴과 무관하다. 그 로케일의 기본 날짜 형식이
   // `YYYY-MM-DD` 라 서버 응답(ISO)과 바로 비교된다. `toISOString()` 은 UTC 라
   // 한국 시간 0~9시 사이에 **어제 날짜**를 준다 — 그래서 쓸 수 없다.
-  const todayIso = new Date().toLocaleDateString("sv-SE", {
-    timeZone: "Asia/Seoul",
-  });
+  const todayIso = kstDateString();
 
   return (
     <main className="mx-auto flex max-w-4xl flex-col gap-6 px-6 py-6 sm:py-8">
@@ -124,12 +139,32 @@ async function PlotForecast({
 }) {
   // plotId 를 줘야 서버가 이 밭의 작물·행정구역을 찾아 하루치 GDD·작물 해석·
   // 기상특보까지 함께 돌려준다. 좌표만 주면 일반 기상값만 온다.
-  const result = await aiService.plotForecast(latitude, longitude, plotId);
+  //
+  // 관측 계열은 **예보와 나란히** 받는다. 둘은 서로를 기다릴 이유가 없고, 이 밭의
+  // 경계 안이라 느려도 다른 밭을 붙잡지 않는다.
+  const [result, weather] = await Promise.all([
+    aiService.plotForecast(latitude, longitude, plotId),
+    loadWeatherSeries({ id: plotId, latitude, longitude }, todayIso).catch(
+      (error) => {
+        // 관측이 없어도 예보는 보여 준다 — 차트 하나 때문에 줄 전체를 죽이지 않는다.
+        console.error("[weather] 관측 계열 조회 실패", error);
+        return null;
+      },
+    ),
+  ]);
+
+  const chart = weather ? (
+    <WeatherChart
+      series={weather.series}
+      summary={summaryKo(nameKo, summarizeWeather(weather.series))}
+    />
+  ) : null;
 
   if (result.ok) {
     rememberForecast(plotId, result.data);
     return (
       <PlotForecastRow
+        chart={chart}
         cropNameKo={cropNameKo}
         defaultOpen={defaultOpen}
         forecast={result.data}
@@ -145,6 +180,7 @@ async function PlotForecast({
     return (
       <PlotForecastRow
         cachedAt={stale.cachedAt}
+        chart={chart}
         cropNameKo={cropNameKo}
         defaultOpen={defaultOpen}
         forecast={stale.data}

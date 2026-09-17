@@ -74,7 +74,11 @@ def load_normals(db, api_key, stn):
 def load_disaster_rule(db, api_key, stn, risk, solar_term, yy1, yy2, crop_id=""):
     """절기재해 기준값(다년 평균) 한 행을 disaster_rules 에 upsert."""
     row = normalize_disaster_rule(
-        fetch_solar_term_crop(api_key, stn, risk, solar_term, yy1, yy2), stn, risk, solar_term, crop_id
+        fetch_solar_term_crop(api_key, stn, risk, solar_term, yy1, yy2),
+        stn,
+        risk,
+        solar_term,
+        crop_id,
     )
 
     stmt = pg_insert(DisasterRule).values(**row)

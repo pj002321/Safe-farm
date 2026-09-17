@@ -7,11 +7,16 @@ map.py 가 app/service/gdd_region.py·warn_region.py 를 쓰는 것과 같은 �
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy.orm import Session
 
+from app.domain.history_context import HISTORY_TURNS, Turn
 from app.models.farm.ask_history import AskHistory
+
+#: 몇 분 안의 질문까지 같은 대화로 볼지. `ask_history` 에 세션 컬럼이 없어
+#: 시간으로 근사한다 — 없으면 어제 물어본 것이 오늘 질문의 맥락으로 끼어든다.
+SESSION_WINDOW_MINUTES = 30
 
 
 def today_ask_count(db: Session, user_id: uuid.UUID) -> int:
@@ -40,12 +45,58 @@ def complete_answer(db: Session, history: AskHistory, answer: str) -> None:
     db.commit()
 
 
-def submit_feedback(db: Session, history_id: uuid.UUID, user_id: uuid.UUID, rating: str) -> bool:
-    """history_id·user_id 가 둘 다 맞는 행에만 평가를 남긴다. 갱신됐으면 True."""
+def submit_feedback(
+    db: Session,
+    history_id: uuid.UUID,
+    user_id: uuid.UUID,
+    rating: str,
+    reason: str | None = None,
+) -> bool:
+    """history_id·user_id 가 둘 다 맞는 행에만 평가를 남긴다. 갱신됐으면 True.
+
+    reason 은 안 보냈으면(None) 기존 값을 건드리지 않는다. 평가만 바꾸러 온 요청이
+    앞서 적어 둔 사유를 지우면 안 되기 때문이다. 지우고 싶으면 빈 문자열을 보낸다.
+    """
+    values: dict[str, str | None] = {"rating": rating}
+    if reason is not None:
+        cleaned = reason.strip()
+        values["feedback_reason"] = cleaned or None
+
     updated = (
         db.query(AskHistory)
         .filter(AskHistory.id == history_id, AskHistory.user_id == user_id)
-        .update({"rating": rating})
+        .update(values)
     )
     db.commit()
     return bool(updated)
+
+
+def recent_turns(
+    db: Session,
+    user_id: uuid.UUID,
+    limit: int = HISTORY_TURNS,
+    within_minutes: int = SESSION_WINDOW_MINUTES,
+) -> list[Turn]:
+    """이 사용자의 최근 대화 몇 턴. 프롬프트에 붙일 맥락의 재료다.
+
+    **자기 이력만 본다** — user_id 로 거르지 않으면 남의 질문이 답변 맥락으로 샌다.
+
+    가드레일에 막힌 건(message 가 채워진 행)은 뺀다. 주제 밖이라 되돌려 봐야
+    맥락이 흐려지고, 차단 문구가 지난 답변인 것처럼 읽힌다.
+
+    돌려주는 순서는 **오래된 것이 앞**이다. 조회는 최신순으로 해야 인덱스
+    (ix_ask_history_user_created)를 타므로, 뒤집는 건 여기서 한다.
+    """
+    since = datetime.now(timezone.utc) - timedelta(minutes=within_minutes)
+    rows = (
+        db.query(AskHistory)
+        .filter(
+            AskHistory.user_id == user_id,
+            AskHistory.created_at >= since,
+            AskHistory.message.is_(None),
+        )
+        .order_by(AskHistory.created_at.desc())
+        .limit(limit)
+        .all()
+    )
+    return [Turn(question=row.question, answer=row.answer) for row in reversed(rows)]

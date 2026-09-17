@@ -15,8 +15,13 @@ from app.models.normal import Normal
 from app.models.weather import WeatherDaily
 
 
-def _actual_gdd_by_station(db: Session, stations: list[str], start: date, end: date) -> dict[str, float]:
-    """weather_daily 에서 관측소별(합성 plot_id) 실측 누적 GDD. 쿼리 한 번으로 전 관측소를 가져온다."""
+def _actual_gdd_by_station(
+    db: Session, stations: list[str], start: date, end: date
+) -> dict[str, float]:
+    """weather_daily 에서 관측소별(합성 plot_id) 실측 누적 GDD.
+
+    쿼리 한 번으로 전 관측소를 가져온다.
+    """
     plot_ids = [station_plot_id(s) for s in stations]
     rows = db.execute(
         select(WeatherDaily.plot_id, WeatherDaily.tmax, WeatherDaily.tmin).where(
@@ -35,10 +40,17 @@ def _actual_gdd_by_station(db: Session, stations: list[str], start: date, end: d
     return totals
 
 
-def _normal_gdd_by_station(db: Session, stations: list[str], start: date, end: date) -> dict[str, float]:
-    """normals(월/일 365개 고정행)에서 관측소별 평년 누적 GDD. 날짜 범위만큼 (월,일)로 골라 더한다."""
+def _normal_gdd_by_station(
+    db: Session, stations: list[str], start: date, end: date
+) -> dict[str, float]:
+    """normals(월/일 365개 고정행)에서 관측소별 평년 누적 GDD.
+
+    날짜 범위만큼 (월,일)로 골라 더한다.
+    """
     rows = db.execute(
-        select(Normal.station, Normal.month, Normal.day, Normal.tmax_normal, Normal.tmin_normal).where(
+        select(
+            Normal.station, Normal.month, Normal.day, Normal.tmax_normal, Normal.tmin_normal
+        ).where(
             Normal.station.in_(stations), Normal.source == "kma"
         )
     ).all()
