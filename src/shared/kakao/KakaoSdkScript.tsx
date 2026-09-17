@@ -64,20 +64,27 @@ export function KakaoSdkScript({ onStatusChange }: KakaoSdkScriptProps) {
       onStatusChange("error");
       return;
     }
-    // 같은 src 의 Script 가 세 번째 이상 마운트되면 onLoad/onReady 가 이
-    // 인스턴스로는 안 불린다(플랫 지도가 이미 두 곳에서 떠 있는 이 페이지처럼).
-    // 다른 마운트가 로드를 끝내는 시점은 알 수 없으니 짧게 폴링해서 넘어간다 —
-    // `kakao.maps` 는 `maps.load()` 콜백이 끝나야 채워지므로 이 값 자체가
-    // "완전히 준비됨" 신호다.
-    if (window.kakao?.maps) {
-      onStatusChange("ready");
-      return;
-    }
+    // 같은 src 의 Script 가 두 번째 이상 마운트되면 onLoad/onReady 가 이
+    // 인스턴스로는 안 불린다. 다른 마운트가 로드를 끝내는 시점은 알 수 없으니
+    // 짧게 폴링해서 넘어간다.
+    //
+    // ⚠️ **`window.kakao.maps` 가 있다고 준비된 것이 아니다.** `autoload=false`
+    //    로 받으면 스크립트가 실행되는 순간 `maps` 는 `load` 하나만 든 껍데기로
+    //    먼저 생긴다. 그 상태를 "ready" 로 알리면 화면이 첫 좌표를 만들다 죽는다
+    //    — 실측한 오류가 정확히 `maps.LatLng is not a constructor` 였다.
+    //    그래서 존재만 보고 넘기지 않고 `load()` 를 통과시킨다. 이미 끝났으면
+    //    콜백을 즉시 부르므로 "늦게 왔다" 와 "이미 됐다" 를 함께 받는다.
+    const finish = () => {
+      const sdk = window.kakao;
+      if (!sdk?.maps) return false;
+      sdk.maps.load(() => onStatusChange("ready"));
+      return true;
+    };
+
+    if (finish()) return;
+
     const interval = setInterval(() => {
-      if (window.kakao?.maps) {
-        onStatusChange("ready");
-        clearInterval(interval);
-      }
+      if (finish()) clearInterval(interval);
     }, 100);
     return () => clearInterval(interval);
   }, [appKey, onStatusChange]);
@@ -102,9 +109,10 @@ export function KakaoSdkScript({ onStatusChange }: KakaoSdkScriptProps) {
       src={sdkUrl(appKey)}
       // 기본값이지만 명시한다. 지도는 첫 화면 페인트를 막을 만큼 급하지 않다.
       strategy="afterInteractive"
-      // 이 페이지엔 같은 src로 KakaoSdkScript가 여러 번 마운트된다(텃밭 지도 +
-      // 시군구 지도). next/script는 src가 같으면 두 번째부터 onReady 를 영영
-      // 안 불러준다(onLoad 만 호출) — onLoad 에도 같은 콜백을 걸어 둔다.
+      // next/script 는 src 가 같으면 두 번째 마운트부터 onReady 를 영영 안
+      // 불러준다(onLoad 만 호출) — onLoad 에도 같은 콜백을 걸어 둔다.
+      // 지도 페이지의 인스턴스는 하나로 합쳤지만, 등록 마법사에서 지도 페이지로
+      // 넘어오는 것처럼 라우트를 오가면 여전히 두 번째 마운트가 생긴다.
       onLoad={handleReady}
       onReady={handleReady}
       onError={() => onStatusChange("error")}

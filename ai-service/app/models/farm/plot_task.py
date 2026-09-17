@@ -33,8 +33,13 @@ class PlotTask(FarmBase):
     generated_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
     done = Column(Boolean, nullable=False, server_default="false")
     done_at = Column(DateTime(timezone=True))
+    # 안 하고 넘어간 시각. **배치만 쓴다** — 사용자에게는 update 권한이 없다.
+    # 살아 있는 카드 = done is false and expired_at is null.
+    expired_at = Column(DateTime(timezone=True))
 
     __table_args__ = (
         CheckConstraint("priority in ('high', 'mid', 'low')", name="plot_tasks_priority_check"),
         Index("ix_plot_tasks_plot_priority", "plot_id", "priority"),
+        # 생성 억제(열린 제목 조회)와 홈 조회가 같이 쓰는 축이다.
+        Index("ix_plot_tasks_plot_open", "plot_id", "done", "expired_at"),
     )

@@ -2,6 +2,8 @@ import "server-only";
 
 import { getSupabaseServer } from "@/shared/supabase/server";
 import {
+  carryOverStart,
+  kstDayStart,
   sortByPriority,
   type TaskCardData,
   type TaskRow,
@@ -18,15 +20,38 @@ import {
  *   (`plotStore.ts` 와 같은 방침).
  * - 카드 생성(판정)은 여기서 하지 않는다. ai-service(`app/service/plot_tasks.py`)
  *   가 만든 행을 읽고, 완료 체크만 여기서 쓴다.
+ * - 조회가 **둘로 나뉜다.** 홈은 지금 해야 할 일만, 이전 기록은 나머지 전부다.
+ *   경계 계산은 전부 `domain/taskSummary.ts` 의 순수 함수가 한다(테스트가 그쪽에
+ *   붙어 있다) — 여기서는 그 값을 질의에 넣기만 한다.
  * ---------------------------------------------
  */
 
 const CARD_COLUMNS =
-  "id, title, reason, priority, done, done_at, plots!inner(name, user_id)";
+  "id, plot_id, title, reason, priority, done, done_at, expired_at, generated_at, " +
+  "plots!inner(name, user_id)";
 
-/** 로그인한 사용자의 모든 밭에 걸린 할 일 카드. 급한 순서로 정렬해 돌려준다. */
-export async function listTaskCards(userId: string): Promise<TaskCardData[]> {
+/**
+ * 홈에 보여 줄 카드. **"지금 해야 할 일"**이다.
+ *
+ *   · 미완료 — 최근 CARRY_OVER_DAYS 일 이내 생성분
+ *   · 완료   — 오늘(KST) 체크한 것
+ *
+ * 미완료를 이월하는 이유: 어제 만들어졌는데 아직 미완료인 카드는 **오늘 다시
+ * 만들어지지 않는다**(생성 쪽이 같은 제목의 미완료 카드를 건너뛴다). "오늘
+ * 생성분"만 거르면 어제 물을 안 준 밭이 화면에서 통째로 사라진다.
+ *
+ * 완료분을 `done_at` 으로 거르는 이유: 사흘 전 카드를 방금 체크했으면 그건
+ * 오늘 한 일이다. `generated_at` 으로 거르면 방금 누른 것이 화면에서 사라져,
+ * 체크가 먹었는지 알 수 없다.
+ */
+export async function listTaskCards(
+  userId: string,
+  now: Date = new Date(),
+): Promise<TaskCardData[]> {
   const supabase = await getSupabaseServer();
+
+  const carryStart = carryOverStart(now).toISOString();
+  const dayStart = kstDayStart(now).toISOString();
 
   const { data, error } = await supabase
     .from("plot_tasks")
@@ -36,12 +61,62 @@ export async function listTaskCards(userId: string): Promise<TaskCardData[]> {
     // `plot_tasks` 에는 `deleted_at` 이 없다. 숨긴 밭의 카드를 가리는 것은
     // 이 조인 조건뿐이라, 빼면 지운 밭의 할 일이 대시보드에 그대로 뜬다.
     .is("plots.deleted_at", null)
+    .or(
+      // 살아 있는 미완료(닫히지 않은 것)만. 배치가 닫은 카드는 이력으로 간다.
+      `and(done.is.false,expired_at.is.null,generated_at.gte.${carryStart}),` +
+        `and(done.is.true,done_at.gte.${dayStart})`,
+    )
     .order("generated_at", { ascending: false });
 
   if (error) throw new Error(error.message);
   return sortByPriority(
-    (data ?? []).map((row) => toTaskCard(row as unknown as TaskRow)),
+    (data ?? []).map((row) => toTaskCard(row as unknown as TaskRow, now)),
   );
+}
+
+/**
+ * 이전 기록. 홈에서 빠진 나머지다 — 배치가 닫은 카드, 오늘 이전에 끝낸 카드,
+ * 그리고 기간은 지났지만 배치가 아직 안 닫은 카드.
+ *
+ * `listTaskCards` 의 정확한 여집합이라 두 화면 사이로 새는 카드가 없다.
+ * (`done=true` 인데 `done_at` 이 비어 있는 행은 나올 수 없다 — 완료를 쓰는 곳은
+ * `setTaskDone` 하나뿐이고 둘을 함께 쓴다. 컬럼 범위 GRANT 가 그걸 강제한다.)
+ *
+ * 최신순으로만 준다. 이전 기록은 "언제 뭘 했나"를 되짚는 화면이라 우선순위가
+ * 아니라 시간이 축이다.
+ */
+export async function listTaskHistory(
+  userId: string,
+  now: Date = new Date(),
+  limit = 100,
+): Promise<TaskCardData[]> {
+  const supabase = await getSupabaseServer();
+
+  const carryStart = carryOverStart(now).toISOString();
+  const dayStart = kstDayStart(now).toISOString();
+
+  const { data, error } = await supabase
+    .from("plot_tasks")
+    .select(CARD_COLUMNS)
+    .eq("plots.user_id", userId)
+    // 홈과 같은 기준으로 숨긴 밭을 뺀다. 한쪽만 걸면 지운 밭의 카드가 홈에서는
+    // 사라지고 이력에는 남아, 아래 주석이 말하는 "정확한 여집합"이 깨진다.
+    .is("plots.deleted_at", null)
+    .or(
+      // ① 배치가 닫은 카드(안 하고 넘어감) ② 오늘 이전에 끝낸 카드
+      // ③ 3일이 지났는데 아직 안 닫힌 카드 — 배치가 돌기 전 창에 존재한다.
+      //    빠뜨리면 그 카드가 홈에도 이력에도 없는 사각지대가 된다.
+      `expired_at.not.is.null,` +
+        `and(done.is.true,done_at.lt.${dayStart}),` +
+        `and(done.is.false,expired_at.is.null,generated_at.lt.${carryStart})`,
+    )
+    .order("generated_at", { ascending: false })
+    // 페이지네이션 없이 다 불러오면 오래 쓴 계정에서 화면이 멈춘다.
+    // ponytail: 더 보기가 필요해지면 그때 커서를 붙인다.
+    .limit(limit);
+
+  if (error) throw new Error(error.message);
+  return (data ?? []).map((row) => toTaskCard(row as unknown as TaskRow, now));
 }
 
 /**
