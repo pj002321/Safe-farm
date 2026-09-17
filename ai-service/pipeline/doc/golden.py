@@ -119,6 +119,16 @@ def main() -> None:
     print(f"  hit@{TOP_K}   {hit}/{n} ({hit * 100 // n}%)")
     print(f"  hint@{TOP_K}  {hint}/{n} ({hint * 100 // n}%)")
 
+    # 임계값 판단 재료. hit 한 문항의 top1 거리와 miss 한 문항의 top1 거리가 갈리는지 본다 —
+    # 갈리면 그 사이가 NO_MATCH_DISTANCE 다. 겹치면 임계로는 못 가르고 1.0 을 둔다
+    맞은 = sorted(r["dist"] for _, r in 검색 if r["hit"] and r["dist"] is not None)
+    틀린 = sorted(r["dist"] for _, r in 검색 if not r["hit"] and r["dist"] is not None)
+    print("\n  top1 거리 — hit :", " ".join(f"{d:.3f}" for d in 맞은))
+    print("  top1 거리 — miss:", " ".join(f"{d:.3f}" for d in 틀린))
+    if 맞은 and 틀린:
+        판정 = "갈린다. 사이값을 임계로" if max(맞은) < min(틀린) else "겹친다. 임계로 못 가른다"
+        print(f"  hit 최대 {max(맞은):.3f} · miss 최소 {min(틀린):.3f} → {판정}")
+
     # 소스별로 나눠 본다. "품종은 되는데 재배법이 0" 같은 편중이 총점에 가려지지 않게
     print("\n  기대 소스별 hit")
     for name in dict.fromkeys(row["expect_source"] for row, _ in 검색):

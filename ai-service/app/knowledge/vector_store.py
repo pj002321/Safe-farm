@@ -3,7 +3,7 @@
 from collections.abc import Collection
 from datetime import date
 
-from sqlalchemy import Date, and_, func, or_, select
+from sqlalchemy import Date, and_, func, or_, select, text
 from sqlalchemy.dialects.postgresql import array
 from sqlalchemy.orm import Session, joinedload
 
@@ -109,6 +109,24 @@ def search_with_score(
     # examples
         search_with_score(db, vector, top_k=2)  -> [(Chunk(id=7), 0.21), (Chunk(id=2), 0.48)]
     """
+    # ⚠ **필터를 걸 때는 HNSW 를 반복 훑기로 바꾼다.** 안 그러면 결과가 통째로 0 이 된다.
+    #
+    #   HNSW 는 `order_by 거리` 를 만나면 인덱스에서 먼저 ef_search(기본 40)개를 뽑고,
+    #   **그 뒤에** where 를 적용한다. 그 40개 안에 조건에 맞는 행이 하나도 없으면
+    #   자료가 DB 에 있어도 빈손으로 끝난다 — SQL 문장에서 filter 를 order_by 앞에 둔 것과
+    #   무관하다. 실행 순서는 여전히 "뽑고 나서 거르기" 다.
+    #
+    #   실측(2026-09-17): "슬슬 배추 심으려는데 뭘 하면 좋을까?" 가 후보 0건이었다.
+    #   배추 자료는 149건 있었고, /v1/ask 는 "관련된 정보를 찾지 못했습니다" 를 냈다.
+    #   pest_bulletin 으로 한정한 검색도 2,272조각을 두고 0건이었다.
+    #
+    #   relaxed_order 를 쓰는 이유: strict_order 는 거리 순서를 정확히 지키느라 느리다.
+    #   우리는 뒤에 reranker 가 순서를 다시 잡으므로 그 정확도를 살 이유가 없다.
+    #   set **local** 이라 이 트랜잭션에서만 산다 — 다른 요청·배치에 안 샌다.
+    #   (pgvector 0.8.0+ 기능. 우리 서버는 0.8.2)
+    if crops or on_date is not None:
+        db.execute(text("set local hnsw.iterative_scan = relaxed_order"))
+
     # 정렬 키와 반환 값이 같은 식이어야 순서와 숫자가 어긋나지 않음
     distance = Chunk.embedding.cosine_distance(query_vector)
     query = (
@@ -159,5 +177,7 @@ def search_with_score(
             )
         )
     rows = query.order_by(distance).limit(top_k).all()
-    return [(chunk, float(dist)) for chunk, dist in rows]
+    # relaxed_order 는 거리 순서를 조금 흐릴 수 있다.
+    # 정렬 키와 반환값이 같은 식이어야 순서가 어긋나지 않는다
+    return sorted(((chunk, float(dist)) for chunk, dist in rows), key=lambda x: x[1])
 

@@ -7,6 +7,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.domain.crop_match import find_crops
+from app.domain.symptoms import expand_symptoms
 from app.knowledge import vector_store
 from app.knowledge.embedder import embed_texts
 from app.models.chunk import Chunk
@@ -94,7 +95,9 @@ def retrieve_with_score(
     # examples
         retrieve_with_score(db, "상추 발아기 물주기", top_k=3)  -> [(Chunk(id=7), 0.21), ...]
     """
-    [query_vector] = embed_texts([question])
+    # 증상말(반점·녹는다·시든다)을 문서의 말(노균병·무름병·시들음병)로 넓혀 임베딩한다.
+    # 원문 question 은 그대로 LLM 으로 간다 — 여기서 바뀌는 건 검색 벡터만이다
+    [query_vector] = embed_texts([expand_symptoms(question)])
     # 부르는 쪽이 작물을 정해 주지 않았으면 질문에서 찾는다. 못 찾으면 필터 없이 전체를 본다 —
     # "요즘 뭐 심어?" 처럼 작물이 없는 질문을 막아 버리면 안 된다
     if crops is None:
