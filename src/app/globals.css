@@ -294,7 +294,20 @@
 
   --animate-pulse-ring: pulse-ring 2.4s var(--ease-out-expo) infinite;
   --animate-drift: drift 9s ease-in-out infinite;
-  --animate-sweep: sweep 3.6s linear infinite;
+  /* 수신 스트립. 타일 한 장(96 사용자 단위)을 위로 밀어 다음 타일에 이어 붙인다 —
+   * marquee 의 세로판이다. **-96px 은 SatelliteScan 의 SCENE 과 같은 값이어야 한다.**
+   * 어긋나면 한 바퀴마다 그림이 튄다.
+   *
+   * SVG 안에서 CSS transform 의 px 는 사용자 단위다(뷰포트 픽셀이 아니다). 그래서
+   * 타일이 112px 로 그려지든 64px 로 그려지든 한 바퀴는 정확히 타일 한 장이다.
+   *
+   * `both` 를 붙인 이유는 아래 prefers-reduced-motion 블록 때문이다. 그 블록이
+   * iteration-count 를 1 로 눌러 애니메이션을 즉시 끝내는데, fill-mode 가 없으면
+   * 계산값이 base 로 되돌아간다 — 앞의 `sweep` 이 정확히 그래서 깨져 있었다
+   * (모션 끈 사용자에게 위쪽 절반을 덮은 정지된 초록 띠가 남았다).
+   * 이 애니메이션은 시작과 끝이 **같은 그림**이라 어느 쪽이어도 안전하지만,
+   * 다음 사람이 규칙을 읽을 수 있게 명시해 둔다. */
+  --animate-acquire: acquire 5.4s linear infinite both;
   --animate-marquee: marquee 38s linear infinite;
   /* 일회성 등장. 위 네 개는 전부 무한 반복이라 "나타났다가 멈추는" 연출이 없었다.
    * `both` 로 끝 상태를 물고 있어야 한다 — 안 그러면 애니메이션이 끝나는 순간
@@ -325,15 +338,6 @@
   }
 }
 
-@keyframes sweep {
-  from {
-    transform: translateY(-100%);
-  }
-  to {
-    transform: translateY(100%);
-  }
-}
-
 @keyframes rise {
   from {
     opacity: 0;
@@ -342,6 +346,15 @@
   to {
     opacity: 1;
     transform: none;
+  }
+}
+
+@keyframes acquire {
+  from {
+    transform: translateY(0);
+  }
+  to {
+    transform: translateY(-96px);
   }
 }
 
