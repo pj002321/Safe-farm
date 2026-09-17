@@ -1,4 +1,5 @@
 import "server-only";
+import { normalizePlotForecast } from "./plotForecastShape";
 
 /**
  * ---------------------------------------------
@@ -125,15 +126,63 @@ export interface SigunguWindFeatureCollection {
   }>;
 }
 
-/** 밭 좌표 기준 7일 예보. `/weather` 탭이 그대로 목록으로 그린다. */
+/** 밭 좌표 기준 실황·시간별·7일 예보. `/weather` 탭이 그린다. */
 export interface PlotForecast {
+  /**
+   * 지금 이 자리의 관측값. Open-Meteo 가 예보와 **같은 요청**으로 준다.
+   * 응답에 current 가 없으면 null — 그때 화면은 실황 칸 자체를 그리지 않는다.
+   */
+  current: {
+    /** 관측 시각(현지). "몇 시 기준인지"를 안 적으면 실황은 의미가 없다. */
+    observedAt: string | null;
+    tempC: number | null;
+    humidityPct: number | null;
+    rainfallMm: number | null;
+    windMs: number | null;
+  } | null;
+  /** 지금부터 24시간. 서버가 **지난 시간을 잘라내고** 준다(00시부터 오지 않는다). */
+  hours: Array<{
+    time: string;
+    tempC: number | null;
+    rainfallMm: number | null;
+    rainChance: number | null;
+  }>;
   days: Array<{
     date: string;
     tempMax: number | null;
     tempMin: number | null;
     rainfallMm: number | null;
+    rainChance: number | null;
     windMax: number | null;
+    humidityPct: number | null;
   }>;
+  /** 최근접 관측소 기준 누적 강수량(mm). 그 구간에 관측이 없으면 null(판정 보류). */
+  rainfall3d: number | null;
+  rainfall5d: number | null;
+  rainfall7d: number | null;
+  /** 최근 14일 하루치 GDD. 재배 중인 작물이 없으면 null. `/weather` 생육속도 막대(V1-69)가 그린다. */
+  growthSeries: Array<{ date: string; gdd: number }> | null;
+  /** 이 밭 작물의 기온·관수 기준. 기상 수치 옆에 "이게 이 작물에 어떤 의미인지"를
+   * 병기하는 근거(V1-64) — 재배 중인 작물이 없으면 null. */
+  cropImpact: {
+    cropNameKo: string;
+    baseTempC: number;
+    upperTempC: number | null;
+    stageName: string | null;
+    waterNeedMm: number | null;
+  } | null;
+  /**
+   * 이 밭이 속한 시군구에 지금 발효 중인 기상특보. 없으면 null.
+   *
+   * 지도의 특보 레이어와 **같은 판정 함수**를 쓴다(`service/warn_region.py`).
+   * 따로 계산하면 두 화면이 서로 다른 말을 하게 된다.
+   */
+  alert: {
+    warnings: string[];
+    label: string | null;
+    /** 기상청 스냅샷을 받아 둔 시각. 특보는 이 시각까지의 상태다. */
+    asOf: string | null;
+  } | null;
 }
 
 export type AiResult<T> =
@@ -154,6 +203,21 @@ export type AiFailure =
 /** 기본 타임아웃. 상태 조회는 짧게, LLM 호출은 부르는 쪽에서 늘린다. */
 const DEFAULT_TIMEOUT_MS = 5_000;
 
+/**
+ * 밭 예보 갱신 주기(초, V1-61).
+ *
+ * 예보 원본(Open-Meteo)은 하루 몇 차례 모델을 갱신할 뿐이라 요청마다 부르는 건
+ * 낭비다 — 날씨 화면은 밭 수만큼 호출이 나간다.
+ *
+ * ⚠️ 하루(86400)로 두지 않은 이유: 이 응답은 "오늘부터 7일"이고 `revalidate` 는
+ *    자정이 아니라 **처음 담은 시각부터** 구르는 TTL 이다. 23시에 담기면 다음 날
+ *    22시까지 어제 기준 표가 남아, 표의 첫 줄이 "오늘"이 아니게 된다. 한 시간이면
+ *    자정을 넘겨도 어긋나는 구간이 한 시간으로 묶인다.
+ *
+ * 개발 서버(`next dev`)는 항상 매 요청 새로 받아온다 — 이 캐시는 배포에서만 보인다.
+ */
+const WEATHER_REVALIDATE_SEC = 60 * 60;
+
 function config(): { baseUrl: string; token: string } | null {
   const baseUrl = process.env.AI_SERVICE_URL?.trim();
   const token = process.env.AI_SERVICE_TOKEN?.trim();
@@ -164,7 +228,7 @@ function config(): { baseUrl: string; token: string } | null {
 
 async function call<T>(
   path: string,
-  init: RequestInit & { timeoutMs?: number } = {},
+  init: RequestInit & { timeoutMs?: number; revalidateSec?: number } = {},
 ): Promise<AiResult<T>> {
   const cfg = config();
   if (!cfg) {
@@ -176,7 +240,7 @@ async function call<T>(
     };
   }
 
-  const { timeoutMs = DEFAULT_TIMEOUT_MS, ...rest } = init;
+  const { timeoutMs = DEFAULT_TIMEOUT_MS, revalidateSec, ...rest } = init;
   // AbortSignal.timeout 은 Node 18+ 에 있다. setTimeout + controller 보다
   // 짧고, 타이머를 걷는 것을 잊을 여지가 없다.
   const signal = AbortSignal.timeout(timeoutMs);
@@ -190,9 +254,16 @@ async function call<T>(
         "X-Service-Token": cfg.token,
         ...rest.headers,
       },
-      // 내부 호출은 캐시하지 않는다. 상태 조회가 캐시되면 "이미 고쳤는데
-      // 화면은 계속 안 된다고 하는" 상황이 된다.
-      cache: "no-store",
+      // 기본은 캐시하지 않는다. 상태 조회가 캐시되면 "이미 고쳤는데 화면은
+      // 계속 안 된다고 하는" 상황이 되고, 작업 생성처럼 부수효과가 있는 호출은
+      // 애초에 캐시 대상이 아니다.
+      //
+      // 값이 자주 안 바뀌는 조회만 `revalidateSec` 으로 열어 준다. 경로에 좌표가
+      // 들어 있어 캐시 키가 밭마다 갈리고, Next 의 Data Cache 는 서버 전역이라
+      // 같은 자리를 보는 다른 사용자도 함께 덜 부른다.
+      ...(revalidateSec == null
+        ? { cache: "no-store" as const }
+        : { next: { revalidate: revalidateSec } }),
     });
 
     if (response.status === 401) {
@@ -245,9 +316,26 @@ export const aiService = {
     call<SigunguWindFeatureCollection>("/v1/map/sigungu-wind", {
       timeoutMs: 15_000,
     }),
-  /** 밭 좌표 기준 7일 예보(기온·강수·최대풍속). Open-Meteo 를 그때그때 불러온다. */
-  plotForecast: (lat: number, lon: number) =>
-    call<PlotForecast>(`/v1/weather/plot?lat=${lat}&lon=${lon}`),
+  /**
+   * 밭 좌표의 7일 예보. `plotId` 를 주면 최근 14일 하루치 GDD(growthSeries)와
+   * 작물 기준 해석(cropImpact)까지 함께 온다.
+   */
+  plotForecast: async (
+    lat: number,
+    lon: number,
+    plotId?: string,
+  ): Promise<AiResult<PlotForecast>> => {
+    const result = await call<PlotForecast>(
+      `/v1/weather/plot?lat=${lat}&lon=${lon}${plotId ? `&plot_id=${plotId}` : ""}`,
+      { revalidateSec: WEATHER_REVALIDATE_SEC },
+    );
+    // ⚠️ 여기서 모양을 맞추는 이유는 `normalizePlotForecast` 에 적어 두었다.
+    //    요약하면: 두 서비스가 따로 배포되므로 **옛 응답이 올 수 있고**, 그때
+    //    선언한 타입은 거짓말이 된다. 컴포넌트마다 방어하지 않고 길목에서 한 번.
+    return result.ok
+      ? { ok: true, data: normalizePlotForecast(result.data) }
+      : result;
+  },
   /**
    * 밭 하나만 즉시 판정해 오늘 할 일 카드를 만든다. 자정 배치를 기다리지 않고
    * 밭 등록·재배 추가 직후 호출한다(registerPlot/addCultivations).
