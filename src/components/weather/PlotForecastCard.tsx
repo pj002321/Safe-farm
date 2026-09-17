@@ -46,7 +46,7 @@ function GrowthSeriesBars({
               title={`${day.date}: ${day.gdd}`}
             />
             <span className="font-mono text-[0.6rem] text-fg-subtle">
-              {day.date.slice(8)}
+              {day.date.slice(5)}
             </span>
           </div>
         ))}
