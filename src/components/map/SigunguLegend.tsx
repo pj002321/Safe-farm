@@ -1,5 +1,6 @@
 import {
   AlertTriangleIcon,
+  CloseIcon,
   CloudRainIcon,
   SnowflakeIcon,
   SunIcon,
@@ -164,14 +165,31 @@ export function Legend({
 export function RegionInfo({
   layer,
   properties,
+  onClose,
 }: {
   layer: Layer;
   properties: GddProperties | WarnProperties | RainProperties | WindProperties;
+  /** 지도 위에 떠 있으므로 닫을 방법이 있어야 한다 — 가린 곳을 보려면 치워야 한다. */
+  onClose: () => void;
 }) {
   return (
-    <div className="rounded-lg border border-border bg-surface px-4 py-3 text-sm">
-      <p className="font-medium text-fg">{properties.name}</p>
-      <p className="mt-0.5 text-fg-muted">{detail(layer, properties)}</p>
+    // 지도 타일 위에 뜬다. 반투명 + blur 로 아래 지도가 비쳐서 "지도 위의 층"임이
+    // 보이게 한다(불투명하면 지도가 잘린 것처럼 읽힌다).
+    <div className="pointer-events-auto flex items-start gap-3 rounded-lg border border-border bg-surface/95 px-4 py-2.5 text-sm shadow-md backdrop-blur">
+      <div className="min-w-0 flex-1">
+        <p className="font-medium text-fg">{properties.name}</p>
+        <p className="mt-0.5 text-fg-muted text-xs leading-relaxed">
+          {detail(layer, properties)}
+        </p>
+      </div>
+      <button
+        aria-label="닫기"
+        className="-mr-1 -mt-0.5 grid size-8 shrink-0 place-items-center rounded-md text-fg-subtle transition-colors duration-200 ease-out-expo hover:bg-surface-2 hover:text-fg"
+        onClick={onClose}
+        type="button"
+      >
+        <CloseIcon className="size-4" />
+      </button>
     </div>
   );
 }

@@ -1,6 +1,7 @@
 import { CloudRainIcon, WindIcon } from "@/components/icons";
 import { dayFlag } from "@/features/weather/domain/forecastAlerts";
 import type { PlotForecast } from "@/shared/aiService/client";
+import { FLAG_TEXT } from "./dayFlagClass";
 
 /**
  * ---------------------------------------------
@@ -18,13 +19,6 @@ import type { PlotForecast } from "@/shared/aiService/client";
  *   하지 않는다.
  * ---------------------------------------------
  */
-
-/** 임계를 넘은 날의 기온 색. 무슨 임계인지는 카드 위 경고가 설명한다. */
-const FLAG_CLASS = {
-  frost: "text-info",
-  cold: "text-info",
-  hot: "text-caution",
-} as const;
 
 /** "2026-09-17" → "9/17 (수)". 요일을 함께 본다는 전제(format.ts 와 같은 방침). */
 function dayLabel(iso: string, todayIso: string): string {
@@ -68,7 +62,7 @@ export function DailyRows({
 
               <span
                 className={`w-[4.25rem] shrink-0 font-mono text-xs tabular-nums ${
-                  flag ? FLAG_CLASS[flag] : "text-fg"
+                  flag ? FLAG_TEXT[flag] : "text-fg"
                 }`}
               >
                 {day.tempMin != null ? Math.round(day.tempMin) : "—"}°–
