@@ -131,10 +131,6 @@ export async function getPlot(
   return data ? toPlotMapPoint(data) : null;
 }
 
-/** 카드 목록이 읽는 컬럼. 지도용 select 와 달라 따로 적는다. */
-const CARD_COLUMNS =
-  "id, name, area_m2, region_ko, crops, sowing_date, sowing_unknown, created_at";
-
 /**
  * 등록한 텃밭을 카드 목록으로.
  *
