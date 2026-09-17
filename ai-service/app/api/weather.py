@@ -19,7 +19,12 @@ from sqlalchemy.orm import Session
 from app.core.db import get_db
 from app.core.security import require_service_token
 from app.models.farm import Plot
-from app.service.plot_growth import daily_gdd_series, nearest_station, rainfall_totals
+from app.service.plot_growth import (
+    crop_interpretation,
+    daily_gdd_series,
+    nearest_station,
+    rainfall_totals,
+)
 from pipeline.open_meteo_client import fetch_daily_forecast, normalize_daily_forecast
 
 router = APIRouter(prefix="/v1/weather", tags=["weather"])
@@ -53,9 +58,20 @@ def plot_forecast(
     rainfall = rainfall_totals(db, station.station_code) if station else {3: None, 5: None, 7: None}
 
     growth_series = None
+    crop_impact = None
     if plot_id is not None and station is not None:
         plot = db.get(Plot, plot_id)
-        growth_series = daily_gdd_series(db, plot, station) if plot else None
+        if plot:
+            growth_series = daily_gdd_series(db, plot, station)
+            impact = crop_interpretation(db, plot, station)
+            if impact:
+                crop_impact = {
+                    "cropNameKo": impact["crop_name_ko"],
+                    "baseTempC": impact["base_temp_c"],
+                    "upperTempC": impact["upper_temp_c"],
+                    "stageName": impact["stage_name"],
+                    "waterNeedMm": impact["water_need_mm"],
+                }
 
     return {
         "days": days,
@@ -63,4 +79,5 @@ def plot_forecast(
         "rainfall5d": rainfall[5],
         "rainfall7d": rainfall[7],
         "growthSeries": growth_series,
+        "cropImpact": crop_impact,
     }

@@ -25,6 +25,36 @@ function rainfallLabel(mm: number | null): string {
   return mm != null ? `${mm}mm` : "관측 없음";
 }
 
+/** 기온이 이 작물에 어떤 의미인지(V1-64) — 일반 날씨 앱은 숫자만 주지만
+ * 여기는 그 숫자가 이 작물엔 스트레스인지 적온인지까지 병기한다. */
+function tempImpactKo(
+  tempMax: number | null,
+  tempMin: number | null,
+  impact: PlotForecast["cropImpact"],
+): string | null {
+  if (!impact || tempMax == null || tempMin == null) return null;
+  if (impact.upperTempC != null && tempMax > impact.upperTempC) {
+    return `${impact.cropNameKo} 고온 스트레스(상한 ${impact.upperTempC}℃)`;
+  }
+  if (tempMin < impact.baseTempC) {
+    return `${impact.cropNameKo} 생육 정지(기준 ${impact.baseTempC}℃)`;
+  }
+  return `${impact.cropNameKo} 생육 적온`;
+}
+
+/** 누적 강수량이 이 작물 단계의 필요량을 채우는지(V1-64). 필요량이 없으면(단계
+ * 판정 불가) 해석하지 않는다 — 근거 없는 판단은 후보에서 뺀다(task_rules.py 방침). */
+function rainImpactKo(
+  rainfall7d: number | null,
+  impact: PlotForecast["cropImpact"],
+): string | null {
+  if (!impact || impact.waterNeedMm == null || rainfall7d == null) return null;
+  const stage = impact.stageName ? `${impact.stageName} ` : "";
+  return rainfall7d < impact.waterNeedMm
+    ? `${stage}단계 필요량(${impact.waterNeedMm}mm) 대비 부족 — 관수 권장`
+    : `${stage}단계 필요량 충족`;
+}
+
 /** 최근 하루치 GDD 막대(V1-69). 높이가 그날 기온이 얼마나 생육에 기여했는지를
  * 바로 보여줘, 생육 속도가 왜 그런지(더워서/추워서)를 숫자 없이도 읽게 한다. */
 function GrowthSeriesBars({
@@ -77,6 +107,11 @@ export function PlotForecastCard({
         {rainfallLabel(forecast.rainfall5d)} · 7일{" "}
         {rainfallLabel(forecast.rainfall7d)}
       </p>
+      {rainImpactKo(forecast.rainfall7d, forecast.cropImpact) && (
+        <p className="mt-0.5 text-[0.7rem] text-info">
+          {rainImpactKo(forecast.rainfall7d, forecast.cropImpact)}
+        </p>
+      )}
 
       {forecast.growthSeries && forecast.growthSeries.length > 0 && (
         <GrowthSeriesBars series={forecast.growthSeries} />
@@ -86,6 +121,11 @@ export function PlotForecastCard({
         {forecast.days.map((day) => {
           const isFrostRisk =
             day.tempMin != null && day.tempMin <= FROST_THRESHOLD_C;
+          const tempImpact = tempImpactKo(
+            day.tempMax,
+            day.tempMin,
+            forecast.cropImpact,
+          );
 
           return (
             <div
@@ -100,6 +140,11 @@ export function PlotForecastCard({
                 <span className="inline-flex items-center gap-1 font-mono text-fg text-xs tabular-nums">
                   <ThermometerIcon className="size-3.5 text-caution" />
                   {day.tempMin ?? "–"}–{day.tempMax ?? "–"}℃
+                  {tempImpact && (
+                    <span className="font-sans text-fg-muted">
+                      ({tempImpact})
+                    </span>
+                  )}
                 </span>
 
                 <span className="inline-flex items-center gap-1 font-mono text-fg text-xs tabular-nums">

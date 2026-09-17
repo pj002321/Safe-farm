@@ -141,6 +141,15 @@ export interface PlotForecast {
   rainfall7d: number | null;
   /** 최근 14일 하루치 GDD. 재배 중인 작물이 없으면 null. `/weather` 생육속도 막대(V1-69)가 그린다. */
   growthSeries: Array<{ date: string; gdd: number }> | null;
+  /** 이 밭 작물의 기온·관수 기준. 기상 수치 옆에 "이게 이 작물에 어떤 의미인지"를
+   * 병기하는 근거(V1-64) — 재배 중인 작물이 없으면 null. */
+  cropImpact: {
+    cropNameKo: string;
+    baseTempC: number;
+    upperTempC: number | null;
+    stageName: string | null;
+    waterNeedMm: number | null;
+  } | null;
 }
 
 export type AiResult<T> =

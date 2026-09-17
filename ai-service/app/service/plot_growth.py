@@ -149,6 +149,26 @@ def daily_gdd_series(
     ]
 
 
+def crop_interpretation(db: Session, plot: Plot, station: Station) -> dict | None:
+    """기상 수치를 이 밭 작물 기준과 견줄 근거(V1-64). base/upper 는 고온·저온
+    스트레스 판정에, 현재 단계의 water_need_mm 은 관수 판정(rainfall_totals 의
+    7일 창과 짝)에 쓴다. 기르는 중인 재배 건이 없으면 None."""
+    cultivation = _lead_cultivation(db, plot)
+    if cultivation is None:
+        return None
+    crop = _crop_for_cultivation(db, cultivation)
+    if crop is None:
+        return None
+    growth = compute_plot_growth(db, plot, station)
+    return {
+        "crop_name_ko": crop.name,
+        "base_temp_c": float(crop.base_temp),
+        "upper_temp_c": float(crop.upper_temp) if crop.upper_temp is not None else None,
+        "stage_name": growth.stage_name if growth else None,
+        "water_need_mm": growth.water_need_mm if growth else None,
+    }
+
+
 def compute_plot_growth(db: Session, plot: Plot, station: Station) -> PlotGrowth | None:
     """밭의 대표 재배 건을 골라 파종일부터 오늘까지 GDD 를 누적, 현재 생육단계를
     계산한다. 기르는 중인 재배 건이 없거나 파종일을 모르면 None."""
