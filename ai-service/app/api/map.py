@@ -19,6 +19,7 @@ from app.core.db import get_db
 from app.core.security import require_service_token
 from app.service.gdd_region import sigungu_gdd_deviation
 from app.service.warn_region import sigungu_warning_status
+from app.service.weather_region import sigungu_rain_levels, sigungu_wind_levels
 
 router = APIRouter(prefix="/v1/map", tags=["map"])
 
@@ -78,3 +79,19 @@ def sigungu_warn(db: Session = Depends(get_db)) -> dict:
     warn_regions = list(_sigungu_warn_regions())
     status_by_code, as_of = sigungu_warning_status(db, warn_regions, _warn_region_up_by_id())
     return _with_properties(status_by_code, as_of.isoformat() if as_of else None)
+
+
+@router.get("/sigungu-rain", dependencies=[Depends(require_service_token)])
+def sigungu_rain(db: Session = Depends(get_db)) -> dict:
+    """시군구 250개 폴리곤 각각에 가장 최근 관측된 일 강수량·색상을 얹어 GeoJSON으로 돌려준다."""
+    today = date.today()
+    rain_by_code = sigungu_rain_levels(db, list(_sigungu_stations()))
+    return _with_properties(rain_by_code, today.isoformat())
+
+
+@router.get("/sigungu-wind", dependencies=[Depends(require_service_token)])
+def sigungu_wind(db: Session = Depends(get_db)) -> dict:
+    """시군구 250개 폴리곤 각각에 가장 최근 관측된 최대풍속·색상을 얹어 GeoJSON으로 돌려준다."""
+    today = date.today()
+    wind_by_code = sigungu_wind_levels(db, list(_sigungu_stations()))
+    return _with_properties(wind_by_code, today.isoformat())
