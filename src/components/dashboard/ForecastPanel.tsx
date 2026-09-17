@@ -1,4 +1,3 @@
-import { after } from "next/server";
 import { SatelliteScan } from "@/components/shared/SatelliteScan";
 import { selectPlot } from "@/features/plots/domain/plotSelection";
 import { listPlots } from "@/features/plots/plotStore";
@@ -20,9 +19,13 @@ import { WorkWindow } from "./WorkWindow";
  * - `?plot=` 로 고른 밭이 목록에 없으면(지운 밭, 남의 밭 id) 조용히 기본값으로
  *   돌아간다. **오류를 내지 않는다** — 쿼리는 사용자가 고칠 수 있는 값이라
  *   그걸로 화면을 죽이면 안 된다.
- * - **화면은 고른 밭 하나만 기다린다.** 나머지 밭은 응답을 보낸 뒤(`after`) 병렬로
- *   데워 둔다 — 1시간 캐시라 밭을 바꿀 때 ai-service 를 새로 안 때린다.
- *   기다리는 것과 데우는 것을 나눈 이유는 아래 ⚠️ 에 적었다.
+ * - **고른 밭 하나만 부른다. 나머지는 부르지 않는다.**
+ *   한때 `after` 로 나머지 밭을 전부 미리 데웠는데, 그것이 운영에서 예보를 통째로
+ *   죽였다: 밭 N개면 홈 진입 한 번이 **동시 요청 N개**를 만드는데 ai-service 의
+ *   커넥션 풀은 5개다(`DB_POOL_SIZE`, `max_overflow=0`). 예열 요청이 풀을 채우면
+ *   정작 사용자가 보는 밭의 요청이 뒤에서 대기하다 **5초 타임아웃**에 걸린다.
+ *   지금은 요청 수가 밭 개수와 무관하게 항상 1이다.
+ *   ⚠️ 캐시를 위해 다시 미리 데우고 싶어지면, **먼저 풀 크기부터 올릴 것.**
  * - 실패하면 이 칸만 안내로 바뀐다. 홈의 나머지(할 일·텃밭)는 그대로 뜬다.
  *   ⚠️ 그건 `<Suspense>` 덕이 **아니다** — Suspense 는 기다림을 다루지 던지는 것을
  *      잡지 않는다. 아래에서 조회와 호출을 각각 직접 막기 때문이다.
@@ -81,25 +84,17 @@ export async function ForecastPanel({
     selected.id,
   );
 
-  /**
-   * 나머지 밭은 **응답을 막지 않고** 데운다.
-   *
-   * 예보는 1시간 캐시라, 지금 받아 두면 셀렉트로 밭을 바꿀 때 ai-service 를 새로
-   * 때리지 않는다 — 전환이 캐시에서 바로 나온다.
-   * `after` 를 쓰는 이유: 렌더 안에서 await 하지 않고 띄워만 두면 응답이 끝나면서
-   * 잘릴 수 있다. `after` 는 응답을 보낸 **뒤에** 실행을 보장한다.
-   */
-  after(async () => {
-    await Promise.all(
-      plots
-        .filter((plot) => plot.id !== selected.id)
-        .map((plot) =>
-          aiService.plotForecast(plot.latitude, plot.longitude, plot.id),
-        ),
-    );
-  });
-
   if (!result.ok) {
+    // ⚠️ **이유를 반드시 남긴다.** 예전에는 화면 문구만 있고 로그가 없어서,
+    //    "예보를 못 불러온다"는 신고를 받고도 timeout 인지 unauthorized 인지
+    //    ai-service 장애인지 구분할 방법이 없었다. 실제로 그 상태에서 원인을
+    //    좁히는 데 한참 걸렸다.
+    console.error(
+      "[dashboard] 밭 예보 조회 실패",
+      selected.id,
+      result.reason,
+      result.detail,
+    );
     return (
       <div className="rounded-lg border border-border border-dashed bg-surface-2/40 p-4 text-fg-muted text-sm">
         <span className="font-semibold text-fg">
