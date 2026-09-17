@@ -98,6 +98,56 @@ export function toPlotMapPoint(row: PlotRow): PlotMapPoint {
 }
 
 /**
+ * 밭 상세 화면이 쓰는 밭 자체의 값.
+ *
+ * 지도 마커와 달리 **작물을 담지 않는다.** 상세의 작물 카드는 게이지에 쓸
+ * 목표 GDD·기준온도까지 필요해서 `features/cultivations` 가 따로 읽는다. 여기에
+ * 절반짜리 작물 목록을 같이 담으면 화면이 어느 쪽을 믿을지 모르게 된다.
+ *
+ * 좌표를 들고 나오는 이유는 게이지 때문이다 — 밭에서 가장 가까운 관측소를
+ * 골라야 기온을 읽는다.
+ */
+export interface PlotDetail {
+  id: string;
+  nameKo: string | null;
+  regionKo: string;
+  areaM2: number | null;
+  latitude: number;
+  longitude: number;
+  /** 기상청 격자. 예보(`weather_forecast`)가 이걸로 갈린다. 좌표로 다시 계산하지 않는다. */
+  gridX: number;
+  gridY: number;
+}
+
+/** 상세가 읽어 오는 plots 한 행. */
+export interface PlotDetailRow {
+  id: string;
+  name: string | null;
+  region_ko: string;
+  /** ⚠️ `numeric` 이라 supabase-js 는 **문자열로** 준다. */
+  area_m2: number | string | null;
+  latitude: number | string;
+  longitude: number | string;
+  grid_x: number;
+  grid_y: number;
+}
+
+export function toPlotDetail(row: PlotDetailRow): PlotDetail {
+  const area = row.area_m2 === null ? Number.NaN : Number(row.area_m2);
+
+  return {
+    id: row.id,
+    nameKo: row.name,
+    regionKo: row.region_ko,
+    areaM2: Number.isFinite(area) ? area : null,
+    latitude: Number(row.latitude),
+    longitude: Number(row.longitude),
+    gridX: row.grid_x,
+    gridY: row.grid_y,
+  };
+}
+
+/**
  * 목록 카드 한 장이 쓰는 값. 지도 마커(`PlotMapPoint`)보다 넓다.
  *
  * ⚠️ 이 타입은 HO-Vic 이 `e2ef705` 에서 쓴 것이다. 브랜치를 주고받는 과정의

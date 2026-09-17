@@ -69,3 +69,9 @@ extend-exclude = ["legacy"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
+
+[tool.ruff.lint.per-file-ignores]
+# FastAPI 는 인자 기본값에 Depends()/Query() 를 쓰는 게 정석이다. B008 은 이 패턴을
+# 못 알아본다 — 규칙을 통째로 끄는 대신 api 층에만 예외를 둔다.
+"app/api/*.py" = ["B008"]
+

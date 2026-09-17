@@ -57,10 +57,9 @@ export async function listTaskCards(
     .select(CARD_COLUMNS)
     // RLS 가 자기 밭의 카드만 보이게 하지만, plotStore.ts 처럼 where 도 명시한다.
     .eq("plots.user_id", userId)
-    .or(
-      `and(done.is.false,generated_at.gte.${carryStart}),` +
-        `and(done.is.true,done_at.gte.${dayStart})`,
-    )
+    // `plot_tasks` 에는 `deleted_at` 이 없다. 숨긴 밭의 카드를 가리는 것은
+    // 이 조인 조건뿐이라, 빼면 지운 밭의 할 일이 대시보드에 그대로 뜬다.
+    .is("plots.deleted_at", null)
     .order("generated_at", { ascending: false });
 
   if (error) throw new Error(error.message);

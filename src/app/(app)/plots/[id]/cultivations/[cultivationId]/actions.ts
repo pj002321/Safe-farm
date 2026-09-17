@@ -1,0 +1,205 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
+import { markFailed } from "@/features/cultivations/cultivationStore";
+import { parseFailureReason } from "@/features/cultivations/domain/failureReason";
+import { parseNote } from "@/features/cultivations/domain/observationNote";
+import {
+  insertCultivationEvent,
+  softDeleteCultivationEvent,
+} from "@/features/cultivations/eventStore";
+import { getPlotDetail } from "@/features/plots/plotStore";
+import { requireConsent } from "@/shared/auth/consentGate";
+import { kstDateString } from "@/shared/utils/kstDate";
+
+/**
+ * ---------------------------------------------
+ * [Feature]: 재배 상세의 기록 Server Actions
+ *
+ * [Description]
+ * - ⚠️ **export 하나가 곧 공개 POST 엔드포인트**다(AGENTS.md). 헬퍼는 export
+ *   하지 않고, 액션마다 **첫 줄에서** `requireConsent()` 를 부른다. 페이지의
+ *   검사는 액션에 미치지 않는다.
+ * - 밭 소유를 `getPlotDetail()` 로 한 번 더 확인한다. `cultivation_events` 의
+ *   RLS 는 `cultivations → plots` 를 경유하므로 남의 기록은 어차피 0건으로
+ *   끝나지만, 그러면 "없는 행"과 "남의 행"이 같은 실패로 뭉개진다.
+ * - 실패 메시지에 DB 오류 원문을 싣지 않는다. 테이블·컬럼 이름이 섞여 나온다.
+ * - 날짜는 **폼에서 받되 서버가 오늘로 막는다**. 어제 일을 오늘 적는 경우가
+ *   흔해서 입력을 받지만, 앞날짜는 `parseNote()` 가 거른다.
+ * ---------------------------------------------
+ */
+
+/** 사용자에게 보여줄 문장만 쿼리에 싣고 그 상세로 돌려보낸다. */
+function fail(path: string, message: string): never {
+  redirect(`${path}?error=${encodeURIComponent(message)}`);
+}
+
+function readText(formData: FormData, key: string): string {
+  const raw = formData.get(key);
+  return typeof raw === "string" ? raw.trim() : "";
+}
+
+/** 폼의 두 id 를 좁히고 밭 소유까지 확인한다. 하나라도 어긋나면 되돌린다. */
+async function openContext(
+  formData: FormData,
+): Promise<{ plotId: string; cultivationId: string; path: string }> {
+  const { viewer } = await requireConsent();
+
+  const plotId = readText(formData, "plotId");
+  const cultivationId = readText(formData, "cultivationId");
+  if (!plotId || !cultivationId) redirect("/plots");
+
+  const plot = await getPlotDetail(viewer.id, plotId);
+  if (!plot) redirect("/plots");
+
+  return {
+    plotId,
+    cultivationId,
+    path: `/plots/${plotId}/cultivations/${cultivationId}`,
+  };
+}
+
+/**
+ * 관찰 기록(메모)을 남긴다.
+ *
+ * 사진은 받지 않는다. 업로드는 AI 사진 분석과 한 묶음이라 그 브랜치로 미뤘다.
+ */
+export async function addObservation(formData: FormData): Promise<void> {
+  const { viewer } = await requireConsent();
+
+  const plotId = readText(formData, "plotId");
+  const cultivationId = readText(formData, "cultivationId");
+  if (!plotId || !cultivationId) redirect("/plots");
+
+  const plot = await getPlotDetail(viewer.id, plotId);
+  if (!plot) redirect("/plots");
+
+  const path = `/plots/${plotId}/cultivations/${cultivationId}`;
+
+  const occurredOn = readText(formData, "occurredOn") || kstDateString();
+  const parsed = parseNote({
+    body: readText(formData, "body"),
+    occurredOn,
+    today: kstDateString(),
+  });
+  if (!parsed.ok) fail(path, parsed.messageKo);
+
+  try {
+    await insertCultivationEvent(cultivationId, {
+      kind: "NOTE",
+      occurredOn: parsed.value.occurredOn,
+      body: parsed.value.body,
+    });
+  } catch {
+    fail(path, "기록을 저장하지 못했습니다. 새로 고친 뒤 다시 시도해 주세요.");
+  }
+
+  revalidatePath(path);
+  redirect(`${path}?saved=note`);
+}
+
+/**
+ * 추천 작업을 했다고 표시한다.
+ *
+ * 작업 이름을 폼에서 받아 그대로 본문에 넣는다. 추천 목록은 규칙이 매번 다시
+ * 만드는 값이라 id 를 저장해도 나중에 가리킬 대상이 없다.
+ */
+export async function completeTask(formData: FormData): Promise<void> {
+  const { plotId, cultivationId, path } = await openContext(formData);
+
+  const titleKo = readText(formData, "titleKo");
+  if (!titleKo) fail(path, "작업 이름이 비어 있습니다.");
+
+  try {
+    await insertCultivationEvent(cultivationId, {
+      kind: "TASK_DONE",
+      occurredOn: kstDateString(),
+      body: titleKo.slice(0, 100),
+    });
+  } catch {
+    fail(path, "기록하지 못했습니다. 새로 고친 뒤 다시 시도해 주세요.");
+  }
+
+  revalidatePath(`/plots/${plotId}`);
+  revalidatePath(path);
+  redirect(`${path}?saved=task`);
+}
+
+/**
+ * 생육단계를 사용자가 보정한다.
+ *
+ * 기록만 남기고 게이지 재계산은 읽을 때 한다(`detailStore.ts` 의 `REBASE_RULE`).
+ * 누적 GDD 를 저장해 두면 기상 관측이 정정됐을 때 원천과 어긋난다.
+ */
+export async function overrideStage(formData: FormData): Promise<void> {
+  const { plotId, cultivationId, path } = await openContext(formData);
+
+  const stageOrder = Number(readText(formData, "stageOrder"));
+  if (!Number.isInteger(stageOrder) || stageOrder < 1) {
+    fail(path, "단계를 고르지 않았습니다.");
+  }
+
+  const occurredOn = readText(formData, "occurredOn") || kstDateString();
+  if (occurredOn > kstDateString())
+    fail(path, "앞으로의 날짜는 넣을 수 없습니다.");
+
+  try {
+    await insertCultivationEvent(cultivationId, {
+      kind: "STAGE_SET",
+      occurredOn,
+      stageOrder,
+    });
+  } catch {
+    fail(path, "단계를 고치지 못했습니다. 새로 고친 뒤 다시 시도해 주세요.");
+  }
+
+  revalidatePath(`/plots/${plotId}`);
+  revalidatePath(path);
+  redirect(`${path}?saved=stage`);
+}
+
+/**
+ * 재배를 중단(실패) 처리한다.
+ *
+ * 사유는 목록에 있는 코드만 받는다. 모르는 값이 오면 `OTHER` 로 바꾸지 않고
+ * 되돌린다 — 폼이 깨진 것과 사용자가 기타를 고른 것은 다른 일이다.
+ */
+export async function failCultivation(formData: FormData): Promise<void> {
+  const { plotId, cultivationId, path } = await openContext(formData);
+
+  const reason = parseFailureReason(formData.get("reason"));
+  if (reason === null) fail(path, "중단 사유를 골라 주세요.");
+
+  try {
+    await markFailed(plotId, cultivationId, kstDateString(), reason);
+  } catch {
+    fail(path, "중단 처리에 실패했습니다. 새로 고친 뒤 다시 시도해 주세요.");
+  }
+
+  revalidatePath(`/plots/${plotId}`);
+  revalidatePath(path);
+  redirect(`${path}?saved=failed`);
+}
+
+/**
+ * 기록 한 줄을 지운다. 화면에서는 삭제지만 DB 에는 `deleted_at` 이 찍힌다.
+ *
+ * 사진 오브젝트는 남는다(`softDeleteCultivationEvent` 참고). 되돌릴 길을 남기려는
+ * 것이고, 경로를 아는 사람은 소유자뿐이라 남겨 둬도 새어 나가지 않는다.
+ */
+export async function removeEvent(formData: FormData): Promise<void> {
+  const { cultivationId, path } = await openContext(formData);
+
+  const eventId = readText(formData, "eventId");
+  if (!eventId) fail(path, "지울 기록을 찾지 못했습니다.");
+
+  try {
+    await softDeleteCultivationEvent(cultivationId, eventId);
+  } catch {
+    fail(path, "지우지 못했습니다. 새로 고친 뒤 다시 시도해 주세요.");
+  }
+
+  revalidatePath(path);
+  redirect(`${path}?saved=removed`);
+}

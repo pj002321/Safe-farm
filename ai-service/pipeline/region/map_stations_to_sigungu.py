@@ -95,11 +95,14 @@ def main() -> None:
         ]
 
         if inside:
-            station = min(inside, key=lambda s: haversine_km(clon, clat, float(s["lon"]), float(s["lat"])))
+            station = min(
+                inside, key=lambda s: haversine_km(clon, clat, float(s["lon"]), float(s["lat"]))
+            )
             method = "contains"
         else:
             station = min(
-                stations_with_normal, key=lambda s: haversine_km(clon, clat, float(s["lon"]), float(s["lat"]))
+                stations_with_normal,
+                key=lambda s: haversine_km(clon, clat, float(s["lon"]), float(s["lat"])),
             )
             method = "nearest"
             unmatched.append(props["name"])
