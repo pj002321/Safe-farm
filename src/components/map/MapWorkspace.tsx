@@ -234,14 +234,31 @@ export function MapWorkspace({ points }: MapWorkspaceProps) {
             </div>
           </div>
         )}
+
+        {/*
+          ⚠️ 고른 지역의 값은 **지도 위에** 얹는다. 지도 아래에 두었더니 누른 자리와
+             답이 떨어져 있어서, 모바일에서는 스크롤해야 값이 보였다 — 지도가 화면
+             절반을 차지하므로 누르는 동작과 결과가 한 화면에 없었다.
+             누른 곳 바로 아래에 답이 나오는 건 지도 앱의 기본 문법이다.
+          지도 **안쪽 아래**에 붙이되 높이를 낮게 유지한다. 카카오 로고·축척이
+          왼쪽 아래에 있으므로 좌우 여백을 두고 그 위로 띄운다.
+        */}
+        {selected && (
+          <div className="absolute inset-x-2 bottom-2 z-20">
+            <RegionInfo
+              layer={layer}
+              onClose={() => setSelectedCode(null)}
+              properties={selected.properties}
+            />
+          </div>
+        )}
       </div>
 
       <Legend asOf={ready?.asOf} layer={layer} />
 
-      {/* 선택 전에도 자리를 비워 두지 않는다 — 무엇을 눌러야 하는지 알려 준다. */}
-      {selected ? (
-        <RegionInfo layer={layer} properties={selected.properties} />
-      ) : (
+      {/* 아직 아무것도 안 골랐을 때만 무엇을 눌러야 하는지 알려 준다. 고른 뒤에는
+          값이 지도 위에 떠 있으므로 이 줄이 남아 있으면 같은 자리에서 두 번 말하게 된다. */}
+      {!selected && (
         <p className="rounded-lg border border-border border-dashed px-4 py-3 text-fg-muted text-sm">
           지도에서 시군구를 누르면 그 지역의 실제 수치를 보여 드립니다.
         </p>
