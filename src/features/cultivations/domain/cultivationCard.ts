@@ -41,6 +41,8 @@ export interface CultivationCardRow {
   sowing_type: string;
   start_stage_order: number | null;
   harvested_at: string | null;
+  failed_at: string | null;
+  failure_reason: string | null;
   created_at: string;
   crop_variants: Embedded<{
     maturity_type: string;
@@ -67,6 +69,10 @@ export interface CultivationCard {
   sowingType: "SEED" | "SEEDLING";
   startStageOrder: number | null;
   harvestedAt: string | null;
+  /** 재배를 그만둔 날. `status` 가 `FAILED` 일 때만 채워진다. */
+  failedAt: string | null;
+  /** 실패 사유 코드. 화면 문구는 `failureReason.ts` 가 가진다. */
+  failureReason: string | null;
   /** 수확까지 쌓아야 할 누적 GDD. 게이지 분모. */
   gddTarget: number | null;
   daysToHarvest: number | null;
@@ -97,6 +103,8 @@ export function toCultivationCard(row: CultivationCardRow): CultivationCard {
     sowingType: row.sowing_type === "SEEDLING" ? "SEEDLING" : "SEED",
     startStageOrder: row.start_stage_order,
     harvestedAt: row.harvested_at,
+    failedAt: row.failed_at,
+    failureReason: row.failure_reason,
     gddTarget: variant?.gdd_target ?? null,
     daysToHarvest: variant?.days_to_harvest ?? null,
     baseTempC: num(crop?.base_temp),

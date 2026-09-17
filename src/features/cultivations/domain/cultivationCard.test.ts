@@ -17,6 +17,8 @@ function row(over: Partial<CultivationCardRow> = {}): CultivationCardRow {
     sowing_type: "SEED",
     start_stage_order: null,
     harvested_at: null,
+    failed_at: null,
+    failure_reason: null,
     created_at: "2026-09-01T00:00:00Z",
     crop_variants: {
       maturity_type: "MID",

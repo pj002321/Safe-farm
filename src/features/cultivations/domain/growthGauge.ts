@@ -61,6 +61,14 @@ export interface GrowthGaugeInput {
   observations: readonly DailyTemp[];
   /** 오늘 (`"YYYY-MM-DD"`). 호출자가 넘긴다 — 여기서 `Date.now()` 를 읽지 않는다. */
   today: string;
+  /**
+   * 단계 보정으로 옮긴 출발선. 없으면 `sowingDate` + `startStageOrder` 를 쓴다.
+   *
+   * 사용자가 "지금 개화기다"라고 고쳐 주면 적산을 그 지점에서 다시 시작한다.
+   * 규칙 자체는 `stageOverride.ts` 의 `rebaseGdd_*` 가 정하고, 여기는 그 결과를
+   * 받기만 한다 — 어느 규칙을 쓸지가 이 파일로 새면 게이지가 규칙마다 갈린다.
+   */
+  rebase?: { baseGdd: number; accumulateFrom: string | null } | null;
 }
 
 export interface GrowthGauge {
@@ -138,13 +146,17 @@ export function buildGrowthGauge(input: GrowthGaugeInput): GrowthGauge | null {
   if (sowingDate === null && input.startStageOrder === null) return null;
 
   const upper = input.upperTempC ?? undefined;
-  const base = startGdd(stages, input.startStageOrder);
+  const rebase = input.rebase ?? null;
+  const base = rebase
+    ? rebase.baseGdd
+    : startGdd(stages, input.startStageOrder);
+  const from = rebase ? rebase.accumulateFrom : sowingDate;
 
-  // 파종일을 모르면 관측을 더할 구간이 없다. 시작 단계의 GDD 만으로 그린다.
+  // 적산을 시작할 날을 모르면 관측을 더할 구간이 없다. 시작 GDD 만으로 그린다.
   const grown =
-    sowingDate === null
+    from === null
       ? 0
-      : accumulateGdd(observations, sowingDate, input.baseTempC, upper);
+      : accumulateGdd(observations, from, input.baseTempC, upper);
 
   const accumulatedGdd = Math.round((base + grown) * 10) / 10;
   const stage = stageAt(stages, accumulatedGdd);
@@ -158,11 +170,10 @@ export function buildGrowthGauge(input: GrowthGaugeInput): GrowthGauge | null {
 
   // 파종일~오늘 사이에 실제로 있는 관측 일수. 미래 예보가 섞여 들어와도 세지 않는다.
   const covered =
-    sowingDate === null
+    from === null
       ? 0
-      : observations.filter(
-          (row) => row.date >= sowingDate && row.date <= today,
-        ).length;
+      : observations.filter((row) => row.date >= from && row.date <= today)
+          .length;
 
   return {
     accumulatedGdd,
@@ -173,7 +184,6 @@ export function buildGrowthGauge(input: GrowthGaugeInput): GrowthGauge | null {
     daysLeft: daysToTarget(accumulatedGdd, perDay, input.gddTarget),
     coveredDays: covered,
     // 파종일 당일도 한 날로 센다. 미래 날짜(PLANNED)면 0.
-    expectedDays:
-      sowingDate === null ? 0 : Math.max(0, daysBetween(sowingDate, today) + 1),
+    expectedDays: from === null ? 0 : Math.max(0, daysBetween(from, today) + 1),
   };
 }

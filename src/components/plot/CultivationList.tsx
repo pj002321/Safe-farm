@@ -1,6 +1,6 @@
 import { SproutIcon } from "@/components/icons";
 import { Badge } from "@/components/shared/Badge";
-import { Button } from "@/components/shared/Button";
+import { Button, ButtonLink } from "@/components/shared/Button";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { GrowthGauge } from "@/components/shared/GrowthGauge";
 import {
@@ -186,6 +186,16 @@ function CultivationItem({
       </div>
 
       <div className="flex flex-wrap items-center gap-2 border-border border-t px-5 py-3">
+        {/* 상세는 링크다. 카드 전체를 링크로 묶지 않는 이유는 그 안에 수확·삭제
+            버튼이 들어 있어서다 — 중첩되면 어느 쪽이 눌렸는지 흐려진다. */}
+        <ButtonLink
+          href={`/plots/${plotId}/cultivations/${card.id}`}
+          size="sm"
+          variant="secondary"
+        >
+          상세 보기
+        </ButtonLink>
+
         {card.status === "GROWING" && (
           <form action={onHarvest}>
             <input name="plotId" type="hidden" value={plotId} />

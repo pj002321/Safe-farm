@@ -5,6 +5,8 @@
  * [Description]
  * - "얼마나 자랐나"를 막대 하나로 보여준다. 눈금(`markRatio`)은 다음 단계가
  *   시작되는 지점이라, 지금 채워진 곳과 눈금 사이가 곧 "남은 만큼"이 된다.
+ * - 퍼센트는 정수로 찍는다. 소수 한 자리까지 쓰면 매일 바뀌는 끝자리가 눈에
+ *   먼저 들어와, 정작 중요한 "어디까지 왔나"를 가린다.
  * - **막대를 진행 표시(progressbar)로 노출한다.** 색 채움만으로는 스크린리더가
  *   아무것도 읽지 못한다. `aria-valuenow` 와 `aria-valuetext` 로 숫자와 단위를
  *   함께 준다.
@@ -60,6 +62,11 @@ export function GrowthGauge({
           {value}
         </b>
         <span className="text-fg-muted text-sm">/ {target} GDD</span>
+        {/* 막대 길이만으로는 "절반쯤"까지만 읽힌다. 같은 색으로 찍어 숫자와
+            막대가 한 값임을 붙여 둔다. */}
+        <span className="font-medium font-mono text-sm text-telemetry tabular-nums">
+          {percent}%
+        </span>
         <span className="ml-auto font-mono text-fg-muted text-xs">
           {dayLabelKo}
         </span>

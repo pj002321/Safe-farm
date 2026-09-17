@@ -7,6 +7,7 @@ import {
   sortCultivationCards,
   toCultivationCard,
 } from "./domain/cultivationCard";
+import type { FailureReasonCode } from "./domain/failureReason";
 
 /**
  * ---------------------------------------------
@@ -69,7 +70,7 @@ export async function insertCultivations(
  */
 const CARD_SELECT = `
   id, variant_id, alias, status, sowing_date, sowing_type,
-  start_stage_order, harvested_at, created_at,
+  start_stage_order, harvested_at, failed_at, failure_reason, created_at,
   crop_variants(
     maturity_type, gdd_target, days_to_harvest,
     crops(name, base_temp, upper_temp)
@@ -126,6 +127,67 @@ export async function markHarvested(
     .eq("id", cultivationId)
     .eq("plot_id", plotId)
     // 지운 재배를 수확 처리하면 숨긴 행이 되살아난 것처럼 보인다.
+    .is("deleted_at", null)
+    .select("id");
+
+  if (error) throw new Error(error.message);
+  if (!data || data.length === 0) throw new Error("CULTIVATION_NOT_FOUND");
+}
+
+/**
+ * 재배 한 건만 읽는다. 재배 상세 화면이 쓴다.
+ *
+ * `plot_id` 를 같이 거는 이유는 `markHarvested` 와 같다 — RLS 가 막지만 경로가
+ * 가리키는 밭과 실제 소유가 어긋난 상태를 여기서 한 번 더 끊는다.
+ * 없으면 던지지 않고 null 이다. 상세 화면은 이걸 받아 `notFound()` 를 부른다.
+ */
+export async function getCultivationCard(
+  plotId: string,
+  cultivationId: string,
+): Promise<CultivationCard | null> {
+  const supabase = await getSupabaseServer();
+
+  const { data, error } = await supabase
+    .from("cultivations")
+    .select(CARD_SELECT)
+    .eq("id", cultivationId)
+    .eq("plot_id", plotId)
+    .is("deleted_at", null)
+    .maybeSingle();
+
+  if (error) throw new Error(error.message);
+  if (!data) return null;
+
+  return toCultivationCard(data as unknown as CultivationCardRow);
+}
+
+/**
+ * 재배를 중단(실패) 처리한다.
+ *
+ * 수확과 나란한 종료다. 지우지 않는 이유도 같다 — "왜 망했나"가 다음 시즌에
+ * 제일 쓸모 있는 기록이다. 사유 코드는 `failureReason.ts` 의 목록과
+ * `ck_cultivations_failure_reason` 제약이 같은 값을 쓴다. 둘이 어긋나면 insert
+ * 가 아니라 여기 update 가 제약에서 막힌다.
+ *
+ * 0건이면 던진다(`markHarvested` 와 같은 이유).
+ */
+export async function markFailed(
+  plotId: string,
+  cultivationId: string,
+  failedAt: string,
+  reason: FailureReasonCode,
+): Promise<void> {
+  const supabase = await getSupabaseServer();
+
+  const { data, error } = await supabase
+    .from("cultivations")
+    .update({
+      status: "FAILED",
+      failed_at: failedAt,
+      failure_reason: reason,
+    })
+    .eq("id", cultivationId)
+    .eq("plot_id", plotId)
     .is("deleted_at", null)
     .select("id");
 
