@@ -117,12 +117,17 @@ def daily_gdd_series(
     db: Session, plot: Plot, station: Station, days: int = 14
 ) -> list[dict] | None:
     """최근 days 일간 하루치 GDD. 생육 속도가 왜 그런지(더워서/추워서)를 막대로
-    보여주는 용도 — 기르는 중인 재배 건이 없으면 None(compute_plot_growth 와 같은 판정)."""
+    보여주는 용도 — 기르는 중인 재배 건이 없거나 그 작물의 base_temp 가 비어 있으면
+    None(compute_plot_growth 와 같은 판정)."""
     cultivation = _lead_cultivation(db, plot)
     if cultivation is None:
         return None
     crop = _crop_for_cultivation(db, cultivation)
     if crop is None:
+        return None
+    # `base_temp` 가 없으면 적산을 시작할 기준이 없다. 지역 지도용 기본값(`BASE_TEMP_C`)을
+    # 끌어 쓰면 작물별 값인 척하는 틀린 숫자가 된다 — 근거가 없으면 판정하지 않는다.
+    if crop.base_temp is None:
         return None
 
     since = max(cultivation.sowing_date, date.today() - timedelta(days=days))
@@ -152,12 +157,17 @@ def daily_gdd_series(
 def crop_interpretation(db: Session, plot: Plot, station: Station) -> dict | None:
     """기상 수치를 이 밭 작물 기준과 견줄 근거(V1-64). base/upper 는 고온·저온
     스트레스 판정에, 현재 단계의 water_need_mm 은 관수 판정(rainfall_totals 의
-    7일 창과 짝)에 쓴다. 기르는 중인 재배 건이 없으면 None."""
+    7일 창과 짝)에 쓴다. 기르는 중인 재배 건이 없거나
+    그 작물의 base_temp 가 비어 있으면 None."""
     cultivation = _lead_cultivation(db, plot)
     if cultivation is None:
         return None
     crop = _crop_for_cultivation(db, cultivation)
     if crop is None:
+        return None
+    # `base_temp` 가 없으면 적산을 시작할 기준이 없다. 지역 지도용 기본값(`BASE_TEMP_C`)을
+    # 끌어 쓰면 작물별 값인 척하는 틀린 숫자가 된다 — 근거가 없으면 판정하지 않는다.
+    if crop.base_temp is None:
         return None
     growth = compute_plot_growth(db, plot, station)
     return {
@@ -171,13 +181,17 @@ def crop_interpretation(db: Session, plot: Plot, station: Station) -> dict | Non
 
 def compute_plot_growth(db: Session, plot: Plot, station: Station) -> PlotGrowth | None:
     """밭의 대표 재배 건을 골라 파종일부터 오늘까지 GDD 를 누적, 현재 생육단계를
-    계산한다. 기르는 중인 재배 건이 없거나 파종일을 모르면 None."""
+    계산한다. 기르는 중인 재배 건이 없거나 파종일·base_temp 를 모르면 None."""
     cultivation = _lead_cultivation(db, plot)
     if cultivation is None:
         return None
 
     crop = _crop_for_cultivation(db, cultivation)
     if crop is None:
+        return None
+    # `base_temp` 가 없으면 적산을 시작할 기준이 없다. 지역 지도용 기본값(`BASE_TEMP_C`)을
+    # 끌어 쓰면 작물별 값인 척하는 틀린 숫자가 된다 — 근거가 없으면 판정하지 않는다.
+    if crop.base_temp is None:
         return None
 
     obs = (
