@@ -16,73 +16,8 @@ import type { ReactNode } from "react";
  * ---------------------------------------------
  */
 
-export type Priority = "high" | "mid" | "low";
-
-export interface TaskCardData {
-  id: string;
-  titleKo: string;
-  /** 왜 이 작업이 나왔는가. 스펙상 **근거 없는 작업은 카드로 만들지 않는다.** */
-  reasonKo: string;
-  priority: Priority;
-  plotKo: string;
-  /** 근거가 된 재배매뉴얼 원문. 없으면 링크를 그리지 않는다. */
-  sourceKo?: string;
-  done?: boolean;
-  /** 완료 시각. 완료 카드에만 있다. */
-  doneAtKo?: string;
-}
-
-export const SAMPLE_TASKS: readonly TaskCardData[] = [
-  {
-    id: "water",
-    titleKo: "배추밭 물 주기",
-    reasonKo:
-      "이레 동안 비가 0.1mm뿐이고, 결구기 배추는 수분이 모자라면 속이 차지 않습니다.",
-    priority: "high",
-    plotKo: "배추밭",
-    sourceKo: "농촌진흥청 · 가을배추 재배매뉴얼",
-  },
-  {
-    id: "sunscald",
-    titleKo: "감나무 일소 피해 확인",
-    reasonKo: "올여름 35℃ 넘은 날이 여드레라 열매가 햇볕에 뎄을 수 있습니다.",
-    priority: "high",
-    plotKo: "감나무밭",
-    sourceKo: "농촌진흥청 · 과수 고온 피해 대책",
-  },
-  {
-    id: "spray",
-    titleKo: "드론 방제 (오전 6–9시)",
-    reasonKo: "이 시간대만 바람이 초속 3m 아래로 내려갑니다.",
-    priority: "mid",
-    plotKo: "배추밭",
-  },
-  {
-    id: "thin",
-    titleKo: "배추 솎아내기",
-    reasonKo: "포기 간격이 좁으면 결구기에 웃자랍니다.",
-    priority: "mid",
-    plotKo: "배추밭",
-    sourceKo: "농촌진흥청 · 가을배추 재배매뉴얼",
-  },
-  {
-    id: "mulch",
-    titleKo: "이랑 비닐 점검",
-    reasonKo: "일교차가 13℃까지 벌어져 지온 유지가 필요합니다.",
-    priority: "low",
-    plotKo: "배추밭",
-  },
-  {
-    id: "record",
-    titleKo: "웃거름 주기",
-    reasonKo: "파종 20일째로 1차 추비 시기입니다.",
-    priority: "mid",
-    plotKo: "배추밭",
-    sourceKo: "농촌진흥청 · 가을배추 재배매뉴얼",
-    done: true,
-    doneAtKo: "어제 17:20",
-  },
-];
+// Priority/TaskCardData(할 일 카드)와 SAMPLE_TASKS 는 여기 있었다. 조회가 붙어
+// `features/dashboard/domain/taskSummary.ts` 로 옮겼다 — 위 주석이 예고한 일이다.
 
 export interface DayForecast {
   labelKo: string;

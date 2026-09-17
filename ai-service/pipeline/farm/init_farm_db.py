@@ -21,12 +21,20 @@ from pipeline.prep.schema import create, ddl, own_tables
 # 선은 그대로 둔다 — auth 관련 정의가 늘어도 여기서 만들어지지 않게
 SKIP_SCHEMAS = ["auth"]
 
-# 회원·약관·텃밭 계열. 쓰기도 읽기도 Next.js 몫이라 여기서 만들지 않는다.
-# profiles·plots 는 정본이 supabase/migrations 라 여기서 만들면 RLS·트리거가 빠진
-# 반쪽이 생기고, --drop 이 남의 데이터를 지운다. terms·user_agreements 는 동의 절차가
-# 채우는 것이라 같이 둔다.
+# 회원·약관·텃밭·질문이력 계열. profiles·plots·cultivations·ask_history 는 정본이
+# supabase/migrations 라 여기서 만들면 RLS·트리거가 빠진 반쪽이 생기고, --drop 이
+# 남의 데이터를 지운다(ask_history 는 쓰기 자체는 ai-service 몫이지만 RLS 는
+# 마이그레이션에만 있다). terms·user_agreements 는 동의 절차가 채우는 것이라 같이 둔다.
 # 옵션으로도 열지 않음 — 이 DB 를 빈 상태로 띄워야 하면 supabase db push 를 쓴다
-EXTERNAL_TABLES = ["profiles", "plots", "terms", "user_agreements"]
+EXTERNAL_TABLES = [
+    "profiles",
+    "plots",
+    "cultivations",
+    "terms",
+    "user_agreements",
+    "ask_history",
+    "plot_tasks"
+]
 
 
 def main() -> None:

@@ -56,6 +56,8 @@ declare namespace kakao.maps {
     /** 지도를 부드럽게 이동시킨다(점프하지 않는다). */
     panTo(position: LatLng): void;
     setLevel(level: number): void;
+    /** 현재 확대 수준. `setBounds` 가 너무 가깝게 맞췄는지 확인하는 데 쓴다. */
+    getLevel(): number;
     /** 여러 좌표가 전부 보이도록 중심·배율을 한 번에 맞춘다. */
     setBounds(bounds: LatLngBounds): void;
     /**

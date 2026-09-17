@@ -63,7 +63,28 @@ def build_context(matches: list[tuple[Chunk, float]]) -> str:
     return "\n\n".join(blocks)
 
 
-def generate_answer(question: str, matches: list[tuple[Chunk, float]]) -> str:
+def _build_messages(
+    question: str, matches: list[tuple[Chunk, float]], plot_context: str | None
+) -> list[dict[str, str]]:
+    """system + user 메시지를 조립한다. plot_context 가 있으면 참고 자료 앞에 붙여
+    "일반론이 아니라 이 밭 기준"으로 답하게 한다 — 없으면(V1 하위호환) 예전과 동일하다.
+
+    참고 자료는 build_context 가 만든다 — 조각마다 '[출처 · 제목]' 과 '참고값' 이 붙는다.
+    chunk.body 를 그냥 이으면 LLM 이 다른 문서의 숫자를 이 문서에 갖다 붙인다(cc49cca).
+    """
+    context = build_context(matches)
+    user_content = f"참고 자료:\n{context}\n\n질문: {question}"
+    if plot_context:
+        user_content = f"밭 정보:\n{plot_context}\n\n{user_content}"
+    return [
+        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "user", "content": user_content},
+    ]
+
+
+def generate_answer(
+    question: str, matches: list[tuple[Chunk, float]], plot_context: str | None = None
+) -> str:
     """
     # summary
     검색된 조각을 근거 자료로 붙여 질문에 답하는 문장을 만든다.
@@ -72,6 +93,7 @@ def generate_answer(question: str, matches: list[tuple[Chunk, float]]) -> str:
     question: 사용자 질문<br>
     matches: (Chunk, 거리) 목록. 비어 있으면 호출하지 말 것 — 근거 없이 부르면
     할루시네이션 방지 프롬프트가 무의미해진다<br>
+    plot_context: app/service/ask_context.py 가 만든 밭 요약. 없으면 예전처럼 답한다<br>
 
     # returns
     LLM 이 생성한 답변 문자열
@@ -82,30 +104,25 @@ def generate_answer(question: str, matches: list[tuple[Chunk, float]]) -> str:
     if not OPENAI_MODEL:
         raise RuntimeError("OPENAI_MODEL 이 없습니다. ai-service/.env 를 확인하세요.")
 
-    context = build_context(matches)
     response = get_client().chat.completions.create(
         model=OPENAI_MODEL,
-        messages=[
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": f"참고 자료:\n{context}\n\n질문: {question}"},
-        ],
+        messages=_build_messages(question, matches, plot_context),
     )
     return response.choices[0].message.content
 
-def stream_answer(question: str, matches: list[tuple[Chunk, float]]):
+
+def stream_answer(
+    question: str, matches: list[tuple[Chunk, float]], plot_context: str | None = None
+):
     """토큰이 오는 대로 문자열 조각을 yield한다. matches 가 비어 있으면 부르지 말 것 —
     generate_answer 와 동일한 계약이다.
     """
     if not OPENAI_MODEL:
         raise RuntimeError("OPENAI_MODEL 이 없습니다. ai-service/.env 를 확인하세요.")
 
-    context = build_context(matches)
     stream = get_client().chat.completions.create(
         model=OPENAI_MODEL,
-        messages=[
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": f"참고 자료:\n{context}\n\n질문: {question}"},
-        ],
+        messages=_build_messages(question, matches, plot_context),
         stream=True,
     )
     for chunk in stream:

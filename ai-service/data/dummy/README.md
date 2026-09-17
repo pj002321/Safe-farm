@@ -8,8 +8,7 @@
 FK 때문에 순서를 지켜야 한다.
 
 ```
-weather_forecast   부모 grids 는 data/master/ 에 있다
-weather_obs_daily  부모 stations 도 마찬가지
+weather_obs_daily  부모 stations 는 data/master/ 에 있다
 ```
 
 `terms`·`user_agreements` 는 어느 스크립트도 넣지 않는다 — 아래 참고.
@@ -25,7 +24,6 @@ weather_obs_daily  부모 stations 도 마찬가지
 |---|---|
 | `crop_variants.csv` | `crop_name` |
 | `crop_stages.csv` | `crop_name` + `maturity_type` |
-| `weather_forecast.csv` | `nx` + `ny` |
 
 적재하는 쪽이 부모를 먼저 넣고, 생성된 id 를 조회해서 매핑한다.
 
@@ -41,7 +39,6 @@ ai-service 는 그 값을 요청으로 받지 DB 에서 읽지 않으므로 더�
 
 ## 일부러 넣어둔 것
 
-- `weather_forecast.csv` 의 `52,38 / 2026-09-15` — 기온·강수가 전부 빈 값. 해상 결측 재현
 - `weather_obs_daily.csv` 의 `133 / 2026-09-12` — `rainfall_mm` 만 빈 값
 - `crop_stages` 의 GDD 구간은 반개구간으로 이어진다 (`0~80`, `80~200`, ...). 경계값 80 은
   1단계가 아니라 2단계다
