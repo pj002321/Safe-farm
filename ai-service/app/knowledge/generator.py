@@ -16,15 +16,26 @@ SYSTEM_PROMPT = (
 
 
 def _build_messages(
-    question: str, matches: list[tuple[Chunk, float]], plot_context: str | None
+    question: str,
+    matches: list[tuple[Chunk, float]],
+    plot_context: str | None,
+    history_context: str | None = None,
 ) -> list[dict[str, str]]:
     """system + user 메시지를 조립한다. plot_context 가 있으면 참고 자료 앞에 붙여
     "일반론이 아니라 이 밭 기준"으로 답하게 한다 — 없으면(V1 하위호환) 예전과 동일하다.
+
+    history_context 는 맨 앞에 둔다. 답의 근거는 어디까지나 참고 자료라서, 지난
+    대화가 자료보다 뒤에 오면 모델이 그쪽을 근거로 읽는다. 순서로 위계를 준다
+    (app/domain/history_context.py).
     """
     context = "\n\n".join(chunk.body for chunk, _ in matches)
     user_content = f"참고 자료:\n{context}\n\n질문: {question}"
     if plot_context:
         user_content = f"밭 정보:\n{plot_context}\n\n{user_content}"
+    if history_context:
+        user_content = (
+            f"지난 대화(참고만, 근거로 쓰지 말 것):\n{history_context}\n\n{user_content}"
+        )
     return [
         {"role": "system", "content": SYSTEM_PROMPT},
         {"role": "user", "content": user_content},
@@ -32,7 +43,10 @@ def _build_messages(
 
 
 def generate_answer(
-    question: str, matches: list[tuple[Chunk, float]], plot_context: str | None = None
+    question: str,
+    matches: list[tuple[Chunk, float]],
+    plot_context: str | None = None,
+    history_context: str | None = None,
 ) -> str:
     """
     # summary
@@ -43,6 +57,8 @@ def generate_answer(
     matches: (Chunk, 거리) 목록. 비어 있으면 호출하지 말 것 — 근거 없이 부르면
     할루시네이션 방지 프롬프트가 무의미해진다<br>
     plot_context: app/service/ask_context.py 가 만든 밭 요약. 없으면 예전처럼 답한다<br>
+    history_context: app/domain/history_context.py 가 만든 지난 대화.
+    없으면 단발 질문으로 답한다<br>
 
     # returns
     LLM 이 생성한 답변 문자열
@@ -55,13 +71,16 @@ def generate_answer(
 
     response = get_client().chat.completions.create(
         model=OPENAI_MODEL,
-        messages=_build_messages(question, matches, plot_context),
+        messages=_build_messages(question, matches, plot_context, history_context),
     )
     return response.choices[0].message.content
 
 
 def stream_answer(
-    question: str, matches: list[tuple[Chunk, float]], plot_context: str | None = None
+    question: str,
+    matches: list[tuple[Chunk, float]],
+    plot_context: str | None = None,
+    history_context: str | None = None,
 ):
     """토큰이 오는 대로 문자열 조각을 yield한다. matches 가 비어 있으면 부르지 말 것 —
     generate_answer 와 동일한 계약이다.
@@ -71,7 +90,7 @@ def stream_answer(
 
     stream = get_client().chat.completions.create(
         model=OPENAI_MODEL,
-        messages=_build_messages(question, matches, plot_context),
+        messages=_build_messages(question, matches, plot_context, history_context),
         stream=True,
     )
     for chunk in stream:

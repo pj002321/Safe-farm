@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import uuid
+from dataclasses import dataclass
 
 from sqlalchemy.orm import Session
 
@@ -21,6 +22,28 @@ from app.models.farm import (
 )
 
 RECENT_WEATHER_DAYS = 7
+
+
+def _owned_plot(db: Session, plot_id: uuid.UUID, user_id: uuid.UUID) -> Plot | None:
+    """이 사용자의 살아 있는 밭. 남의 밭이거나 지운 밭이면 None.
+
+    **소유 확인을 여기서 한다.** plot_id 는 브라우저가 보낸 값이고, ai-service 는
+    슈퍼유저로 붙어 RLS 를 타지 않는다 — 걸러 내지 않으면 남의 밭 id 하나로 그
+    밭의 지역·작물·생육단계를 답변으로 되받을 수 있다. Next 쪽 화면이 자기 밭만
+    고르게 해 두지만 그건 화면의 일이고, `/api/ai/ask` 는 직접 POST 할 수 있다.
+
+    없는 밭과 남의 밭을 구분해 알리지 않는다 — 둘 다 None 이다. 구분하는 순간
+    "그 id 의 밭이 존재한다"는 사실이 새어 나간다.
+    """
+    return (
+        db.query(Plot)
+        .filter(
+            Plot.id == plot_id,
+            Plot.user_id == user_id,
+            Plot.deleted_at.is_(None),
+        )
+        .first()
+    )
 
 
 def _nearest_station(db: Session, plot: Plot) -> Station | None:
@@ -56,16 +79,18 @@ def _start_gdd(db: Session, cultivation: Cultivation) -> float:
     return float(stage.gdd_from) if stage is not None else 0.0
 
 
-def _growth_stage_lines(
+def _current_stage(
     db: Session, cultivation: Cultivation, crop: Crop, station: Station
-) -> list[str]:
-    """파종일부터 오늘까지 GDD 를 누적해 현재 생육단계 문장을 만든다.
+) -> CropStage | None:
+    """파종일부터 오늘까지 GDD 를 누적해 지금 걸린 생육단계를 찾는다.
 
-    파종일을 모르면 빈 리스트다 — 언제부터 쌓을지가 없으면 누적이 성립하지 않는다.
+    파종일을 모르면 None 이다 — 언제부터 쌓을지가 없으면 누적이 성립하지 않는다.
     그 품종의 단계표(crop_stages)가 비어 있을 때도 마찬가지다.
+
+    누적값은 저장하지 않고 매번 관측에서 다시 쌓는다(웹의 gdd.ts 와 같은 방침).
     """
     if cultivation.sowing_date is None:
-        return []
+        return None
 
     obs = (
         db.query(WeatherObsDaily)
@@ -82,7 +107,7 @@ def _growth_stage_lines(
         if o.temp_max is not None and o.temp_min is not None
     )
 
-    stage = (
+    return (
         db.query(CropStage)
         .filter(
             CropStage.variant_id == cultivation.variant_id,
@@ -91,6 +116,13 @@ def _growth_stage_lines(
         )
         .first()
     )
+
+
+def _growth_stage_lines(
+    db: Session, cultivation: Cultivation, crop: Crop, station: Station
+) -> list[str]:
+    """현재 생육단계를 LLM 프롬프트에 붙일 한글 문장으로 옮긴다. 단계를 못 찾으면 빈 리스트."""
+    stage = _current_stage(db, cultivation, crop, station)
     if stage is None:
         return []
     lines = [f"{crop.name}의 현재 생육단계는 {stage.stage_name}이다."]
@@ -151,15 +183,56 @@ def _lead(rows: list[tuple[Cultivation, Crop]]) -> tuple[Cultivation, Crop]:
     return min(dated, key=lambda row: row[0].sowing_date)
 
 
-def build_plot_context(db: Session, plot_id: uuid.UUID) -> str | None:
-    """밭 하나를 조회해 LLM 프롬프트에 붙일 한글 문장을 만든다. 밭이 없거나 기르는
-    작물이 없으면 None — 이때 /ask 는 컨텍스트 없이 예전처럼 답한다."""
-    # 지운 밭은 없는 밭으로 본다(soft delete 라 행은 남아 있다).
-    plot = (
-        db.query(Plot)
-        .filter(Plot.id == plot_id, Plot.deleted_at.is_(None))
-        .first()
+@dataclass(frozen=True)
+class PlotFocus:
+    """밭 하나를 한 줄로 요약할 때 쓰는 값. 추천 질문이 이걸 보고 문장을 고른다.
+
+    문장이 아니라 값으로 돌려주는 이유는 `build_plot_context` 의 결과(완성된 한글
+    문장)로는 "지금 단계가 무엇인가"를 되짚을 수 없어서다. 문장을 파싱하는 대신
+    같은 조회를 한 번 더 하고 값으로 받는다.
+    """
+
+    region_ko: str | None
+    crop_name: str
+    stage_name: str | None
+    guide_text: str | None
+
+
+def plot_focus(db: Session, plot_id: uuid.UUID, user_id: uuid.UUID) -> PlotFocus | None:
+    """밭의 대표 작물과 현재 생육단계. 남의 밭이거나 기르는 작물이 없으면 None.
+
+    `build_plot_context` 와 같은 순서로 밭 → 재배 → 관측소 → 단계를 탄다. 한쪽만
+    고치면 답변이 말하는 단계와 추천 질문이 말하는 단계가 갈린다.
+    """
+    plot = _owned_plot(db, plot_id, user_id)
+    if plot is None:
+        return None
+
+    growing = _growing(db, plot.id)
+    if not growing:
+        return None
+
+    cultivation, crop = _lead(growing)
+    station = _nearest_station(db, plot)
+    stage = _current_stage(db, cultivation, crop, station) if station else None
+
+    return PlotFocus(
+        region_ko=plot.region_ko,
+        crop_name=crop.name,
+        stage_name=stage.stage_name if stage else None,
+        guide_text=stage.guide_text if stage else None,
     )
+
+
+def build_plot_context(
+    db: Session, plot_id: uuid.UUID, user_id: uuid.UUID
+) -> str | None:
+    """밭 하나를 조회해 LLM 프롬프트에 붙일 한글 문장을 만든다.
+
+    남의 밭이거나, 지운 밭이거나, 기르는 작물이 없으면 None — 이때 /ask 는
+    컨텍스트 없이 일반론으로 답한다. 소유 확인은 `_owned_plot` 이 한다.
+    """
+    plot = _owned_plot(db, plot_id, user_id)
     if plot is None:
         return None
 

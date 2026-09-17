@@ -20,7 +20,11 @@ class AskHistory(FarmBase):
     __tablename__ = "ask_history"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("profiles.id", ondelete="CASCADE"), nullable=False)
+    user_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("profiles.id", ondelete="CASCADE"),
+        nullable=False,
+    )
 
     question = Column(Text, nullable=False)
     answer = Column(Text)
@@ -28,6 +32,9 @@ class AskHistory(FarmBase):
     message = Column(Text)
     # 답변 평가. null = 아직 평가 안 함
     rating = Column(Text)
+    # 왜 그렇게 평가했나(20260917100000_ask_feedback_reason.sql). 자유 입력이라
+    # 개인정보가 섞일 수 있음 — 화면에 되돌려 주지 않고 검색 품질 점검에만 씀
+    feedback_reason = Column(Text)
 
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
