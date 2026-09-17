@@ -1,10 +1,12 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import {
   ForecastFallback,
   ForecastPanel,
 } from "@/components/dashboard/ForecastPanel";
+import { HazardBannerSlot } from "@/components/dashboard/HazardBannerSlot";
 import {
   PLOT_ONBOARDING_PATH,
   PlotStrip,
@@ -12,9 +14,8 @@ import {
 import {
   DataFreshness,
   DeviationBanner,
-  HazardBanner,
 } from "@/components/dashboard/StatusBanners";
-import { SAMPLE_ALERT, SAMPLE_FRESHNESS } from "@/components/dashboard/sample";
+import { SAMPLE_FRESHNESS } from "@/components/dashboard/sample";
 import { TaskBoard } from "@/components/dashboard/TaskBoard";
 import { MapPinIcon } from "@/components/icons";
 import { ButtonLink } from "@/components/shared/Button";
@@ -134,7 +135,14 @@ export default async function DashboardPage({
           특보만 여기 둔다. 생육 편차(중 우선순위)까지 위에 쌓으면 화면 맨 위를
           두 덩어리가 먹어, 정작 봐야 할 할 일이 접힌 곳 아래로 밀린다.
           편차는 텃밭 생육 얘기라 아래 텃밭 섹션이 제자리다. */}
-      <HazardBanner alert={SAMPLE_ALERT} />
+      {profile && (
+        <Suspense fallback={null}>
+          <HazardBannerSlot
+            requestedPlotId={requestedPlotId}
+            userId={profile.id}
+          />
+        </Suspense>
+      )}
 
       {/* ── 머리말 ─────────────────────────────────── */}
       <div className="flex flex-wrap items-end justify-between gap-4">
@@ -191,9 +199,17 @@ export default async function DashboardPage({
             <h2 className="font-semibold text-fg text-sm" id="tasks-heading">
               오늘 할 일
             </h2>
-            <p className="font-mono text-[0.68rem] text-fg-subtle">
-              매일 00시 갱신 · 우선순위순
-            </p>
+            <div className="flex items-baseline gap-3">
+              <p className="font-mono text-[0.68rem] text-fg-subtle">
+                매일 00시 갱신 · 우선순위순
+              </p>
+              <Link
+                className="text-[0.68rem] text-fg-muted underline underline-offset-2 hover:text-fg"
+                href="/dashboard/history"
+              >
+                이전 기록
+              </Link>
+            </div>
           </div>
           <TaskBoard tasks={tasks} toggleTaskAction={toggleTask} />
         </section>

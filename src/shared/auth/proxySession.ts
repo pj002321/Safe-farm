@@ -60,7 +60,16 @@ const PUBLIC_EXACT = new Set([
  * 상태로 들어온다.** 여기 없으면 콜백이 `/login` 으로 307 되어 영원히 로그인하지
  * 못한다.
  */
-const PUBLIC_PREFIXES = ["/login", "/signup", "/auth"];
+/**
+ * **`/api/cron` 도 세션이 없는 상태로 들어온다.** 호출자가 사람이 아니라
+ * Supabase pg_cron 이라 쿠키가 존재할 수 없다. 여기 없으면 배치 요청이
+ * `/login` 으로 307 되어 **조용히 한 건도 실행되지 않는다** — 크론은
+ * 리다이렉트를 성공으로 보므로 실패 로그조차 남지 않는다.
+ *
+ * 공개는 "세션 검사를 건너뛴다"는 뜻이지 무인증이 아니다. 그 경로는
+ * `CRON_SECRET` 베어러 토큰을 직접 검사한다(app/api/cron/[job]/route.ts).
+ */
+const PUBLIC_PREFIXES = ["/login", "/signup", "/auth", "/api/cron"];
 
 function isPublicPath(pathname: string): boolean {
   if (PUBLIC_EXACT.has(pathname)) return true;

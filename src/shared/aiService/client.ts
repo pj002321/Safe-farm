@@ -204,6 +204,14 @@ export type AiFailure =
 const DEFAULT_TIMEOUT_MS = 5_000;
 
 /**
+ * 배치 호출 타임아웃(ms). 화면 호출과 달리 사람이 기다리지 않으므로 길게 잡는다.
+ *
+ * 크론 쪽 `pg_net` 타임아웃보다 **짧아야 한다.** 반대면 pg_net 이 먼저 끊어
+ * 결과를 못 받는데 서버는 계속 일하는 상태가 되어, 성공·실패를 알 수 없다.
+ */
+const BATCH_TIMEOUT_MS = 50_000;
+
+/**
  * 밭 예보 갱신 주기(초, V1-61).
  *
  * 예보 원본(Open-Meteo)은 하루 몇 차례 모델을 갱신할 뿐이라 요청마다 부르는 건
@@ -343,5 +351,29 @@ export const aiService = {
   generateTasks: (plotId: string) =>
     call<{ created: number }>(`/v1/tasks/generate?plot_id=${plotId}`, {
       method: "POST",
+    }),
+  /**
+   * 등록된 **모든 밭**을 판정한다. 매일 00시(KST) 배치 전용이다.
+   *
+   * ⚠️ 기본 타임아웃(5초)을 쓰지 않는다. 밭 수만큼 생육 계산과 DB 조회가 도는
+   *    호출이라 5초에 걸리면, 실제로는 서버가 계속 일하고 있는데 호출자만
+   *    실패로 보는 상태가 된다. 그 경우 다음 날 배치까지 원인을 모른다.
+   */
+  generateAllTasks: () =>
+    call<{ created: number }>("/v1/tasks/generate-all", {
+      method: "POST",
+      timeoutMs: BATCH_TIMEOUT_MS,
+    }),
+  /**
+   * KMA 기상특보 스냅샷을 적재한다. 30분 주기 배치 전용이다.
+   *
+   * 특보 **조회**는 이 적재가 채운 표를 읽을 뿐 KMA 를 직접 부르지 않는다
+   * (ai-service `app/api/alerts.py` 주석 참고). 이게 멈추면 화면의 특보는
+   * 마지막 적재 시점에 그대로 얼어붙는다.
+   */
+  ingestAlerts: () =>
+    call<{ inserted: number }>("/v1/alerts/ingest", {
+      method: "POST",
+      timeoutMs: BATCH_TIMEOUT_MS,
     }),
 };

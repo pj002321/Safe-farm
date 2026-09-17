@@ -1,5 +1,5 @@
 import { AlertTriangleIcon, SatelliteIcon } from "@/components/icons";
-import type { HazardAlert } from "./sample";
+import type { HazardAlert } from "@/features/dashboard/domain/hazardAlert";
 
 /**
  * ---------------------------------------------
