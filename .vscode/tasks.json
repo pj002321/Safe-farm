@@ -85,17 +85,6 @@
       "problemMatcher": []
     },
     {
-      "label": "ai-service: 서버 실행",
-      "detail": "uvicorn --reload 로 개발 서버 기동 (localhost:8000)",
-      "type": "shell",
-      "command": { "value": "${command:python.interpreterPath}", "quoting": "strong" },
-      "args": ["-m", "uvicorn", "app.main:app", "--reload"],
-      "options": { "cwd": "${workspaceFolder}/ai-service" },
-      "isBackground": true,
-      "presentation": { "clear": true },
-      "problemMatcher": []
-    },
-    {
       "label": "ai-service: 질문 답변 스트리밍",
       "detail": "터미널에 질문을 입력하면 LLM 답변만 토큰 단위로 출력한다",
       "type": "shell",
