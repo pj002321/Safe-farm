@@ -1,16 +1,14 @@
 # 더미 데이터
 
-전부 가짜 값이다. 실제 기상·작물 수치가 아니다.
+실측 마스터(crops · crop_variants · crop_stages · grids · stations)는
+`data/master/` 로 옮겼다. 이름이 거짓말을 하지 않게 하려는 것이다.
 
 ## 적재 순서
 
 FK 때문에 순서를 지켜야 한다.
 
 ```
-grids ──> weather_forecast
-stations ──> weather_obs_daily
-
-crops ──> crop_variants ──> crop_stages
+weather_obs_daily  부모 stations 는 data/master/ 에 있다
 ```
 
 `terms`·`user_agreements` 는 어느 스크립트도 넣지 않는다 — 아래 참고.
@@ -26,7 +24,6 @@ crops ──> crop_variants ──> crop_stages
 |---|---|
 | `crop_variants.csv` | `crop_name` |
 | `crop_stages.csv` | `crop_name` + `maturity_type` |
-| `weather_forecast.csv` | `nx` + `ny` |
 
 적재하는 쪽이 부모를 먼저 넣고, 생성된 id 를 조회해서 매핑한다.
 
@@ -42,7 +39,6 @@ ai-service 는 그 값을 요청으로 받지 DB 에서 읽지 않으므로 더�
 
 ## 일부러 넣어둔 것
 
-- `weather_forecast.csv` 의 `52,38 / 2026-09-15` — 기온·강수가 전부 빈 값. 해상 결측 재현
 - `weather_obs_daily.csv` 의 `133 / 2026-09-12` — `rainfall_mm` 만 빈 값
 - `crop_stages` 의 GDD 구간은 반개구간으로 이어진다 (`0~80`, `80~200`, ...). 경계값 80 은
   1단계가 아니라 2단계다

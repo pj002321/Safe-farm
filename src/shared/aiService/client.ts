@@ -87,6 +87,55 @@ export interface SigunguWarnFeatureCollection {
   }>;
 }
 
+/** 시군구 경계 + 가장 최근 관측된 일 강수량·색상. `/map` 강수 레이어가 그대로 그린다. */
+export interface SigunguRainFeatureCollection {
+  type: "FeatureCollection";
+  asOf?: string | null;
+  features: Array<{
+    type: "Feature";
+    properties: {
+      code: string;
+      name: string;
+      station?: string;
+      stationName?: string;
+      rainMm?: number | null;
+      color?: string;
+      label?: string;
+    };
+    geometry: { type: "Polygon" | "MultiPolygon"; coordinates: unknown };
+  }>;
+}
+
+/** 시군구 경계 + 가장 최근 관측된 최대풍속·색상. `/map` 바람 레이어가 그대로 그린다. */
+export interface SigunguWindFeatureCollection {
+  type: "FeatureCollection";
+  asOf?: string | null;
+  features: Array<{
+    type: "Feature";
+    properties: {
+      code: string;
+      name: string;
+      station?: string;
+      stationName?: string;
+      windMax?: number | null;
+      color?: string;
+      label?: string;
+    };
+    geometry: { type: "Polygon" | "MultiPolygon"; coordinates: unknown };
+  }>;
+}
+
+/** 밭 좌표 기준 7일 예보. `/weather` 탭이 그대로 목록으로 그린다. */
+export interface PlotForecast {
+  days: Array<{
+    date: string;
+    tempMax: number | null;
+    tempMin: number | null;
+    rainfallMm: number | null;
+    windMax: number | null;
+  }>;
+}
+
 export type AiResult<T> =
   | { ok: true; data: T }
   | { ok: false; reason: AiFailure; detail?: string };
@@ -185,5 +234,26 @@ export const aiService = {
   sigunguWarn: () =>
     call<SigunguWarnFeatureCollection>("/v1/map/sigungu-warn", {
       timeoutMs: 15_000,
+    }),
+  /** 시군구 250개 폴리곤 + 최근 관측 강수량. */
+  sigunguRain: () =>
+    call<SigunguRainFeatureCollection>("/v1/map/sigungu-rain", {
+      timeoutMs: 15_000,
+    }),
+  /** 시군구 250개 폴리곤 + 최근 관측 최대풍속. */
+  sigunguWind: () =>
+    call<SigunguWindFeatureCollection>("/v1/map/sigungu-wind", {
+      timeoutMs: 15_000,
+    }),
+  /** 밭 좌표 기준 7일 예보(기온·강수·최대풍속). Open-Meteo 를 그때그때 불러온다. */
+  plotForecast: (lat: number, lon: number) =>
+    call<PlotForecast>(`/v1/weather/plot?lat=${lat}&lon=${lon}`),
+  /**
+   * 밭 하나만 즉시 판정해 오늘 할 일 카드를 만든다. 자정 배치를 기다리지 않고
+   * 밭 등록·재배 추가 직후 호출한다(registerPlot/addCultivations).
+   */
+  generateTasks: (plotId: string) =>
+    call<{ created: number }>(`/v1/tasks/generate?plot_id=${plotId}`, {
+      method: "POST",
     }),
 };

@@ -33,9 +33,10 @@ CSV 자연키가 어긋나면 DB 에 손대기 전에 멈춘다.
 |---|---|---|
 | `init` | FarmBase 전체 − 회원·약관·텃밭 계열 | CREATE TABLE 만. 데이터는 안 건드림 |
 | `master` | crops · crop_variants · crop_stages · grids · stations | upsert |
-| `seed` | weather_forecast · weather_obs_daily | upsert |
+| `seed` | weather_obs_daily | upsert |
 
-- 원본은 `data/dummy/*.csv`. 파일 이름이 테이블 이름이다.
+- 원본은 `master` 가 `data/master/*.csv`, `seed` 가 `data/dummy/*.csv`.
+  파일 이름이 테이블 이름이다. 마스터는 실측값이고 더미는 가짜다.
 - **upsert** — 자연키가 이미 있으면 UPDATE, 없으면 INSERT. **삭제는 없다.**
   CSV 에서 행을 지워도 DB 에는 남는다.
 - 자연키는 테이블마다 다르다 — `crops.name`, `crop_variants.(crop_id, maturity_type)`,
