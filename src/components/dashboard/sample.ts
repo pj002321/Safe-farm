@@ -18,41 +18,10 @@ import type { ReactNode } from "react";
 
 // Priority/TaskCardData(할 일 카드)와 SAMPLE_TASKS 는 여기 있었다. 조회가 붙어
 // `features/dashboard/domain/taskSummary.ts` 로 옮겼다 — 위 주석이 예고한 일이다.
-
-export interface DayForecast {
-  labelKo: string;
-  dateKo: string;
-  tempMinC: number;
-  tempMaxC: number;
-  rainChance: number;
-  rainMm: number;
-  /** 야외 작업이 가능한가. 스펙상 이 판단이 주말 예보의 목적이다. */
-  workableKo: string;
-  icon: "sun" | "rain";
-}
-
-export const SAMPLE_WEEKEND: readonly DayForecast[] = [
-  {
-    labelKo: "토요일",
-    dateKo: "9/19",
-    tempMinC: 14.2,
-    tempMaxC: 27.8,
-    rainChance: 10,
-    rainMm: 0,
-    workableKo: "야외 작업하기 좋습니다",
-    icon: "sun",
-  },
-  {
-    labelKo: "일요일",
-    dateKo: "9/20",
-    tempMinC: 16.0,
-    tempMaxC: 24.1,
-    rainChance: 60,
-    rainMm: 5.5,
-    workableKo: "오후에 비가 옵니다. 오전에 끝내세요",
-    icon: "rain",
-  },
-];
+//
+// DayForecast/SAMPLE_WEEKEND(주말 예보)도 여기 있었다. 홈이 실제 예보를 부르게
+// 되면서 `features/weather/domain/weekSplit.ts` + `ForecastPanel` 로 옮겼다.
+// 고정값이 남아 있었다면 화면이 영영 9/19·9/20 을 말했을 것이다.
 
 /** 기상 특보. 없으면 배너를 그리지 않는다. */
 export interface HazardAlert {
