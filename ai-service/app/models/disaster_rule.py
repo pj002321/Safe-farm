@@ -13,7 +13,13 @@ class DisasterRule(Base):
 
     __tablename__ = "disaster_rules"
     __table_args__ = (
-        UniqueConstraint("station", "risk", "solar_term", "crop_id", name="uq_disaster_rules_station_risk_term_crop"),
+        UniqueConstraint(
+            "station",
+            "risk",
+            "solar_term",
+            "crop_id",
+            name="uq_disaster_rules_station_risk_term_crop",
+        ),
     )
 
     id = Column(Integer, primary_key=True)

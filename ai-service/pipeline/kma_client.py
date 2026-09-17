@@ -4,7 +4,8 @@
 - 일통계(arcltr_sfc_day)      disp=2 → {"result":"ok","data":[...]}
 - 특보현황(wrn_now_data_new)  disp=1 → 맨 배열 [...] (disp=2 는 XML 로 깨짐 — 쓰지 말 것)
 - 천리안 LST(nph-arcltr_sat_txt) disp=2 → [{"TM_INT0":.., "TM_INT1":..}] · 호출당 최대 24개 구간
-- 평년값(arcltr_sfc_norm)     disp=2 → {"data":[...]} · 결측치는 -99.9 (weather_daily 의 -999 와 다름, 실측 확인)
+- 평년값(arcltr_sfc_norm)     disp=2 → {"data":[...]} · 결측치는 -99.9
+  (weather_daily 의 -999 와 다름, 실측 확인)
 - 절기재해(arcltr_solar_term_crop) disp=2 → {"data":[...]} · risk=01 필드만 확인됨(DOMAIN_REF §3)
 - 격자변환(nph-dfs_xy_lonlat) → JSON 아님, 고정폭 텍스트(실측 확인)
 """
@@ -80,7 +81,10 @@ def _kst_day_utc_range(kst_day: date):
 
 
 def _utc_windows(start, end, interval_min, max_items):
-    """tm1~tm2 구간은 양끝 포함이라 항목 수 = (분수/interval)+1 (실측 확인). max_items 를 넘기지 않게 한 칸 적게 끊는다."""
+    """tm1~tm2 구간은 양끝 포함이라 항목 수 = (분수/interval)+1 (실측 확인).
+
+    max_items 를 넘기지 않게 한 칸 적게 끊는다.
+    """
     step = timedelta(minutes=interval_min * (max_items - 1))
     cur = start
     while cur < end:
@@ -95,7 +99,12 @@ def fetch_daily_lst_min(api_key, lat, lon, kst_day: date, interval=30):
     values = []
     for w_start, w_end in _utc_windows(start, end, interval, LST_MAX_ITEMS):
         chunk = _fetch_lst_chunk(
-            api_key, lat, lon, w_start.strftime("%Y%m%d%H%M"), w_end.strftime("%Y%m%d%H%M"), interval
+            api_key,
+            lat,
+            lon,
+            w_start.strftime("%Y%m%d%H%M"),
+            w_end.strftime("%Y%m%d%H%M"),
+            interval,
         )
         values.extend(parse_lst_values(chunk))
     return min(values) if values else None

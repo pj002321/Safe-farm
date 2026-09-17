@@ -58,6 +58,9 @@ export async function listTaskCards(
     .select(CARD_COLUMNS)
     // RLS 가 자기 밭의 카드만 보이게 하지만, plotStore.ts 처럼 where 도 명시한다.
     .eq("plots.user_id", userId)
+    // `plot_tasks` 에는 `deleted_at` 이 없다. 숨긴 밭의 카드를 가리는 것은
+    // 이 조인 조건뿐이라, 빼면 지운 밭의 할 일이 대시보드에 그대로 뜬다.
+    .is("plots.deleted_at", null)
     .or(
       // 살아 있는 미완료(닫히지 않은 것)만. 배치가 닫은 카드는 이력으로 간다.
       `and(done.is.false,expired_at.is.null,generated_at.gte.${carryStart}),` +
@@ -96,6 +99,9 @@ export async function listTaskHistory(
     .from("plot_tasks")
     .select(CARD_COLUMNS)
     .eq("plots.user_id", userId)
+    // 홈과 같은 기준으로 숨긴 밭을 뺀다. 한쪽만 걸면 지운 밭의 카드가 홈에서는
+    // 사라지고 이력에는 남아, 아래 주석이 말하는 "정확한 여집합"이 깨진다.
+    .is("plots.deleted_at", null)
     .or(
       // ① 배치가 닫은 카드(안 하고 넘어감) ② 오늘 이전에 끝낸 카드
       // ③ 3일이 지났는데 아직 안 닫힌 카드 — 배치가 돌기 전 창에 존재한다.

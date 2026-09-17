@@ -5,6 +5,8 @@
  * [Description]
  * - "얼마나 자랐나"를 막대 하나로 보여준다. 눈금(`markRatio`)은 다음 단계가
  *   시작되는 지점이라, 지금 채워진 곳과 눈금 사이가 곧 "남은 만큼"이 된다.
+ * - 퍼센트는 정수로 찍는다. 소수 한 자리까지 쓰면 매일 바뀌는 끝자리가 눈에
+ *   먼저 들어와, 정작 중요한 "어디까지 왔나"를 가린다.
  * - **막대를 진행 표시(progressbar)로 노출한다.** 색 채움만으로는 스크린리더가
  *   아무것도 읽지 못한다. `aria-valuenow` 와 `aria-valuetext` 로 숫자와 단위를
  *   함께 준다.
@@ -23,8 +25,13 @@ interface GrowthGaugeProps {
   value: number;
   /** 목표 적산온도 */
   target: number;
-  /** 0~1. 다음 단계가 시작되는 지점. */
-  markRatio: number;
+  /**
+   * 0~1. 다음 단계가 시작되는 지점.
+   *
+   * **null 이면 눈금을 그리지 않는다.** 단계를 모르는데 0 을 넘기면 눈금이 왼쪽
+   * 끝에 붙어, 사용자는 "다음 단계가 이미 지났다"로 읽는다.
+   */
+  markRatio: number | null;
   markLabelKo: string;
   /** 왼쪽 아래 보조 문구 */
   footStartKo: string;
@@ -55,6 +62,11 @@ export function GrowthGauge({
           {value}
         </b>
         <span className="text-fg-muted text-sm">/ {target} GDD</span>
+        {/* 막대 길이만으로는 "절반쯤"까지만 읽힌다. 같은 색으로 찍어 숫자와
+            막대가 한 값임을 붙여 둔다. */}
+        <span className="font-medium font-mono text-sm text-telemetry tabular-nums">
+          {percent}%
+        </span>
         <span className="ml-auto font-mono text-fg-muted text-xs">
           {dayLabelKo}
         </span>
@@ -76,17 +88,21 @@ export function GrowthGauge({
       </div>
 
       {/* 눈금은 막대 바깥에 둔다 — overflow-hidden 안에 넣으면 잘린다. */}
-      <div className="relative h-0">
-        <span
-          aria-hidden="true"
-          className="-top-[14px] absolute h-3.5 w-0.5 rounded-full bg-earth"
-          style={{ left: `${markRatio * 100}%` }}
-        />
-      </div>
+      {markRatio !== null && (
+        <div className="relative h-0">
+          <span
+            aria-hidden="true"
+            className="-top-[14px] absolute h-3.5 w-0.5 rounded-full bg-earth"
+            style={{ left: `${markRatio * 100}%` }}
+          />
+        </div>
+      )}
 
       <div className="mt-2 flex justify-between font-mono text-[0.7rem] text-fg-subtle">
         <span>{footStartKo}</span>
-        <span className="text-earth">{markLabelKo}</span>
+        {markRatio !== null && (
+          <span className="text-earth">{markLabelKo}</span>
+        )}
         <span>{footEndKo}</span>
       </div>
     </div>

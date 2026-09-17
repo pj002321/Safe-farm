@@ -1,5 +1,3 @@
-import type { DailyObservation } from "./observations";
-
 /**
  * ---------------------------------------------
  * [Feature]: 적산온도(GDD) 누적과 생육 진행 판정
@@ -7,6 +5,8 @@ import type { DailyObservation } from "./observations";
  * [Description]
  * - "며칠 남았나"를 정하는 계산이 전부 여기 있다. 화면도, LLM 문장도 이 결과를
  *   받아쓰기만 한다 — 판단을 LLM 에 맡기면 입력에 없는 숫자를 지어낸다.
+ * - `features/` 가 아니라 `shared/` 에 있다. 리포트 데모와 텃밭 상세가 둘 다
+ *   쓰는데, features 끼리 import 하면 의존 방향 규칙에 어긋난다.
  * - GDD(Growing Degree Days)는 **날짜가 아니라 쌓인 열**로 생육을 재는 방법이다.
  *   같은 20일이라도 더웠으면 더 자란다. 농진청 작형표가 "8월 상순~하순"처럼
  *   폭넓게 적힌 이유이자, 우리가 날짜 대신 이걸 쓰는 이유다.
@@ -21,6 +21,23 @@ import type { DailyObservation } from "./observations";
  * ```
  * ---------------------------------------------
  */
+
+/**
+ * 적산에 필요한 하루치 값만 추린 것.
+ *
+ * 강수·습도까지 요구하지 않는다 — 그러면 관측 원본을 그대로 넘기는 쪽
+ * (`features/report/domain/observations.ts` 의 `DailyObservation`)과 DB 행을
+ * 좁혀 넘기는 쪽이 같은 함수를 못 쓴다. 구조적 타이핑이라 필드가 더 많은
+ * 객체는 그냥 통과한다.
+ *
+ * ⚠️ `date` 는 **정렬 가능한 문자열**이어야 한다(`"YYYY-MM-DD"` 또는 `"MM-DD"`).
+ *    한 배열 안에서 형식이 섞이면 `>=` 비교가 엉뚱하게 걸린다.
+ */
+export interface DailyTemp {
+  date: string;
+  tempMinC: number;
+  tempMaxC: number;
+}
 
 /**
  * 하루치 적산온도. 기준온도 아래로 내려간 날은 0 이다(음수를 빼지 않는다).
@@ -64,7 +81,7 @@ export function dailyGdd(
 
 /** 기준일 이후 관측만 골라 적산온도를 더한다. */
 export function accumulateGdd(
-  rows: readonly DailyObservation[],
+  rows: readonly DailyTemp[],
   fromDate: string,
   baseTempC: number,
   upperTempC?: number,
@@ -87,7 +104,7 @@ export function accumulateGdd(
  * 나온다. 배열 끝이 오늘이라는 전제로 뒤에서 n개를 센다.
  */
 export function recentDailyGdd(
-  rows: readonly DailyObservation[],
+  rows: readonly DailyTemp[],
   days: number,
   baseTempC: number,
   upperTempC?: number,

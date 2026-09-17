@@ -47,6 +47,14 @@ interface PlotForecastRowProps {
   todayIso: string;
   /** 첫 줄만 펴 둔다. 전부 접히면 화면이 비어 보이고, 펼 수 있다는 것도 안 알려진다. */
   defaultOpen?: boolean;
+  /**
+   * 관측 차트(최근 실측 + 예보). **펼쳤을 때만** 그린다.
+   *
+   * 로스터 구조를 지키면서 차트를 얹는 자리다 — 접힌 줄은 판단 한 줄로 두고,
+   * 자세히 볼 사람만 펼쳐서 기온·강수 흐름을 본다. 접힌 목록에 차트를 밭 수만큼
+   * 그리면 스크롤을 줄이려고 만든 구조가 도로 무너진다.
+   */
+  chart?: React.ReactNode;
   /** 값이 있으면 실시간이 아니라 보관해 둔 예보다. 줄을 펴면 그 사실이 보인다. */
   cachedAt?: Date;
 }
@@ -58,6 +66,7 @@ export function PlotForecastRow({
   forecast,
   todayIso,
   defaultOpen = false,
+  chart,
   cachedAt,
 }: PlotForecastRowProps) {
   const alerts = buildForecastAlerts(forecast);
@@ -152,6 +161,10 @@ export function PlotForecastRow({
           days={forecast.days}
           todayIso={todayIso}
         />
+
+        {/* 관측 차트. 주간 밴드가 "이번 주 기온 폭"이라면 이건 "지난 며칠 실측이
+            어떻게 흘러 여기까지 왔나"다 — 실측과 예보를 한 선에서 잇는다. */}
+        {chart}
 
         <details className="border-border/60 border-t pt-3">
           <summary className="cursor-pointer text-fg-muted text-xs hover:text-fg">
