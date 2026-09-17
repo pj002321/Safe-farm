@@ -11,7 +11,7 @@
 값이 틀렸으면 저쪽을 고치고 다시 뽑아 온다.
 
     레포    https://github.com/easty00/safefarm-crop-data.git
-    버전    723b5b4
+    버전    b2e493a
     갱신    연 1회. 런타임에 농사로 API 를 부르지 않는다
 
 ## 출처

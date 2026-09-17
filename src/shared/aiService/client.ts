@@ -1,4 +1,5 @@
 import "server-only";
+import { normalizePlotForecast } from "./plotForecastShape";
 
 /**
  * ---------------------------------------------
@@ -125,8 +126,27 @@ export interface SigunguWindFeatureCollection {
   }>;
 }
 
-/** 밭 좌표 기준 7일 예보. `/weather` 탭이 그대로 목록으로 그린다. */
+/** 밭 좌표 기준 실황·시간별·7일 예보. `/weather` 탭이 그린다. */
 export interface PlotForecast {
+  /**
+   * 지금 이 자리의 관측값. Open-Meteo 가 예보와 **같은 요청**으로 준다.
+   * 응답에 current 가 없으면 null — 그때 화면은 실황 칸 자체를 그리지 않는다.
+   */
+  current: {
+    /** 관측 시각(현지). "몇 시 기준인지"를 안 적으면 실황은 의미가 없다. */
+    observedAt: string | null;
+    tempC: number | null;
+    humidityPct: number | null;
+    rainfallMm: number | null;
+    windMs: number | null;
+  } | null;
+  /** 지금부터 24시간. 서버가 **지난 시간을 잘라내고** 준다(00시부터 오지 않는다). */
+  hours: Array<{
+    time: string;
+    tempC: number | null;
+    rainfallMm: number | null;
+    rainChance: number | null;
+  }>;
   days: Array<{
     date: string;
     tempMax: number | null;
@@ -151,6 +171,18 @@ export interface PlotForecast {
     stageName: string | null;
     waterNeedMm: number | null;
   } | null;
+  /**
+   * 이 밭이 속한 시군구에 지금 발효 중인 기상특보. 없으면 null.
+   *
+   * 지도의 특보 레이어와 **같은 판정 함수**를 쓴다(`service/warn_region.py`).
+   * 따로 계산하면 두 화면이 서로 다른 말을 하게 된다.
+   */
+  alert: {
+    warnings: string[];
+    label: string | null;
+    /** 기상청 스냅샷을 받아 둔 시각. 특보는 이 시각까지의 상태다. */
+    asOf: string | null;
+  } | null;
 }
 
 export type AiResult<T> =
@@ -171,8 +203,27 @@ export type AiFailure =
 /** 기본 타임아웃. 상태 조회는 짧게, LLM 호출은 부르는 쪽에서 늘린다. */
 const DEFAULT_TIMEOUT_MS = 5_000;
 
-/** 밭 예보 갱신 주기(초, V1-61). 개발 중 바로 바꿀 수 있게 상수 하나로 둔다.
- * 개발 서버(`next dev`)는 항상 매 요청 새로 받아온다 — 이 캐시는 배포 환경에서만 보인다. */
+/**
+ * 배치 호출 타임아웃(ms). 화면 호출과 달리 사람이 기다리지 않으므로 길게 잡는다.
+ *
+ * 크론 쪽 `pg_net` 타임아웃보다 **짧아야 한다.** 반대면 pg_net 이 먼저 끊어
+ * 결과를 못 받는데 서버는 계속 일하는 상태가 되어, 성공·실패를 알 수 없다.
+ */
+const BATCH_TIMEOUT_MS = 50_000;
+
+/**
+ * 밭 예보 갱신 주기(초, V1-61).
+ *
+ * 예보 원본(Open-Meteo)은 하루 몇 차례 모델을 갱신할 뿐이라 요청마다 부르는 건
+ * 낭비다 — 날씨 화면은 밭 수만큼 호출이 나간다.
+ *
+ * ⚠️ 하루(86400)로 두지 않은 이유: 이 응답은 "오늘부터 7일"이고 `revalidate` 는
+ *    자정이 아니라 **처음 담은 시각부터** 구르는 TTL 이다. 23시에 담기면 다음 날
+ *    22시까지 어제 기준 표가 남아, 표의 첫 줄이 "오늘"이 아니게 된다. 한 시간이면
+ *    자정을 넘겨도 어긋나는 구간이 한 시간으로 묶인다.
+ *
+ * 개발 서버(`next dev`)는 항상 매 요청 새로 받아온다 — 이 캐시는 배포에서만 보인다.
+ */
 const WEATHER_REVALIDATE_SEC = 60 * 60;
 
 function config(): { baseUrl: string; token: string } | null {
@@ -211,12 +262,16 @@ async function call<T>(
         "X-Service-Token": cfg.token,
         ...rest.headers,
       },
-      // 내부 호출은 기본적으로 캐시하지 않는다. 상태 조회가 캐시되면 "이미
-      // 고쳤는데 화면은 계속 안 된다고 하는" 상황이 된다. revalidateSec 을
-      // 준 호출(예: 밭 예보)만 그 주기로 캐시한다.
-      ...(revalidateSec != null
-        ? { next: { revalidate: revalidateSec } }
-        : { cache: "no-store" as const }),
+      // 기본은 캐시하지 않는다. 상태 조회가 캐시되면 "이미 고쳤는데 화면은
+      // 계속 안 된다고 하는" 상황이 되고, 작업 생성처럼 부수효과가 있는 호출은
+      // 애초에 캐시 대상이 아니다.
+      //
+      // 값이 자주 안 바뀌는 조회만 `revalidateSec` 으로 열어 준다. 경로에 좌표가
+      // 들어 있어 캐시 키가 밭마다 갈리고, Next 의 Data Cache 는 서버 전역이라
+      // 같은 자리를 보는 다른 사용자도 함께 덜 부른다.
+      ...(revalidateSec == null
+        ? { cache: "no-store" as const }
+        : { next: { revalidate: revalidateSec } }),
     });
 
     if (response.status === 401) {
@@ -269,13 +324,26 @@ export const aiService = {
     call<SigunguWindFeatureCollection>("/v1/map/sigungu-wind", {
       timeoutMs: 15_000,
     }),
-  /** 밭 좌표 기준 7일 예보(기온·강수·최대풍속). Open-Meteo 를 그때그때 불러온다.
-   * plotId 를 주면 최근 14일 하루치 GDD(growthSeries)도 같이 온다. */
-  plotForecast: (lat: number, lon: number, plotId?: string) =>
-    call<PlotForecast>(
+  /**
+   * 밭 좌표의 7일 예보. `plotId` 를 주면 최근 14일 하루치 GDD(growthSeries)와
+   * 작물 기준 해석(cropImpact)까지 함께 온다.
+   */
+  plotForecast: async (
+    lat: number,
+    lon: number,
+    plotId?: string,
+  ): Promise<AiResult<PlotForecast>> => {
+    const result = await call<PlotForecast>(
       `/v1/weather/plot?lat=${lat}&lon=${lon}${plotId ? `&plot_id=${plotId}` : ""}`,
       { revalidateSec: WEATHER_REVALIDATE_SEC },
-    ),
+    );
+    // ⚠️ 여기서 모양을 맞추는 이유는 `normalizePlotForecast` 에 적어 두었다.
+    //    요약하면: 두 서비스가 따로 배포되므로 **옛 응답이 올 수 있고**, 그때
+    //    선언한 타입은 거짓말이 된다. 컴포넌트마다 방어하지 않고 길목에서 한 번.
+    return result.ok
+      ? { ok: true, data: normalizePlotForecast(result.data) }
+      : result;
+  },
   /**
    * 밭 하나만 즉시 판정해 오늘 할 일 카드를 만든다. 자정 배치를 기다리지 않고
    * 밭 등록·재배 추가 직후 호출한다(registerPlot/addCultivations).
@@ -283,5 +351,29 @@ export const aiService = {
   generateTasks: (plotId: string) =>
     call<{ created: number }>(`/v1/tasks/generate?plot_id=${plotId}`, {
       method: "POST",
+    }),
+  /**
+   * 등록된 **모든 밭**을 판정한다. 매일 00시(KST) 배치 전용이다.
+   *
+   * ⚠️ 기본 타임아웃(5초)을 쓰지 않는다. 밭 수만큼 생육 계산과 DB 조회가 도는
+   *    호출이라 5초에 걸리면, 실제로는 서버가 계속 일하고 있는데 호출자만
+   *    실패로 보는 상태가 된다. 그 경우 다음 날 배치까지 원인을 모른다.
+   */
+  generateAllTasks: () =>
+    call<{ created: number }>("/v1/tasks/generate-all", {
+      method: "POST",
+      timeoutMs: BATCH_TIMEOUT_MS,
+    }),
+  /**
+   * KMA 기상특보 스냅샷을 적재한다. 30분 주기 배치 전용이다.
+   *
+   * 특보 **조회**는 이 적재가 채운 표를 읽을 뿐 KMA 를 직접 부르지 않는다
+   * (ai-service `app/api/alerts.py` 주석 참고). 이게 멈추면 화면의 특보는
+   * 마지막 적재 시점에 그대로 얼어붙는다.
+   */
+  ingestAlerts: () =>
+    call<{ inserted: number }>("/v1/alerts/ingest", {
+      method: "POST",
+      timeoutMs: BATCH_TIMEOUT_MS,
     }),
 };
