@@ -16,6 +16,7 @@
 """
 
 import csv
+from datetime import date
 
 from app.core.config import DATA_DIR
 from app.core.db import new_session
@@ -55,7 +56,14 @@ def run_one(db, row: dict) -> dict:
         run_one(db, {'question': '...', 'expect_source': 'crop_guide', 'expect_hint': '씨앗량'})
         -> {'hit': True, 'hint': True, 'dist': 0.402, 'sources': ['crop_guide', ...]}
     """
-    matches = rerank(row["question"], retrieve_with_score(db, row["question"], CANDIDATES))[:TOP_K]
+    # ask_date 가 있으면 그날 기준으로 시기를 거른다. 같은 질문에 날짜만 다른 문항이 있어
+    # (벼 5월 vs 10월) 필터가 없으면 둘 중 하나는 반드시 틀린다
+    when = (row.get("ask_date") or "").strip()
+    on_date = date.fromisoformat(when) if when else None
+    matches = rerank(
+        row["question"],
+        retrieve_with_score(db, row["question"], CANDIDATES, on_date=on_date),
+    )[:TOP_K]
     sources = [chunk.document.source for chunk, _ in matches]
     bodies = " ".join(chunk.body for chunk, _ in matches)
     hint = (row.get("expect_hint") or "").strip()

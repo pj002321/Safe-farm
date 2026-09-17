@@ -1,7 +1,10 @@
 """chunks 벡터 저장/조회. pgvector 문법을 아는 곳을 여기 하나로 묶는다."""
 
 from collections.abc import Collection
+from datetime import date
 
+from sqlalchemy import Date, and_, func, or_, select
+from sqlalchemy.dialects.postgresql import array
 from sqlalchemy.orm import Session, joinedload
 
 from app.models.chunk import Chunk
@@ -73,6 +76,7 @@ def search_with_score(
     query_vector: list[float],
     top_k: int = 10,
     crops: Collection[str] | None = None,
+    on_date: date | None = None,
 ) -> list[tuple[Chunk, float]]:
     """
     # summary
@@ -88,6 +92,14 @@ def search_with_score(
     crops: 이 작물의 문서만 후보로 삼는다. 비거나 None 이면 전체.
         meta 에 '작물' 이 없는 문서(옛 색인)는 걸러지지 않고 남는다 — 필터가 후보를 줄일 뿐
         없는 작물을 지어내지는 않기 때문이다<br>
+    on_date: 주면 meta 에 period_from/to 가 있는 문서는 그 날짜가 기간 안(연도 무시,
+        'MM-DD' 비교)일 때만 후보가 된다. period 가 없는 문서(crop_stage·crop_guide·
+        variety)는 영향받지 않는다 — 시기가 있는 문서만 거르는 것이지, 시기 없는
+        문서를 빼는 게 아니다<br>
+    on_date: 이 날짜에 해당하는 시기의 문서만 후보로 삼는다. **연도는 무시하고 월·일만** 본다 —
+        weekly_note 는 2023~2026 네 해치가 같은 주차에 겹쳐 있고, 그게 근거를 두껍게 하는
+        장치라 연도로 자르면 안 된다. period 가 없는 문서(crop_stage·crop_guide·variety)는
+        영향받지 않는다 — 시기가 있는 문서만 거르는 것이지 없는 문서를 빼는 게 아니다<br>
 
     # returns
     (조각, 코사인 거리) 를 가까운 순으로. 거리는 0(같음) ~ 1(무관) ~ 2(정반대).
@@ -109,15 +121,42 @@ def search_with_score(
         .filter(Chunk.embedding.is_not(None))
     )
     if crops:
-        # meta 는 JSONB 다. ->> 로 문자열을 꺼내 비교한다.
+        # meta['작물들'] 은 JSONB 배열이다. ?| 는 "배열 요소 중 하나라도 겹치나" 를 본다 —
+        # weekly_notes 의 '마늘,양파' 같은 복수 작물이 '마늘' 검색에 걸리게 하려는 것이다.
+        # 문자열 일치(meta['작물'].astext.in_)로는 '마늘,양파' 가 '마늘' 과 안 맞는다.
         #
         # ⚠ **order_by·limit 보다 먼저 걸어야 한다.** 10개를 뽑은 뒤 거르면 정답이 11위였을 때
         #   영영 안 나온다 — 필터의 목적이 "후보를 줄여 정답을 top_k 안으로 올리는 것" 이다.
         #
-        # ⚠ join 이 아니라 has(EXISTS) 를 쓴다. joinedload 가 이미 documents 를 붙이고 있어
-        #   join 을 또 걸면 같은 표를 두 번 조인하게 된다
+        # ⚠ has() 를 쓰지 않는다. joinedload 와 얽혀 상관 없는 EXISTS 가 만들어진다 —
+        #   `EXISTS (SELECT 1 FROM documents, chunks WHERE ...)` 처럼 바깥 행과 안 묶여서,
+        #   조건에 맞는 문서가 하나라도 있으면 **모든 행이 통과**한다(2026-09-17 실측).
+        #   document_id IN (서브쿼리) 는 그런 함정이 없다
         query = query.filter(
-            Chunk.document.has(Document.meta["작물"].astext.in_(list(crops)))
+            Chunk.document_id.in_(
+                select(Document.id).where(Document.meta["작물들"].has_any(array(tuple(crops))))
+            )
+        )
+    if on_date is not None:
+        # 연도를 버리고 'MM-DD' 로 견준다. 12월→1월을 넘는 주(period_from > period_to)는
+        # 그 주만 두 조각으로 나눠 본다 — 안 그러면 '12-30' <= md <= '01-05' 가 항상 거짓이다
+        md = on_date.strftime("%m-%d")
+        _from = func.to_char(Document.meta["period_from"].astext.cast(Date), "MM-DD")
+        _to = func.to_char(Document.meta["period_to"].astext.cast(Date), "MM-DD")
+        안쪽 = and_(_from <= md, md <= _to)              # 한 해 안에서 끝나는 보통의 주
+        해넘김 = and_(_from > _to, or_(md >= _from, md <= _to))
+        query = query.filter(
+            Chunk.document_id.in_(
+                select(Document.id).where(
+                    or_(
+                        # period 가 없는 문서는 시기를 안 따진다. 이 줄이 없으면
+                        # crop_guide·variety 가 통째로 빠져 검색이 weekly 만 남는다
+                        Document.meta["period_from"].astext.is_(None),
+                        안쪽,
+                        해넘김,
+                    )
+                )
+            )
         )
     rows = query.order_by(distance).limit(top_k).all()
     return [(chunk, float(dist)) for chunk, dist in rows]

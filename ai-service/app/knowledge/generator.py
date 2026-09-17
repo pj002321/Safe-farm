@@ -20,6 +20,9 @@ SYSTEM_PROMPT = (
     "3문장 이내로 답하라."
 )
 
+# 검색 필터용 키. 사람이 읽을 값이 아니라 '참고값' 에서 뺀다
+# ('작물' 은 그대로 둔다 — 그건 사람이 읽는 값이다)
+META_SKIP = frozenset({"작물들"})
 
 def build_context(matches: list[tuple[Chunk, float]]) -> str:
     """
@@ -46,7 +49,9 @@ def build_context(matches: list[tuple[Chunk, float]]) -> str:
     for chunk, _ in matches:
         # sorted 로 순서를 고정한다. JSONB 는 키 순서를 보장하지 않아서 같은 질문에도
         # 프롬프트가 매번 달라진다 — 재현이 안 되고 프롬프트 캐시도 못 탄다
-        meta = sorted((chunk.document.meta or {}).items())
+        meta = sorted(
+            (k, v) for k, v in (chunk.document.meta or {}).items() if k not in META_SKIP
+        )
         numbers = " · ".join(f"{key}={value}" for key, value in meta)
         # ⚠ 제목을 앞에 박는다. 이게 없으면 LLM 이 **다른 문서의 참고값을 이 문서에 갖다 붙인다** —
         #   "상추 수확까지 며칠" 에 crop_stage 의 days_to_harvest=31 을 품종 '미홍' 의 값으로
