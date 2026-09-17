@@ -13,6 +13,7 @@ from app.models.farm.crop import Crop
 from app.models.farm.crop_guide import CropGuide
 from app.models.farm.crop_stage import CropStage
 from app.models.farm.crop_variant import CropVariant
+from app.models.farm.pest import PestBulletin
 from app.models.farm.variety import Variety
 from app.models.farm.weekly_note import WeeklyNote
 
@@ -117,6 +118,22 @@ _WEEKLY_QUERY = (
     .order_by(WeeklyNote.issue_year, WeeklyNote.issue_no, WeeklyNote.ordinal)
 )
 
+_PEST_QUERY = (
+    select(
+        PestBulletin.pest_name.label("병해충"),
+        PestBulletin.level.label("등급"),
+        PestBulletin.crop_group.label("작물군"),
+        PestBulletin.crop_names.label("작물"),
+        PestBulletin.body.label("본문"),
+        PestBulletin.issue_year.label("issue_year"),
+        PestBulletin.issue_no.label("issue_no"),
+        PestBulletin.ordinal.label("ordinal"),
+        PestBulletin.period_from.label("period_from"),
+        PestBulletin.period_to.label("period_to"),
+    )
+    .order_by(PestBulletin.issue_year, PestBulletin.issue_no, PestBulletin.ordinal)
+)
+
 SOURCES: tuple[DbEmbedSource, ...] = (
     DbEmbedSource(
         name="crop_stage",
@@ -160,6 +177,14 @@ SOURCES: tuple[DbEmbedSource, ...] = (
         title_columns=("issue_year", "issue_no", "주제"),
         # period_from/to 는 meta 로 간다(build_meta 가 안 쓴 칸을 담는다).
         # 시기 필터가 그걸 읽는다 — 다음 단계
+    ),
+    DbEmbedSource(
+        name="pest_bulletin",
+        statement=_PEST_QUERY,
+        # 작물군을 본문에 넣는다 — crop_names 가 빈 22% 는 이것이 유일한 작물 단서다
+        content_columns=("병해충", "등급", "작물군", "작물", "본문"),
+        id_columns=("issue_year", "issue_no", "ordinal"),
+        title_columns=("병해충", "등급"),
     ),
 )
 

@@ -11,7 +11,7 @@ import sys
 
 from app.core.config import DATA_DIR
 from app.core.db import get_engine, new_session
-from app.models.farm import DisasterBulletin, WeeklyNote
+from app.models.farm import DisasterBulletin, PestAlert, PestBulletin, WeeklyNote
 from pipeline.prep import check
 from pipeline.prep.seeding import count_rows, read_all, report, require_tables
 from pipeline.prep.table import upsert
@@ -22,6 +22,11 @@ INIT_HINT = "py -m pipeline.farm.init_farm_db"
 # 표 이름 → (ORM, 자연키). 병해충·재해예방 교안이 여기 한 줄씩 더한다
 TABLES = {
     "weekly_notes": (WeeklyNote, ["issue_year", "issue_no", "ordinal"]),
+    "pest_alerts": (
+        PestAlert,
+        ["issue_year", "issue_no", "crop_group", "level", "kind", "pest_name"],
+    ),
+    "pest_bulletins": (PestBulletin, ["issue_year", "issue_no", "ordinal"]),
     "disaster_bulletins": (DisasterBulletin, ["issue_year", "issue_month", "ordinal"]),
 }
 UNIQUE = [(name, key) for name, (_, key) in TABLES.items()]
@@ -39,7 +44,7 @@ def _rows(name, data):
         for k in ("issue_year", "issue_no", "ordinal", "issue_month"):
             if k in row:
                 row[k] = _int(row[k])
-        for k in ("crops", "crop_names"):
+        for k in ("crops", "crop_names", "target_crops"):
             if k in row:
                 row[k] = row[k] or ""          # UNIQUE·NOT NULL 에 걸리지 않게 빈 문자열
         for k in ("period_from", "period_to"):

@@ -19,6 +19,7 @@ from app.models.farm.crop_stage import CropStage
 from app.models.farm.crop_variant import CropVariant
 from app.models.farm.disaster_bulletin import DisasterBulletin
 from app.models.farm.grid import Grid
+from app.models.farm.pest import PestAlert, PestBulletin
 from app.models.farm.profile import Profile
 from app.models.farm.station import Station
 from app.models.farm.terms import Terms
@@ -37,6 +38,8 @@ __all__ = [
     "CropVariant",
     "FarmBase",
     "Grid",
+    "PestAlert",
+    "PestBulletin",
     "Profile",
     "Station",
     "Terms",
