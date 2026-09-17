@@ -1,3 +1,4 @@
+import { after } from "next/server";
 import { SatelliteScan } from "@/components/shared/SatelliteScan";
 import { selectPlot } from "@/features/plots/domain/plotSelection";
 import { listPlots } from "@/features/plots/plotStore";
@@ -19,8 +20,9 @@ import { WorkWindow } from "./WorkWindow";
  * - `?plot=` 로 고른 밭이 목록에 없으면(지운 밭, 남의 밭 id) 조용히 기본값으로
  *   돌아간다. **오류를 내지 않는다** — 쿼리는 사용자가 고칠 수 있는 값이라
  *   그걸로 화면을 죽이면 안 된다.
- * - **진입할 때 모든 밭 예보를 병렬로 받는다.** 화면에 그리는 건 고른 밭 하나지만,
- *   응답이 1시간 캐시라 여기서 데워 두면 밭을 바꿀 때 ai-service 를 새로 안 때린다.
+ * - **화면은 고른 밭 하나만 기다린다.** 나머지 밭은 응답을 보낸 뒤(`after`) 병렬로
+ *   데워 둔다 — 1시간 캐시라 밭을 바꿀 때 ai-service 를 새로 안 때린다.
+ *   기다리는 것과 데우는 것을 나눈 이유는 아래 ⚠️ 에 적었다.
  * - 실패하면 이 칸만 안내로 바뀐다. 홈의 나머지(할 일·텃밭)는 그대로 뜬다.
  *   ⚠️ 그건 `<Suspense>` 덕이 **아니다** — Suspense 는 기다림을 다루지 던지는 것을
  *      잡지 않는다. 아래에서 조회와 호출을 각각 직접 막기 때문이다.
@@ -65,23 +67,37 @@ export async function ForecastPanel({
   if (!selected) return null;
 
   /**
-   * **모든 밭을 한꺼번에 받는다.** 보여 주는 건 고른 밭 하나뿐인데 전부 받는 이유:
-   * 이 응답은 1시간 캐시라(`plotForecast`), 여기서 한 번 받아 두면 밭을 바꿔도
-   * ai-service 를 새로 때리지 않는다. 셀렉트로 밭을 옮기는 것이 곧바로 그려진다.
+   * 화면이 기다리는 것은 **고른 밭 하나뿐**이다.
    *
-   * `Promise.all` 이라 밭 수만큼 **동시에** 나간다 — 순서대로 기다리지 않는다.
-   * 밭이 셋이면 왕복 1회 시간에 셋이 다 온다.
-   *
-   * ⚠️ 하나가 실패해도 나머지를 버리지 않는다. `Promise.all` 은 첫 거절에서 통째로
-   *    거절되지만 `plotForecast` 는 **던지지 않고** `{ok:false}` 를 돌려주므로
-   *    여기서는 안전하다(던지는 버전으로 바뀌면 allSettled 로 바꿀 것).
+   * ⚠️ 전에 `Promise.all` 로 모든 밭을 await 했다가 되돌렸다. `plotForecast` 는
+   *    던지지 않고 값을 돌려주므로 Promise.all 이 **전부 끝날 때까지** 기다리는데,
+   *    그러면 밭 하나가 느린 날 고른 밭 예보가 캐시에 있어도 화면이 같이 멈춘다.
+   *    같은 함정을 `/weather` 가 이미 밟고 고쳤다 — 그 파일에 "하나로 묶으면 가장
+   *    느린 밭이 나머지를 붙잡아"라고 적혀 있는데 그걸 여기서 다시 냈다.
    */
-  const forecasts = await Promise.all(
-    plots.map((plot) =>
-      aiService.plotForecast(plot.latitude, plot.longitude, plot.id),
-    ),
+  const result = await aiService.plotForecast(
+    selected.latitude,
+    selected.longitude,
+    selected.id,
   );
-  const result = forecasts[plots.indexOf(selected)];
+
+  /**
+   * 나머지 밭은 **응답을 막지 않고** 데운다.
+   *
+   * 예보는 1시간 캐시라, 지금 받아 두면 셀렉트로 밭을 바꿀 때 ai-service 를 새로
+   * 때리지 않는다 — 전환이 캐시에서 바로 나온다.
+   * `after` 를 쓰는 이유: 렌더 안에서 await 하지 않고 띄워만 두면 응답이 끝나면서
+   * 잘릴 수 있다. `after` 는 응답을 보낸 **뒤에** 실행을 보장한다.
+   */
+  after(async () => {
+    await Promise.all(
+      plots
+        .filter((plot) => plot.id !== selected.id)
+        .map((plot) =>
+          aiService.plotForecast(plot.latitude, plot.longitude, plot.id),
+        ),
+    );
+  });
 
   if (!result.ok) {
     return (

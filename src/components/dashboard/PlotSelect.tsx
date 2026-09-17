@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useTransition } from "react";
+import { useOptimistic, useTransition } from "react";
 
 /**
  * ---------------------------------------------
@@ -33,6 +33,18 @@ export function PlotSelect({ plots, selectedId }: PlotSelectProps) {
   const router = useRouter();
   // 전환 중임을 알린다. 표시가 없으면 누르고도 바뀐 게 없어 보여 다시 누르게 된다.
   const [pending, startTransition] = useTransition();
+  /**
+   * 고른 값을 화면에 붙잡아 둔다.
+   *
+   * ⚠️ `value={selectedId}` 만 쓰면 **고른 밭이 눈앞에서 되돌아간다.** `selectedId` 는
+   *    서버가 내려주는 값이라 RSC 응답이 도착하기 전에는 바뀌지 않는데, React 는
+   *    controlled select 에서 change 이벤트가 끝날 때 DOM 값을 `props.value` 로
+   *    되돌린다(react-dom 의 `restoreStateOfTarget`). 즉 사용자가 B밭을 고르면
+   *    그 즉시 A밭로 튕기고 서버가 답할 때까지 그대로 있다. 실제로 재현했다.
+   *    `useOptimistic` 은 전환이 끝날 때 서버 값으로 자동 정리되므로, 손으로
+   *    동기화하는 상태를 따로 들 필요가 없다.
+   */
+  const [shownId, setShownId] = useOptimistic(selectedId);
 
   // 밭이 하나뿐이면 고를 것이 없다. 이름만 보여 주고 조작은 주지 않는다.
   if (plots.length < 2) return null;
@@ -44,13 +56,18 @@ export function PlotSelect({ plots, selectedId }: PlotSelectProps) {
         className={`min-h-9 min-w-0 max-w-52 truncate rounded-lg border border-border bg-surface px-3 font-medium text-fg text-sm transition-colors duration-200 ease-out-expo hover:border-border-strong ${
           pending ? "opacity-60" : ""
         }`}
+        // 전환 중에는 잠근다. 안 잠그면 되돌아간 것처럼 보일 때 사용자가 다시
+        // 고르고, 이동이 두 번 나간다.
+        aria-busy={pending}
+        disabled={pending}
         onChange={(event) => {
           const next = event.target.value;
           startTransition(() => {
+            setShownId(next);
             router.replace(`/dashboard?plot=${next}`, { scroll: false });
           });
         }}
-        value={selectedId}
+        value={shownId}
       >
         {plots.map((plot) => (
           <option key={plot.id} value={plot.id}>
