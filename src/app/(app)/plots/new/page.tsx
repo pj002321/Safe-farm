@@ -209,25 +209,25 @@ export default async function PlotRegisterPage() {
               lg~   지도 22rem, 가로 배치 → 1단계 509px  → 32rem
             처음에 `lg` 한 곳만 나눴다가 **태블릿 폭에서 22px 어긋났다** —
             지도가 sm 에서 커지는데 그리드는 lg 에서야 갈라지기 때문이다. */}
-        <div className="mt-7 min-h-[38rem] sm:min-h-[40rem] lg:min-h-[32rem]">
-          {STEPS.map((step) => (
-            <StepPanel key={step.id} step={step}>
-              {step.no === 1 && <PlotLocationStep />}
-              {step.no === 2 && <PlotInfoFields />}
-              {step.no === 3 && (
-                <fieldset>
-                  <legend className="sr-only">재배할 작물</legend>
-                  <CropCards crops={crops} />
-                </fieldset>
-              )}
-              {step.no === 4 && (
-                <div className="max-w-md">
-                  <SowingFields />
-                </div>
-              )}
-            </StepPanel>
-          ))}
-        </div>
+          <div className="mt-7 min-h-[38rem] sm:min-h-[40rem] lg:min-h-[32rem]">
+            {STEPS.map((step) => (
+              <StepPanel key={step.id} step={step}>
+                {step.no === 1 && <PlotLocationStep />}
+                {step.no === 2 && <PlotInfoFields />}
+                {step.no === 3 && (
+                  <fieldset>
+                    <legend className="sr-only">재배할 작물</legend>
+                    <CropCards crops={crops} />
+                  </fieldset>
+                )}
+                {step.no === 4 && (
+                  <div className="max-w-md">
+                    <SowingFields />
+                  </div>
+                )}
+              </StepPanel>
+            ))}
+          </div>
           <WizardNav />
         </form>
 
