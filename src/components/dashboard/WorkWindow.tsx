@@ -47,13 +47,22 @@ const WEEKEND_ID = "work-window-weekend";
 export function WorkWindow({
   weekdays,
   weekend,
+  picker,
 }: {
   weekdays: readonly WorkDay[];
   weekend: readonly WorkDay[];
+  /**
+   * 밭 고르기. **탭과 같은 줄에** 놓으려고 주입으로 받는다.
+   * 이 컴포넌트가 직접 그리지 않는 이유: 고르기는 클라이언트 동작(라우터)이고
+   * 여기는 서버 컴포넌트로 남아야 한다 — 받아서 자리만 내준다.
+   */
+  picker?: React.ReactNode;
 }) {
   return (
     <div className="group/work">
-      <fieldset className="mb-3">
+      {/* 셀렉트와 탭을 한 줄에 둔다. 세로로 쌓으면 조작 두 개가 각자 한 줄을
+          먹어 정작 볼 목록이 아래로 밀린다. 좁으면 줄바꿈해 두 줄이 된다. */}
+      <fieldset className="mb-3 flex flex-wrap items-center gap-2">
         <legend className="sr-only">평일과 주말 중 볼 구간</legend>
         {/* sr-only 지만 실제 포커스를 받으므로 키보드 화살표로 전환된다.
             ⚠️ 다만 **포커스 링은 여기 그리면 안 보인다.** sr-only 는 `clip-path:
@@ -73,7 +82,9 @@ export function WorkWindow({
           type="radio"
         />
 
-        <div className="inline-flex rounded-lg border border-border p-1">
+        {picker}
+
+        <div className="inline-flex shrink-0 rounded-lg border border-border p-1">
           <label
             className="inline-flex min-h-9 cursor-pointer items-center rounded-md px-3 font-medium text-fg-muted text-sm transition-colors duration-200 ease-out-expo group-has-[#work-window-weekday:checked]/work:bg-accent group-has-[#work-window-weekday:checked]/work:text-accent-on group-has-[#work-window-weekday:focus-visible]/work:outline group-has-[#work-window-weekday:focus-visible]/work:outline-2 group-has-[#work-window-weekday:focus-visible]/work:outline-ring group-has-[#work-window-weekday:focus-visible]/work:outline-offset-2"
             htmlFor={WEEKDAY_ID}

@@ -3,7 +3,7 @@ import { selectPlot } from "@/features/plots/domain/plotSelection";
 import { listPlots } from "@/features/plots/plotStore";
 import { splitWeek } from "@/features/weather/domain/weekSplit";
 import { aiService } from "@/shared/aiService/client";
-import { PlotPicker } from "./PlotPicker";
+import { PlotSelect } from "./PlotSelect";
 import { WorkWindow } from "./WorkWindow";
 
 /**
@@ -19,8 +19,8 @@ import { WorkWindow } from "./WorkWindow";
  * - `?plot=` 로 고른 밭이 목록에 없으면(지운 밭, 남의 밭 id) 조용히 기본값으로
  *   돌아간다. **오류를 내지 않는다** — 쿼리는 사용자가 고칠 수 있는 값이라
  *   그걸로 화면을 죽이면 안 된다.
- * - 예보 호출은 1시간 캐시다(`plotForecast`). 밭을 오가며 눌러도 같은 밭은 다시
- *   부르지 않는다.
+ * - **진입할 때 모든 밭 예보를 병렬로 받는다.** 화면에 그리는 건 고른 밭 하나지만,
+ *   응답이 1시간 캐시라 여기서 데워 두면 밭을 바꿀 때 ai-service 를 새로 안 때린다.
  * - 실패하면 이 칸만 안내로 바뀐다. 홈의 나머지(할 일·텃밭)는 그대로 뜬다.
  *   ⚠️ 그건 `<Suspense>` 덕이 **아니다** — Suspense 는 기다림을 다루지 던지는 것을
  *      잡지 않는다. 아래에서 조회와 호출을 각각 직접 막기 때문이다.
@@ -64,11 +64,24 @@ export async function ForecastPanel({
   const selected = selectPlot(plots, requestedPlotId);
   if (!selected) return null;
 
-  const result = await aiService.plotForecast(
-    selected.latitude,
-    selected.longitude,
-    selected.id,
+  /**
+   * **모든 밭을 한꺼번에 받는다.** 보여 주는 건 고른 밭 하나뿐인데 전부 받는 이유:
+   * 이 응답은 1시간 캐시라(`plotForecast`), 여기서 한 번 받아 두면 밭을 바꿔도
+   * ai-service 를 새로 때리지 않는다. 셀렉트로 밭을 옮기는 것이 곧바로 그려진다.
+   *
+   * `Promise.all` 이라 밭 수만큼 **동시에** 나간다 — 순서대로 기다리지 않는다.
+   * 밭이 셋이면 왕복 1회 시간에 셋이 다 온다.
+   *
+   * ⚠️ 하나가 실패해도 나머지를 버리지 않는다. `Promise.all` 은 첫 거절에서 통째로
+   *    거절되지만 `plotForecast` 는 **던지지 않고** `{ok:false}` 를 돌려주므로
+   *    여기서는 안전하다(던지는 버전으로 바뀌면 allSettled 로 바꿀 것).
+   */
+  const forecasts = await Promise.all(
+    plots.map((plot) =>
+      aiService.plotForecast(plot.latitude, plot.longitude, plot.id),
+    ),
   );
+  const result = forecasts[plots.indexOf(selected)];
 
   if (!result.ok) {
     return (
@@ -87,9 +100,10 @@ export async function ForecastPanel({
   );
 
   return (
-    <>
-      <PlotPicker plots={plots} selectedId={selected.id} />
-      <WorkWindow weekdays={weekdays} weekend={weekend} />
-    </>
+    <WorkWindow
+      picker={<PlotSelect plots={plots} selectedId={selected.id} />}
+      weekdays={weekdays}
+      weekend={weekend}
+    />
   );
 }

@@ -1,0 +1,63 @@
+"use client";
+
+import { useRouter } from "next/navigation";
+import { useTransition } from "react";
+
+/**
+ * ---------------------------------------------
+ * [Feature]: 홈 날씨 칸의 밭 고르기 — 셀렉트 박스
+ *
+ * [Description]
+ * - 밭이 여럿이면 칩을 가로로 늘어놓는 것보다 셀렉트가 낫다. 칩은 밭이 늘수록
+ *   가로로 넘쳐 스크롤이 생기고, 이름이 긴 밭은 잘린다. 셀렉트는 개수와 무관하게
+ *   자리가 일정하고, 모바일에서는 기기의 기본 목록 UI 가 떠서 고르기도 쉽다.
+ * - **고른 밭은 `?plot=` 로 URL 에 남는다.** 로컬 상태로 두지 않는 이유가 있다 —
+ *   같은 선택을 화면 맨 위의 **기상특보 배너**도 읽는다(`HazardBannerSlot`).
+ *   여기서만 바꾸면 "배너는 A밭, 예보는 B밭"이 되는데, 재해 경보 화면에서 그건
+ *   그냥 틀린 화면이다. `plotSelection.ts` 가 같은 이유로 규칙을 한 곳에 뒀다.
+ * - `replace` 를 쓴다(`push` 아님). 밭을 세 번 바꾸고 뒤로 가기를 누르면 홈을
+ *   세 번 되짚는 게 아니라 이전 화면으로 나가는 쪽이 맞다.
+ * - `scroll: false` — 날씨 칸만 바뀌는데 화면이 맨 위로 튀면 보던 자리를 잃는다.
+ * - ⚠️ 전환이 서버 왕복이지만 **예보를 다시 받지는 않는다.** 대시보드가 진입할 때
+ *   모든 밭 예보를 병렬로 미리 받아 두고(`ForecastPanel`), 그 응답은 1시간 캐시라
+ *   어느 밭을 골라도 ai-service 를 새로 때리지 않는다.
+ * ---------------------------------------------
+ */
+
+interface PlotSelectProps {
+  plots: readonly { id: string; nameKo: string | null }[];
+  selectedId: string;
+}
+
+export function PlotSelect({ plots, selectedId }: PlotSelectProps) {
+  const router = useRouter();
+  // 전환 중임을 알린다. 표시가 없으면 누르고도 바뀐 게 없어 보여 다시 누르게 된다.
+  const [pending, startTransition] = useTransition();
+
+  // 밭이 하나뿐이면 고를 것이 없다. 이름만 보여 주고 조작은 주지 않는다.
+  if (plots.length < 2) return null;
+
+  return (
+    <label className="inline-flex min-w-0 items-center gap-2">
+      <span className="sr-only">예보를 볼 밭</span>
+      <select
+        className={`min-h-9 min-w-0 max-w-52 truncate rounded-lg border border-border bg-surface px-3 font-medium text-fg text-sm transition-colors duration-200 ease-out-expo hover:border-border-strong ${
+          pending ? "opacity-60" : ""
+        }`}
+        onChange={(event) => {
+          const next = event.target.value;
+          startTransition(() => {
+            router.replace(`/dashboard?plot=${next}`, { scroll: false });
+          });
+        }}
+        value={selectedId}
+      >
+        {plots.map((plot) => (
+          <option key={plot.id} value={plot.id}>
+            {plot.nameKo ?? "이름 없는 밭"}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
