@@ -240,11 +240,17 @@ export function MapWorkspace({ points }: MapWorkspaceProps) {
              답이 떨어져 있어서, 모바일에서는 스크롤해야 값이 보였다 — 지도가 화면
              절반을 차지하므로 누르는 동작과 결과가 한 화면에 없었다.
              누른 곳 바로 아래에 답이 나오는 건 지도 앱의 기본 문법이다.
-          지도 **안쪽 아래**에 붙이되 높이를 낮게 유지한다. 카카오 로고·축척이
-          왼쪽 아래에 있으므로 좌우 여백을 두고 그 위로 띄운다.
+          지도 **안쪽 아래**에 붙이되 높이를 낮게 유지한다.
+          ⚠️ `bottom-2` 로는 부족하다 — 카카오가 컨테이너 맨 아래 모서리에 로고와
+             축척·저작권 표기를 심는데, 그 밴드를 카드가 덮는다(카카오맵 약관이
+             출처 노출을 요구한다). `bottom-7`(28px)이 그 위다.
+          ⚠️ 래퍼는 `pointer-events-none` 이다. 카드가 차지하지 않는 여백까지
+             이벤트를 먹으면 지도 하단이 드래그·탭 불가 영역이 된다 — 카드를
+             지도 밖에 두던 때는 없던 회귀다. 카드 본체만 다시 살린다
+             (`PlotMapFrame` 이 같은 이유로 쓰는 방식).
         */}
         {selected && (
-          <div className="absolute inset-x-2 bottom-2 z-20">
+          <div className="pointer-events-none absolute inset-x-2 bottom-7 z-20">
             <RegionInfo
               layer={layer}
               onClose={() => setSelectedCode(null)}

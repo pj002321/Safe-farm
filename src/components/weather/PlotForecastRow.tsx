@@ -23,7 +23,9 @@ import { WeekBand } from "./WeekBand";
  * - 상세는 `<details name="plot">` 이 한 번에 하나만 펼친다. **JS 가 0줄이다** —
  *   브라우저 기능이고, 지원하지 않는 브라우저는 `name` 을 무시해 여러 개가
  *   동시에 열릴 뿐 깨지지 않는다.
- * - 줄에 보이는 것: 밭 얼굴색 · 이름 · 작물/단계 · 지금 기온 · 가장 급한 판단.
+ * - **접힌 줄에 보이는 것**: 밭 얼굴색 · 이름 · 작물/단계 · 지금 기온 · 가장 급한
+ *   판단 · (보관된 값이면) 그 표시. 전부 `<summary>` 안에 있다 — 밖에 두면 닫힌
+ *   `<details>` 가 안 그린다.
  *   얼굴색은 홈의 텃밭 띠·텃밭 관리와 **같은 밭이면 같은 색**이다(`plotIdentity`).
  * - ⚠️ 판단 줄은 `alerts[0]` 을 쓴다. `buildForecastAlerts` 가 심각도 내림차순을
  *   보장한다는 전제이고, 그 전제는 테스트로 박아 두었다.
@@ -87,33 +89,51 @@ export function PlotForecastRow({
             {cropNameKo ?? "작물 미정"}
             {stage && <span className="text-accent"> · {stage}</span>}
           </span>
+
+          {/*
+            판단 한 줄. ⚠️ **반드시 `<summary>` 안이어야 한다.** 닫힌 `<details>` 는
+            첫 `<summary>` 말고는 아무것도 그리지 않으므로, 이 줄이 밖에 있으면
+            접힌 밭의 경고가 통째로 사라진다 — 이 화면이 존재하는 이유가 없어진다.
+            (한 번 밖에 두고 높이만 재서 못 잡았다. 접힌 줄의 **내용**을 봐야 한다.)
+            경고가 없으면 이 줄도 없다 — "이상 없음"을 매일 적으면 정작 빨간 줄이
+            떴을 때의 무게가 사라진다.
+          */}
+          {worst && (
+            <span
+              className={`mt-0.5 flex items-center gap-1.5 text-xs ${TONE_TEXT[worst.tone]}`}
+            >
+              <span className="truncate font-medium">{worst.titleKo}</span>
+              {alerts.length > 1 && (
+                <span className="shrink-0 text-fg-subtle">
+                  +{alerts.length - 1}건
+                </span>
+              )}
+            </span>
+          )}
         </span>
 
         <span className="shrink-0 text-right">
-          <span className="block font-mono text-fg text-xl tabular-nums">
+          <span
+            className={`block font-mono text-xl tabular-nums ${cachedAt ? "text-caution" : "text-fg"}`}
+          >
             {forecast.current?.tempC != null
               ? `${forecast.current.tempC.toFixed(1)}℃`
               : "—"}
           </span>
+          {/*
+            ⚠️ 보관된 값이라는 사실은 **접힌 상태에서도** 보여야 한다. 자세한 안내
+            (StaleNotice)는 펼친 자리에 있지만 그건 닫혀 있으면 안 보이고, 그러면
+            요약 줄의 낡은 기온이 실시간 값과 똑같은 모양으로 찍힌다.
+            `lastGoodForecast` 가 "언제 것인지 말하지 않는 폴백은 거짓말"이라고
+            못 박아 둔 그 상황이다. 기온 색도 같이 낮춘다.
+          */}
+          {cachedAt && (
+            <span className="block text-caution text-[0.65rem]">보관된 값</span>
+          )}
         </span>
 
         <ChevronDownIcon className="size-4 shrink-0 text-fg-subtle" />
       </summary>
-
-      {/* 판단 한 줄. 경고가 없으면 이 줄도 없다 — "이상 없음"을 매일 적으면
-          정작 빨간 줄이 떴을 때의 무게가 사라진다. */}
-      {worst && (
-        <p
-          className={`flex items-center gap-1.5 px-3 pb-3 text-xs ${TONE_TEXT[worst.tone]}`}
-        >
-          <span className="truncate font-medium">{worst.titleKo}</span>
-          {alerts.length > 1 && (
-            <span className="shrink-0 text-fg-subtle">
-              +{alerts.length - 1}건
-            </span>
-          )}
-        </p>
-      )}
 
       <div className="flex flex-col gap-4 border-border/60 border-t p-3">
         {cachedAt && <StaleNotice cachedAt={cachedAt} />}

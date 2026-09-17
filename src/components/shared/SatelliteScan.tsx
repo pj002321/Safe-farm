@@ -221,15 +221,30 @@ export function SatelliteScan({
             y2={LINE_Y}
           />
           {/* 검출선 양 끝 눈금. 선이 화면을 가로지르는 계측선임을 짧게 말해 준다. */}
+          {/* ⚠️ `vector-effect` 는 **상속되지 않고** `<g>` 에는 적용 대상도 아니다.
+              그룹에 걸면 조용히 아무 일도 안 일어나서, 눈금만 칸 크기에 따라
+              굵기가 달라진다(64px 에서 1.6px, 112px 에서 2.9px). 그리는 요소에
+              직접 건다. stroke 계열은 상속되므로 그룹에 그대로 둔다. */}
           <g
             className="text-telemetry"
             stroke="currentColor"
             strokeLinecap="round"
             strokeWidth="2.5"
-            vectorEffect="non-scaling-stroke"
           >
-            <line x1="0" x2="7" y1={LINE_Y} y2={LINE_Y} />
-            <line x1={SCENE - 7} x2={SCENE} y1={LINE_Y} y2={LINE_Y} />
+            <line
+              vectorEffect="non-scaling-stroke"
+              x1="0"
+              x2="7"
+              y1={LINE_Y}
+              y2={LINE_Y}
+            />
+            <line
+              vectorEffect="non-scaling-stroke"
+              x1={SCENE - 7}
+              x2={SCENE}
+              y1={LINE_Y}
+              y2={LINE_Y}
+            />
           </g>
         </svg>
       </span>

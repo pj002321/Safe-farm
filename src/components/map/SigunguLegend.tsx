@@ -175,7 +175,7 @@ export function RegionInfo({
   return (
     // 지도 타일 위에 뜬다. 반투명 + blur 로 아래 지도가 비쳐서 "지도 위의 층"임이
     // 보이게 한다(불투명하면 지도가 잘린 것처럼 읽힌다).
-    <div className="flex items-start gap-3 rounded-lg border border-border bg-surface/95 px-4 py-2.5 text-sm shadow-md backdrop-blur">
+    <div className="pointer-events-auto flex items-start gap-3 rounded-lg border border-border bg-surface/95 px-4 py-2.5 text-sm shadow-md backdrop-blur">
       <div className="min-w-0 flex-1">
         <p className="font-medium text-fg">{properties.name}</p>
         <p className="mt-0.5 text-fg-muted text-xs leading-relaxed">
