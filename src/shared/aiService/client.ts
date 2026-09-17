@@ -132,6 +132,7 @@ export interface PlotForecast {
     tempMax: number | null;
     tempMin: number | null;
     rainfallMm: number | null;
+    rainChance: number | null;
     windMax: number | null;
   }>;
 }

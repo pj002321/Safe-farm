@@ -45,6 +45,7 @@ export function PlotForecastCard({
             <span className="inline-flex items-center gap-1 font-mono text-fg text-xs tabular-nums">
               <DropletIcon className="size-3.5 text-info" />
               {day.rainfallMm != null ? `${day.rainfallMm}mm` : "–"}
+              {day.rainChance != null && ` (${day.rainChance}%)`}
             </span>
 
             <span className="ml-auto inline-flex items-center gap-1 font-mono text-fg text-xs tabular-nums">

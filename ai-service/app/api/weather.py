@@ -29,6 +29,7 @@ def plot_forecast(lat: float, lon: float) -> dict:
             "tempMax": row["temp_max"],
             "tempMin": row["temp_min"],
             "rainfallMm": row["rainfall_mm"],
+            "rainChance": row["rain_chance"],
             "windMax": row["wind_max"],
         }
         for row in normalize_daily_forecast(daily)
