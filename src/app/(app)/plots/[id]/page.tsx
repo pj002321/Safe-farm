@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { CropCards } from "@/components/plot/CropCards";
 import { CultivationList } from "@/components/plot/CultivationList";
-import { Button } from "@/components/shared/Button";
 import { SectionHeading } from "@/components/shared/SectionHeading";
+import { SubmitButton } from "@/components/shared/SubmitButton";
 import { listCropOptions } from "@/features/crops/cropStore";
 import { listCultivationCards } from "@/features/cultivations/cultivationStore";
 import { loadPlotGrowth } from "@/features/cultivations/growthStore";
@@ -117,11 +117,12 @@ export default async function Page({
           className="mt-3 flex flex-col gap-4 rounded-lg bg-surface-2 p-4"
         >
           <input name="plotId" type="hidden" value={plot.id} />
-          <CropCards crops={crops} />
+          <CropCards crops={crops} maxSowingDate={today} />
           <div>
-            <Button size="sm" type="submit">
+            {/* 연타하면 같은 작물이 그만큼 더 생긴다 — `SubmitButton` 참고. */}
+            <SubmitButton pendingKo="추가하는 중" size="sm">
               추가
-            </Button>
+            </SubmitButton>
           </div>
         </form>
       </details>

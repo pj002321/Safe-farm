@@ -49,6 +49,10 @@ import type { CropOption } from "@/features/crops/domain/cropOption";
  *   켜져 있다)까지 걸려서 실제로는 아무것도 안 골랐는데 다 골라진 것처럼
  *   보였다. 그 상태로는 진짜 선택과 구분이 안 돼 제출해도 `cropIds` 가
  *   비어 있었다 — "작물 추가가 안 된다"의 원인.
+ * - 파종일은 **오늘까지만** 고를 수 있다(`maxSowingDate`). 미래 날짜를 넣으면
+ *   "날짜를 압니다" 경로가 `GROWING` 으로 저장해, 아직 심지도 않은 작물이
+ *   "자라는 중"으로 뜨고 적산온도까지 쌓기 시작한다. 브라우저의 `max` 는 달력만
+ *   막으므로 서버(`toCultivationInputs`)도 같은 판정을 한다.
  *
  * [Usage]
  * ```tsx
@@ -81,12 +85,18 @@ interface CropCardsProps {
   name?: string;
   /** 미리 선택해 둘 `crop_id`. */
   defaultSelected?: readonly number[];
+  /**
+   * 파종일로 고를 수 있는 마지막 날(한국 기준 오늘). 서버가 정해 내려보낸다 —
+   * 여기서 `new Date()` 를 읽으면 서버가 그린 마크업과 달라 하이드레이션이 어긋난다.
+   */
+  maxSowingDate?: string;
 }
 
 export function CropCards({
   crops,
   name = "cropIds",
   defaultSelected = [],
+  maxSowingDate,
 }: CropCardsProps) {
   const [query, setQuery] = useState("");
   // 검색으로 걸러져도 **이미 고른 작물은 계속 보인다.** 안 그러면 체크한 채로
@@ -185,6 +195,7 @@ export function CropCards({
               <div className="hidden flex-col gap-3 border-border border-t bg-surface-2/60 p-4 group-has-[>label>input:checked]/crop:flex">
                 <CropSowingFields
                   cropId={crop.cropId}
+                  maxDate={maxSowingDate}
                   required={selected.has(crop.cropId)}
                 />
               </div>
@@ -219,9 +230,11 @@ export function CropCards({
 function CropSowingFields({
   cropId,
   required,
+  maxDate,
 }: {
   cropId: number;
   required: boolean;
+  maxDate?: string;
 }) {
   return (
     <div className="group/sowing flex flex-col gap-3">
@@ -259,6 +272,7 @@ function CropSowingFields({
           <input
             className="w-full rounded-md border border-border bg-surface py-2 pr-3 pl-10 text-fg text-sm transition-colors hover:border-accent focus:border-accent"
             id={`sowing-date-${cropId}`}
+            max={maxDate}
             name={`sowingDate.${cropId}`}
             type="date"
           />

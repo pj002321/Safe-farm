@@ -258,6 +258,9 @@ function CultivationItem({
                   className="w-full rounded-md border border-border bg-surface px-3 py-2 text-fg text-sm transition-colors hover:border-accent focus:border-accent"
                   defaultValue={card.sowingDate ?? ""}
                   id={`sowing-date-${card.id}`}
+                  // 미래 날짜를 고르면 심지도 않은 작물이 "자라는 중"이 된다.
+                  // 달력을 오늘에서 끊고, 같은 판정을 `editCultivationSowing` 이 한 번 더 한다.
+                  max={today}
                   name="sowingDate"
                   type="date"
                 />

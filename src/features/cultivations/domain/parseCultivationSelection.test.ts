@@ -49,6 +49,8 @@ describe("parseCultivationSelections", () => {
   });
 });
 
+const TODAY = "2025-09-17";
+
 describe("toCultivationInputs", () => {
   it("품종이 없는 작물은 건너뛴다", () => {
     const result = toCultivationInputs(
@@ -67,6 +69,7 @@ describe("toCultivationInputs", () => {
         },
       ],
       new Map([[5, 105]]),
+      TODAY,
     );
     expect(result).toEqual([
       {
@@ -89,6 +92,7 @@ describe("toCultivationInputs", () => {
         },
       ],
       new Map([[5, 105]]),
+      TODAY,
     );
     expect(result).toEqual([
       {
@@ -98,6 +102,45 @@ describe("toCultivationInputs", () => {
         sowingType: "SEEDLING",
       },
     ]);
+  });
+
+  it("오늘보다 뒤의 날짜는 PLANNED 로 넣되, 심을 예정일로 남긴다", () => {
+    const result = toCultivationInputs(
+      [
+        {
+          cropId: 5,
+          sowingDate: "2025-09-18",
+          sowingUnknown: false,
+          sowingMethod: "seed",
+        },
+      ],
+      new Map([[5, 105]]),
+      TODAY,
+    );
+    expect(result).toEqual([
+      {
+        variantId: 105,
+        status: "PLANNED",
+        sowingDate: "2025-09-18",
+        sowingType: "SEED",
+      },
+    ]);
+  });
+
+  it("오늘 당일은 심은 것으로 본다 — GROWING", () => {
+    const result = toCultivationInputs(
+      [
+        {
+          cropId: 5,
+          sowingDate: TODAY,
+          sowingUnknown: false,
+          sowingMethod: "seed",
+        },
+      ],
+      new Map([[5, 105]]),
+      TODAY,
+    );
+    expect(result[0]?.status).toBe("GROWING");
   });
 
   it("미정 체크를 안 해도 날짜를 안 넣으면 PLANNED 다 — GROWING+날짜없음은 DB 제약 위반", () => {
@@ -111,6 +154,7 @@ describe("toCultivationInputs", () => {
         },
       ],
       new Map([[5, 105]]),
+      TODAY,
     );
     expect(result).toEqual([
       {
