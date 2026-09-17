@@ -27,7 +27,8 @@ import {
  */
 
 const CARD_COLUMNS =
-  "id, title, reason, priority, done, done_at, generated_at, plots!inner(name, user_id)";
+  "id, plot_id, title, reason, priority, done, done_at, expired_at, generated_at, " +
+  "plots!inner(name, user_id)";
 
 /**
  * 홈에 보여 줄 카드. **"지금 해야 할 일"**이다.
@@ -60,6 +61,11 @@ export async function listTaskCards(
     // `plot_tasks` 에는 `deleted_at` 이 없다. 숨긴 밭의 카드를 가리는 것은
     // 이 조인 조건뿐이라, 빼면 지운 밭의 할 일이 대시보드에 그대로 뜬다.
     .is("plots.deleted_at", null)
+    .or(
+      // 살아 있는 미완료(닫히지 않은 것)만. 배치가 닫은 카드는 이력으로 간다.
+      `and(done.is.false,expired_at.is.null,generated_at.gte.${carryStart}),` +
+        `and(done.is.true,done_at.gte.${dayStart})`,
+    )
     .order("generated_at", { ascending: false });
 
   if (error) throw new Error(error.message);
@@ -69,7 +75,8 @@ export async function listTaskCards(
 }
 
 /**
- * 이전 기록. 홈에서 빠진 나머지 — 이월 기간을 넘긴 미완료와, 오늘 이전에 끝낸 것.
+ * 이전 기록. 홈에서 빠진 나머지다 — 배치가 닫은 카드, 오늘 이전에 끝낸 카드,
+ * 그리고 기간은 지났지만 배치가 아직 안 닫은 카드.
  *
  * `listTaskCards` 의 정확한 여집합이라 두 화면 사이로 새는 카드가 없다.
  * (`done=true` 인데 `done_at` 이 비어 있는 행은 나올 수 없다 — 완료를 쓰는 곳은
@@ -92,9 +99,16 @@ export async function listTaskHistory(
     .from("plot_tasks")
     .select(CARD_COLUMNS)
     .eq("plots.user_id", userId)
+    // 홈과 같은 기준으로 숨긴 밭을 뺀다. 한쪽만 걸면 지운 밭의 카드가 홈에서는
+    // 사라지고 이력에는 남아, 아래 주석이 말하는 "정확한 여집합"이 깨진다.
+    .is("plots.deleted_at", null)
     .or(
-      `and(done.is.false,generated_at.lt.${carryStart}),` +
-        `and(done.is.true,done_at.lt.${dayStart})`,
+      // ① 배치가 닫은 카드(안 하고 넘어감) ② 오늘 이전에 끝낸 카드
+      // ③ 3일이 지났는데 아직 안 닫힌 카드 — 배치가 돌기 전 창에 존재한다.
+      //    빠뜨리면 그 카드가 홈에도 이력에도 없는 사각지대가 된다.
+      `expired_at.not.is.null,` +
+        `and(done.is.true,done_at.lt.${dayStart}),` +
+        `and(done.is.false,expired_at.is.null,generated_at.lt.${carryStart})`,
     )
     .order("generated_at", { ascending: false })
     // 페이지네이션 없이 다 불러오면 오래 쓴 계정에서 화면이 멈춘다.
