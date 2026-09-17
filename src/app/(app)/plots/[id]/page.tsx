@@ -1,7 +1,10 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { CalendarIcon } from "@/components/icons";
+import { CropCards, SowingStatusOption } from "@/components/plot/CropCards";
 import { Button } from "@/components/shared/Button";
 import { SectionHeading } from "@/components/shared/SectionHeading";
+import { listCropOptions } from "@/features/crops/cropStore";
 import {
   findCalendarByNameKo,
   stageAt,
@@ -9,7 +12,11 @@ import {
 import { daysSincePlanting } from "@/features/plots/domain/plotSummary";
 import { getPlot } from "@/features/plots/plotStore";
 import { getCurrentProfile } from "@/shared/auth/profileStore";
-import { harvestCultivation } from "./actions";
+import {
+  addCultivations,
+  editCultivationSowing,
+  harvestCultivation,
+} from "./actions";
 
 /**
  * ---------------------------------------------
@@ -26,6 +33,14 @@ import { harvestCultivation } from "./actions";
  *   과수 등)은 생육단계 없이 이름만 보여준다.
  * - 작물 이름은 `cultivations` 를 타고 온 작물 마스터의 이름이다. 화면에 박아 둔
  *   목록에서 찾지 않는다 — 그 목록의 슬러그는 마스터와 이어지지 않았다.
+ * - **작물 추가는 밭을 새로 만들지 않고도 된다.** 이미 심어 둔 작물이 있는
+ *   상태에서 다른 작물을 더 심을 수 있어야 해서(등록 때 다 고르라고 강요하지
+ *   않는다), 등록 마법사와 같은 `CropCards`·`parseCultivationSelections` 를
+ *   재사용한 `addCultivations` 를 붙였다.
+ * - **파종일도 여기서 고친다.** 등록·작물 추가 때는 한 번만 받고 고칠 길이
+ *   없었다 — GDD 적산 기준점이라 잘못 적으면 생육 단계가 계속 틀어진다.
+ *   `SowingStatusOption`(`CropCards.tsx`)을 그대로 가져다 쓴다 — 재배가
+ *   하나뿐이라 필드 이름에 cropId 를 매달지 않는다.
  * ---------------------------------------------
  */
 
@@ -38,6 +53,7 @@ export default async function Page({ params }: PageProps<"/plots/[id]">) {
   if (!plot) notFound();
 
   const now = new Date();
+  const crops = await listCropOptions();
 
   return (
     <main className="mx-auto flex max-w-2xl flex-col gap-6 px-6 py-6 sm:py-8">
@@ -94,9 +110,91 @@ export default async function Page({ params }: PageProps<"/plots/[id]">) {
                 생육 단계 정보가 아직 없습니다.
               </p>
             )}
+
+            {/* 수확·실패 처리된 건은 되돌릴 일이 아니라 수정 칸을 안 보여준다. */}
+            {(cultivation.status === "GROWING" ||
+              cultivation.status === "PLANNED") && (
+              <details className="mt-2 [&_summary]:list-none">
+                <summary className="inline-flex w-fit cursor-pointer items-center gap-1 text-fg-subtle text-xs transition-colors hover:text-accent">
+                  <CalendarIcon className="size-3.5" />
+                  파종일 수정
+                </summary>
+                <form
+                  action={editCultivationSowing}
+                  className="group/sowing mt-2 flex flex-col gap-3 rounded-md bg-surface-2 p-3"
+                >
+                  <input name="plotId" type="hidden" value={plot.id} />
+                  <input
+                    name="cultivationId"
+                    type="hidden"
+                    value={cultivation.id}
+                  />
+                  <fieldset className="flex flex-col gap-1.5">
+                    <legend className="font-medium text-fg text-xs">
+                      파종일
+                    </legend>
+                    <SowingStatusOption
+                      defaultChecked={cultivation.sowingDate !== null}
+                      labelKo="날짜를 압니다"
+                      name="sowingStatus"
+                      value="known"
+                    />
+                    <SowingStatusOption
+                      defaultChecked={cultivation.sowingDate === null}
+                      labelKo="아직 안 심었어요"
+                      name="sowingStatus"
+                      value="unknown"
+                    />
+                  </fieldset>
+
+                  {/* "날짜를 압니다"를 골랐을 때만 나타난다(CropSowingFields 와 같은 패턴). */}
+                  <div className="hidden flex-col gap-1.5 group-has-[input[value=known]:checked]/sowing:flex">
+                    <label
+                      className="font-medium text-fg text-xs"
+                      htmlFor={`sowing-date-${cultivation.id}`}
+                    >
+                      날짜 선택
+                    </label>
+                    <input
+                      className="w-full rounded-md border border-border bg-surface px-3 py-2 text-fg text-sm transition-colors hover:border-accent focus:border-accent"
+                      defaultValue={cultivation.sowingDate ?? ""}
+                      id={`sowing-date-${cultivation.id}`}
+                      name="sowingDate"
+                      type="date"
+                    />
+                  </div>
+
+                  <div>
+                    <Button size="sm" type="submit">
+                      저장
+                    </Button>
+                  </div>
+                </form>
+              </details>
+            )}
           </div>
         );
       })}
+
+      {/* 등록 화면과 같은 `CropCards`·`addCultivations` 조합이다 — 이미 심어 둔
+          작물이 있어도 밭을 새로 만들지 않고 나중에 더할 수 있어야 한다. */}
+      <details className="[&_summary]:list-none">
+        <summary className="inline-flex w-fit cursor-pointer items-center rounded-md px-3 py-1.5 font-medium text-fg-muted text-sm transition-colors duration-200 ease-out-expo hover:bg-surface-2 hover:text-fg">
+          작물 추가
+        </summary>
+        <form
+          action={addCultivations}
+          className="mt-3 flex flex-col gap-4 rounded-lg bg-surface-2 p-4"
+        >
+          <input name="plotId" type="hidden" value={plot.id} />
+          <CropCards crops={crops} />
+          <div>
+            <Button size="sm" type="submit">
+              추가
+            </Button>
+          </div>
+        </form>
+      </details>
     </main>
   );
 }

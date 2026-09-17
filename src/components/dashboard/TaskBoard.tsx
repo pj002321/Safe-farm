@@ -54,6 +54,8 @@ interface TaskBoardProps {
 }
 
 export function TaskBoard({ tasks, toggleTaskAction }: TaskBoardProps) {
+  if (tasks.length === 0) return <EmptyTasks />;
+
   const open = tasks.filter((task) => !task.done);
   const done = tasks.filter((task) => task.done);
   const shown = open.slice(0, VISIBLE_COUNT);
@@ -104,6 +106,31 @@ export function TaskBoard({ tasks, toggleTaskAction }: TaskBoardProps) {
           </div>
         </section>
       )}
+    </div>
+  );
+}
+
+/**
+ * 카드가 하나도 없을 때.
+ *
+ * 빈 배열을 그대로 두면 "오늘 할 일" 밑이 그냥 빈 공간이라 서비스가 멈춘
+ * 것처럼 보인다(빈 상태 없는 `PlotStrip` 이 같은 이유로 온보딩을 그리는 것과
+ * 같은 문제). 판정은 매일·밭마다 실제로 도는 것이니, "확인했고 지금은 없다"를
+ * 눈에 보이는 카드 한 장으로 알려준다.
+ */
+function EmptyTasks() {
+  return (
+    <div className="rounded-lg border border-border border-dashed bg-surface-2/40 px-6 py-8 text-center">
+      <span className="mx-auto grid size-11 place-items-center rounded-full bg-telemetry text-accent-on">
+        <CheckIcon strokeWidth={3} />
+      </span>
+      <p className="mt-3 font-semibold text-fg text-sm">
+        오늘은 특별히 할 일이 없습니다
+      </p>
+      <p className="mx-auto mt-1.5 max-w-xs text-balance text-fg-muted text-xs leading-relaxed">
+        강수량과 생육 단계를 매일 다시 판정합니다. 조건이 바뀌면 그 즉시 카드로
+        알려 드릴게요.
+      </p>
     </div>
   );
 }

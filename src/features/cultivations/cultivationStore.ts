@@ -79,3 +79,27 @@ export async function markHarvested(cultivationId: string): Promise<void> {
   if (error) throw new Error(error.message);
   if (!data || data.length === 0) throw new Error("CULTIVATION_NOT_FOUND");
 }
+
+/**
+ * 파종일(또는 "아직 안 심었어요")을 고친다.
+ *
+ * 등록·작물 추가 때 잘못 적거나 비워 둔 파종일을 나중에 고칠 방법이 없었다
+ * — 이 값이 GDD 적산의 기준점이라 틀리면 생육 단계·오늘 할 일 판정 전체가
+ * 어긋난다. 수확·실패 처리된 건은 화면(`plots/[id]/page.tsx`)에서 애초에
+ * 수정 칸을 보여주지 않는다 — 여기서는 막지 않는다.
+ */
+export async function updateCultivationSowing(
+  cultivationId: string,
+  input: { status: "PLANNED" | "GROWING"; sowingDate: string | null },
+): Promise<void> {
+  const supabase = await getSupabaseServer();
+
+  const { data, error } = await supabase
+    .from("cultivations")
+    .update({ status: input.status, sowing_date: input.sowingDate })
+    .eq("id", cultivationId)
+    .select("id");
+
+  if (error) throw new Error(error.message);
+  if (!data || data.length === 0) throw new Error("CULTIVATION_NOT_FOUND");
+}

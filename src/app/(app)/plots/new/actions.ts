@@ -14,6 +14,7 @@ import {
 } from "@/features/monitoring/domain/plotLocation";
 import { parsePlotRegistration } from "@/features/plots/domain/registerPlot";
 import { insertPlot } from "@/features/plots/plotStore";
+import { aiService } from "@/shared/aiService/client";
 import { requireUser } from "@/shared/auth/session";
 /**
  * ---------------------------------------------
@@ -75,6 +76,17 @@ export async function registerPlot(formData: FormData): Promise<void> {
     plotId,
     toCultivationInputs(selections, variantIdByCropId),
   );
+
+  // 자정 배치를 기다리지 않고 등록 직후 오늘 할 일을 채운다. ai-service 가
+  // 죽어 있어도 밭 등록 자체는 끝난 상태라 리다이렉트를 막지 않는다.
+  const generated = await aiService.generateTasks(plotId);
+  if (!generated.ok) {
+    console.error(
+      "[registerPlot] 할 일 카드 생성 실패",
+      generated.reason,
+      generated.detail,
+    );
+  }
 
   redirect("/dashboard");
 }

@@ -248,4 +248,12 @@ export const aiService = {
   /** 밭 좌표 기준 7일 예보(기온·강수·최대풍속). Open-Meteo 를 그때그때 불러온다. */
   plotForecast: (lat: number, lon: number) =>
     call<PlotForecast>(`/v1/weather/plot?lat=${lat}&lon=${lon}`),
+  /**
+   * 밭 하나만 즉시 판정해 오늘 할 일 카드를 만든다. 자정 배치를 기다리지 않고
+   * 밭 등록·재배 추가 직후 호출한다(registerPlot/addCultivations).
+   */
+  generateTasks: (plotId: string) =>
+    call<{ created: number }>(`/v1/tasks/generate?plot_id=${plotId}`, {
+      method: "POST",
+    }),
 };
