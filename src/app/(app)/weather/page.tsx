@@ -4,7 +4,7 @@ import { CloudRainIcon } from "@/components/icons";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { SatelliteScan } from "@/components/shared/SatelliteScan";
 import { SectionHeading } from "@/components/shared/SectionHeading";
-import { PlotForecastCard } from "@/components/weather/PlotForecastCard";
+import { PlotForecastRow } from "@/components/weather/PlotForecastRow";
 import { listPlots } from "@/features/plots/plotStore";
 import { aiService } from "@/shared/aiService/client";
 import {
@@ -46,10 +46,14 @@ export default async function Page() {
 
   return (
     <main className="mx-auto flex max-w-4xl flex-col gap-6 px-6 py-6 sm:py-8">
-      <SectionHeading
-        description="밭 좌표 기준 실황과 예보입니다."
-        title="날씨"
-      />
+      {/* 홈·내 정보와 같은 머리말 구조(위 지도 페이지 주석 참고). */}
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <SectionHeading
+          description="밭 좌표 기준 실황과 예보입니다."
+          eyebrow="weather"
+          title="날씨"
+        />
+      </div>
       {plots.length === 0 ? (
         <EmptyState
           actionHref="/plots/new"
@@ -59,32 +63,39 @@ export default async function Page() {
           titleKo="밭 위치를 먼저 알려 주세요"
         />
       ) : (
-        <div className="flex flex-col gap-4">
-          {plots.map((plot) => (
+        // 밭이 목록이므로 목록 요소로 적는다 — 스크린리더가 "3개 중 2번째"를 말한다.
+        <ol className="flex flex-col gap-2">
+          {plots.map((plot, index) => (
             // 밭마다 경계를 따로 둔다. 하나로 묶으면 가장 느린 밭이 나머지를
             // 붙잡아, 이미 받아 온 예보까지 같이 기다리게 된다.
-            <Suspense
-              fallback={
-                <div className="rounded-xl border border-border bg-surface p-4">
-                  <SatelliteScan
-                    compact
-                    labelKo={`${plot.nameKo ?? "이름 없는 밭"} 예보를 읽는 중`}
-                  />
-                </div>
-              }
-              key={plot.id}
-            >
-              <PlotForecast
-                cropNameKo={plot.cropNameKo}
-                latitude={plot.latitude}
-                longitude={plot.longitude}
-                nameKo={plot.nameKo ?? "이름 없는 밭"}
-                plotId={plot.id}
-                todayIso={todayIso}
-              />
-            </Suspense>
+            <li key={plot.id}>
+              <Suspense
+                fallback={
+                  <div className="rounded-xl border border-border bg-surface p-3">
+                    <SatelliteScan
+                      compact
+                      labelKo={`${plot.nameKo ?? "이름 없는 밭"} 예보를 읽는 중`}
+                    />
+                  </div>
+                }
+              >
+                <PlotForecast
+                  cropNameKo={plot.cropNameKo}
+                  // 첫 줄만 펴 둔다. 전부 접히면 화면이 비어 보이고, 줄을 펼 수
+                  // 있다는 것도 알 길이 없다. "가장 심한 밭"을 여는 건 하지 않는다 —
+                  // 그러려면 밭 전체 예보를 먼저 기다려야 해서, 밭별 Suspense 로
+                  // 흘려보내는 이 구조가 무너진다.
+                  defaultOpen={index === 0}
+                  latitude={plot.latitude}
+                  longitude={plot.longitude}
+                  nameKo={plot.nameKo ?? "이름 없는 밭"}
+                  plotId={plot.id}
+                  todayIso={todayIso}
+                />
+              </Suspense>
+            </li>
           ))}
-        </div>
+        </ol>
       )}
     </main>
   );
@@ -104,6 +115,7 @@ async function PlotForecast({
   cropNameKo,
   plotId,
   todayIso,
+  defaultOpen,
 }: {
   latitude: number;
   longitude: number;
@@ -111,6 +123,7 @@ async function PlotForecast({
   cropNameKo: string | null;
   plotId: string;
   todayIso: string;
+  defaultOpen: boolean;
 }) {
   // plotId 를 줘야 서버가 이 밭의 작물·행정구역을 찾아 하루치 GDD·작물 해석·
   // 기상특보까지 함께 돌려준다. 좌표만 주면 일반 기상값만 온다.
@@ -119,10 +132,12 @@ async function PlotForecast({
   if (result.ok) {
     rememberForecast(plotId, result.data);
     return (
-      <PlotForecastCard
+      <PlotForecastRow
         cropNameKo={cropNameKo}
+        defaultOpen={defaultOpen}
         forecast={result.data}
         nameKo={nameKo}
+        plotId={plotId}
         todayIso={todayIso}
       />
     );
@@ -131,11 +146,13 @@ async function PlotForecast({
   const stale = recallForecast(plotId);
   if (stale) {
     return (
-      <PlotForecastCard
+      <PlotForecastRow
         cachedAt={stale.cachedAt}
         cropNameKo={cropNameKo}
+        defaultOpen={defaultOpen}
         forecast={stale.data}
         nameKo={nameKo}
+        plotId={plotId}
         todayIso={todayIso}
       />
     );

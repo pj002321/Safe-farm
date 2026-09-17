@@ -105,7 +105,11 @@ export async function listPlots(userId: string): Promise<PlotMapPoint[]> {
     .from("plots")
     .select(`id, name, latitude, longitude, ${CULTIVATION_SELECT}`)
     // RLS가 자기 밭만 보이게 하지만, profileStore.ts처럼 where도 명시한다.
-    .eq("user_id", userId);
+    .eq("user_id", userId)
+    // ⚠️ 정렬을 명시하지 않으면 Postgres 가 순서를 보장하지 않는다. 날씨 화면이
+    //    "첫 밭을 펼쳐 둔다"는 규칙을 쓰므로, 순서가 흔들리면 새로 고칠 때마다
+    //    다른 밭이 펴진다. `listPlotCards` 와 같은 정렬로 맞춘다.
+    .order("created_at", { ascending: false });
 
   if (error) throw new Error(error.message);
 

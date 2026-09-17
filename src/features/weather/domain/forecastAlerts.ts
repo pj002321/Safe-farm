@@ -72,6 +72,12 @@ function joinDates(dates: string[]): string {
   return dates.map(shortDate).join(", ");
 }
 
+/**
+ * ⚠️ **반환 순서는 심각도 내림차순이다.** 밭 목록의 한 줄 요약이 `alerts[0]` 을
+ *    "가장 급한 것"으로 그대로 쓴다. 여기에 push 를 하나 끼워 넣어 순서가 깨지면
+ *    목록이 엉뚱한 경고를 대표로 띄우는데, 타입도 린트도 그걸 못 잡는다.
+ *    그래서 순서를 테스트로 박아 두었다(forecastAlerts.test.ts).
+ */
 export function buildForecastAlerts(forecast: PlotForecast): ForecastAlert[] {
   const alerts: ForecastAlert[] = [];
   const impact = forecast.cropImpact;
@@ -117,8 +123,11 @@ export function buildForecastAlerts(forecast: PlotForecast): ForecastAlert[] {
       alerts.push({
         id: "hot",
         tone: "caution",
-        titleKo: `고온 ${hotDays.length}일 — ${impact.cropNameKo} 상한 ${upper}℃ 초과`,
-        bodyKo: `${joinDates(hotDays.map((d) => d.date))}. 한낮 작업을 피하고 물 마름을 자주 확인하세요.`,
+        // ⚠️ 제목은 짧게 유지한다. 이 문자열이 밭 목록의 **한 줄 요약**에 그대로
+        //    들어가는데(`PlotForecastRow`), 폭이 281px 라 임계 설명까지 붙이면
+        //    잘린다. 근거는 본문에 둔다 — 펼치면 보인다.
+        titleKo: `고온 ${hotDays.length}일`,
+        bodyKo: `${joinDates(hotDays.map((d) => d.date))} — ${impact.cropNameKo} 상한 ${upper}℃ 초과. 한낮 작업을 피하고 물 마름을 자주 확인하세요.`,
         dates: hotDays.map((d) => d.date),
       });
     }
@@ -136,8 +145,8 @@ export function buildForecastAlerts(forecast: PlotForecast): ForecastAlert[] {
       alerts.push({
         id: "cold",
         tone: "caution",
-        titleKo: `생육 정지 ${coldDays.length}일 — ${impact.cropNameKo} 기준온도 ${impact.baseTempC}℃ 미만`,
-        bodyKo: `${joinDates(coldDays.map((d) => d.date))}. 적산온도가 거의 안 쌓여 수확이 뒤로 밀립니다.`,
+        titleKo: `생육 정지 ${coldDays.length}일`,
+        bodyKo: `${joinDates(coldDays.map((d) => d.date))} — ${impact.cropNameKo} 기준온도 ${impact.baseTempC}℃ 미만. 적산온도가 거의 안 쌓여 수확이 뒤로 밀립니다.`,
         dates: coldDays.map((d) => d.date),
       });
     }

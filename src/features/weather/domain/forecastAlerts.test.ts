@@ -140,6 +140,39 @@ describe("buildForecastAlerts — 특보 label 이 없을 때", () => {
   });
 });
 
+describe("buildForecastAlerts — 순서 보장", () => {
+  it("가장 급한 것이 맨 앞이다 — 밭 목록 한 줄이 alerts[0] 을 대표로 쓴다", () => {
+    const alerts = buildForecastAlerts(
+      forecast({
+        days: [day("2026-09-20", 1, 40), day("2026-09-21", 4, 16)],
+        rainfall7d: 0,
+        cropImpact: CABBAGE,
+        alert: { warnings: ["호우"], label: "호우경보", asOf: null },
+      }),
+    );
+    // 특보 → 서리 → 고온 → 저온 → 관수. 심각도가 뒤로 갈수록 낮아져야 한다.
+    const rank = { danger: 0, caution: 1, info: 2 } as const;
+    const tones = alerts.map((a) => rank[a.tone]);
+    expect(tones).toEqual([...tones].sort((x, y) => x - y));
+    expect(alerts[0].id).toBe("official");
+  });
+
+  it("경고 제목이 짧다 — 목록 한 줄(281px)에서 잘리면 안 된다", () => {
+    const alerts = buildForecastAlerts(
+      forecast({
+        days: [day("2026-09-20", 18, 40), day("2026-09-21", 3, 16)],
+        cropImpact: CABBAGE,
+      }),
+    );
+    for (const alert of alerts) {
+      expect(alert.titleKo.length).toBeLessThanOrEqual(20);
+    }
+    // 임계 근거는 사라진 게 아니라 본문으로 내려갔다.
+    expect(alerts.find((a) => a.id === "hot")?.bodyKo).toContain("25℃");
+    expect(alerts.find((a) => a.id === "cold")?.bodyKo).toContain("5℃");
+  });
+});
+
 describe("dayFlag", () => {
   it("서리가 저온보다 먼저다 — 둘 다면 더 급한 쪽을 보여준다", () => {
     expect(dayFlag(day("2026-09-20", 1, 17), CABBAGE)).toBe("frost");

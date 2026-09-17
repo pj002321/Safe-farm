@@ -234,14 +234,37 @@ export function MapWorkspace({ points }: MapWorkspaceProps) {
             </div>
           </div>
         )}
+
+        {/*
+          ⚠️ 고른 지역의 값은 **지도 위에** 얹는다. 지도 아래에 두었더니 누른 자리와
+             답이 떨어져 있어서, 모바일에서는 스크롤해야 값이 보였다 — 지도가 화면
+             절반을 차지하므로 누르는 동작과 결과가 한 화면에 없었다.
+             누른 곳 바로 아래에 답이 나오는 건 지도 앱의 기본 문법이다.
+          지도 **안쪽 아래**에 붙이되 높이를 낮게 유지한다.
+          ⚠️ `bottom-2` 로는 부족하다 — 카카오가 컨테이너 맨 아래 모서리에 로고와
+             축척·저작권 표기를 심는데, 그 밴드를 카드가 덮는다(카카오맵 약관이
+             출처 노출을 요구한다). `bottom-7`(28px)이 그 위다.
+          ⚠️ 래퍼는 `pointer-events-none` 이다. 카드가 차지하지 않는 여백까지
+             이벤트를 먹으면 지도 하단이 드래그·탭 불가 영역이 된다 — 카드를
+             지도 밖에 두던 때는 없던 회귀다. 카드 본체만 다시 살린다
+             (`PlotMapFrame` 이 같은 이유로 쓰는 방식).
+        */}
+        {selected && (
+          <div className="pointer-events-none absolute inset-x-2 bottom-7 z-20">
+            <RegionInfo
+              layer={layer}
+              onClose={() => setSelectedCode(null)}
+              properties={selected.properties}
+            />
+          </div>
+        )}
       </div>
 
       <Legend asOf={ready?.asOf} layer={layer} />
 
-      {/* 선택 전에도 자리를 비워 두지 않는다 — 무엇을 눌러야 하는지 알려 준다. */}
-      {selected ? (
-        <RegionInfo layer={layer} properties={selected.properties} />
-      ) : (
+      {/* 아직 아무것도 안 골랐을 때만 무엇을 눌러야 하는지 알려 준다. 고른 뒤에는
+          값이 지도 위에 떠 있으므로 이 줄이 남아 있으면 같은 자리에서 두 번 말하게 된다. */}
+      {!selected && (
         <p className="rounded-lg border border-border border-dashed px-4 py-3 text-fg-muted text-sm">
           지도에서 시군구를 누르면 그 지역의 실제 수치를 보여 드립니다.
         </p>

@@ -30,10 +30,17 @@ export default async function Page() {
 
   return (
     <main className="mx-auto flex max-w-4xl flex-col gap-6 px-6 py-6 sm:py-8">
-      <SectionHeading
-        description="등록한 밭과 그 지역의 관측을 한 지도에서 봅니다."
-        title="지도"
-      />
+      {/* 앱 페이지 공통 머리말. 홈(today)·내 정보(account)·텃밭 관리(plots)와 같은
+          구조다 — eyebrow 가 있어야 계측 화면의 채널 라벨 리듬이 맞는다.
+          여기만 eyebrow 를 빼 두어 제목 크기는 같은데 윗줄이 없어 어긋나 보였다.
+          감싸는 flex 는 오른쪽에 보조 동작을 둘 자리다(내 정보의 로그아웃과 같은 자리). */}
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <SectionHeading
+          description="등록한 밭과 그 지역의 관측을 한 지도에서 봅니다."
+          eyebrow="map"
+          title="지도"
+        />
+      </div>
 
       {plots.length === 0 && (
         <p className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border border-border border-dashed px-4 py-3 text-fg-muted text-sm">
