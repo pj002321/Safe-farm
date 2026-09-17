@@ -102,13 +102,23 @@ export function ObservationChart({
   }
 
   const box: ChartBox = { width: WIDTH, height, padding: BOX_PADDING };
-  const scale = createScale(allDates, domain, box);
   const ticks = axisTicks(domain.lo, domain.hi, tickStep);
   const decimals = (String(tickStep).split(".")[1] ?? "").length;
 
+  // 눈금은 `domain` 안의 값을 `tickStep` 간격으로 반올림해 만든다 — 그 반올림이
+  // `domain.hi` 를 살짝 넘기면(예: hi=0.282 인데 눈금은 반올림된 0.3) 맨 위 눈금이
+  // 그린 영역 밖(y<0)으로 나가 SVG 위쪽에서 잘린다. 눈금을 반드시 담도록 도메인을
+  // 넓혀서 스케일을 만든다 — 손으로 고른 "예쁜" domain(예: 0.2~0.85)에서는 원래
+  // 안 걸리던 경우라 지금까지 안 보였다.
+  const effectiveDomain = {
+    lo: Math.min(domain.lo, ticks[0] ?? domain.lo),
+    hi: Math.max(domain.hi, ticks.at(-1) ?? domain.hi),
+  };
+  const scale = createScale(allDates, effectiveDomain, box);
+
   const axisLeft = BOX_PADDING.left;
   const axisRight = WIDTH - BOX_PADDING.right;
-  const hasZeroLine = domain.lo < 0 && domain.hi > 0;
+  const hasZeroLine = effectiveDomain.lo < 0 && effectiveDomain.hi > 0;
   // 날짜가 한 종류뿐이면 모든 월 라벨이 같은 x 에 겹쳐 찍힌다.
   // 구간 밖으로 밀린 월 라벨은 축 왼쪽에 삐져나오거나 viewBox 에 잘린다.
   const labels = (

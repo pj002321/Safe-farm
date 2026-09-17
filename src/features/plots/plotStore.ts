@@ -106,7 +106,7 @@ export async function listPlots(userId: string): Promise<PlotMapPoint[]> {
 
   const { data, error } = await supabase
     .from("plots")
-    .select(`id, name, latitude, longitude, ${CULTIVATION_SELECT}`)
+    .select(`id, name, latitude, longitude, grid_x, grid_y, ${CULTIVATION_SELECT}`)
     // RLS가 자기 밭만 보이게 하지만, profileStore.ts처럼 where도 명시한다.
     .eq("user_id", userId)
     .is("deleted_at", null)
@@ -126,7 +126,7 @@ export async function getPlot(
 
   const { data, error } = await supabase
     .from("plots")
-    .select(`id, name, latitude, longitude, ${CULTIVATION_SELECT}`)
+    .select(`id, name, latitude, longitude, grid_x, grid_y, ${CULTIVATION_SELECT}`)
     .eq("user_id", userId)
     .eq("id", plotId)
     .is("deleted_at", null)

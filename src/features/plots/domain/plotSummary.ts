@@ -66,6 +66,9 @@ export interface PlotMapPoint {
   nameKo: string | null;
   latitude: number;
   longitude: number;
+  /** 기상청 격자. 예보(`weather_forecast`)가 이걸로 갈린다. 좌표로 다시 계산하지 않는다. */
+  gridX: number;
+  gridY: number;
   variantId: number | null;
   cropNameKo: string | null;
   sowingDate: string | null;
@@ -79,6 +82,8 @@ export interface PlotRow {
   name: string | null;
   latitude: number;
   longitude: number;
+  grid_x: number;
+  grid_y: number;
   cultivations: CultivationRow[];
 }
 
@@ -90,6 +95,8 @@ export function toPlotMapPoint(row: PlotRow): PlotMapPoint {
     nameKo: row.name,
     latitude: row.latitude,
     longitude: row.longitude,
+    gridX: row.grid_x,
+    gridY: row.grid_y,
     variantId: lead?.variant_id ?? null,
     cropNameKo: lead ? toCultivationSummary(lead).cropNameKo : null,
     sowingDate: lead?.sowing_date ?? null,
