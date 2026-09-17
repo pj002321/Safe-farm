@@ -47,47 +47,67 @@ const WEEKEND_ID = "work-window-weekend";
 export function WorkWindow({
   weekdays,
   weekend,
+  picker,
 }: {
   weekdays: readonly WorkDay[];
   weekend: readonly WorkDay[];
+  /**
+   * 밭 고르기. **탭과 같은 줄에** 놓으려고 주입으로 받는다.
+   * 이 컴포넌트가 직접 그리지 않는 이유: 고르기는 클라이언트 동작(라우터)이고
+   * 여기는 서버 컴포넌트로 남아야 한다 — 받아서 자리만 내준다.
+   */
+  picker?: React.ReactNode;
 }) {
   return (
     <div className="group/work">
-      <fieldset className="mb-3">
-        <legend className="sr-only">평일과 주말 중 볼 구간</legend>
-        {/* sr-only 지만 실제 포커스를 받으므로 키보드 화살표로 전환된다.
+      {/* 셀렉트와 탭을 한 줄에 둔다. 세로로 쌓으면 조작 두 개가 각자 한 줄을
+          먹어 정작 볼 목록이 아래로 밀린다. 좁으면 줄바꿈해 두 줄이 된다.
+
+          ⚠️ 한 줄로 만드는 일은 **이 div** 가 한다. `fieldset` 을 그 자리에 쓰면
+             안 된다 — `legend`("평일과 주말 중 볼 구간")가 그 안에 든 모든 컨트롤의
+             그룹 이름이 되어서, 밭 셀렉트가 "구간을 고르는 것"으로 읽힌다.
+             ⚠️ 그리고 `{picker}` 는 라디오보다 **앞**이어야 한다. 라디오는 sr-only 라
+                화면에 없지만 포커스는 받고 그 링이 오른쪽 탭 위에 그려진다 —
+                뒤에 두면 Tab 이 오른쪽 탭 → 왼쪽 셀렉트로 거꾸로 간다. */}
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        {picker}
+
+        <fieldset className="shrink-0">
+          <legend className="sr-only">평일과 주말 중 볼 구간</legend>
+          {/* sr-only 지만 실제 포커스를 받으므로 키보드 화살표로 전환된다.
             ⚠️ 다만 **포커스 링은 여기 그리면 안 보인다.** sr-only 는 `clip-path:
                inset(50%)` 라 outline 까지 잘라낸다. 그래서 아래 라벨로 옮겨
                그린다 — `PlotWizardDock`·`meSections` 가 같은 이유로 쓰는 방식이다. */}
-        <input
-          className="sr-only"
-          defaultChecked
-          id={WEEKDAY_ID}
-          name="__work_window"
-          type="radio"
-        />
-        <input
-          className="sr-only"
-          id={WEEKEND_ID}
-          name="__work_window"
-          type="radio"
-        />
+          <input
+            className="sr-only"
+            defaultChecked
+            id={WEEKDAY_ID}
+            name="__work_window"
+            type="radio"
+          />
+          <input
+            className="sr-only"
+            id={WEEKEND_ID}
+            name="__work_window"
+            type="radio"
+          />
 
-        <div className="inline-flex rounded-lg border border-border p-1">
-          <label
-            className="inline-flex min-h-9 cursor-pointer items-center rounded-md px-3 font-medium text-fg-muted text-sm transition-colors duration-200 ease-out-expo group-has-[#work-window-weekday:checked]/work:bg-accent group-has-[#work-window-weekday:checked]/work:text-accent-on group-has-[#work-window-weekday:focus-visible]/work:outline group-has-[#work-window-weekday:focus-visible]/work:outline-2 group-has-[#work-window-weekday:focus-visible]/work:outline-ring group-has-[#work-window-weekday:focus-visible]/work:outline-offset-2"
-            htmlFor={WEEKDAY_ID}
-          >
-            평일
-          </label>
-          <label
-            className="inline-flex min-h-9 cursor-pointer items-center rounded-md px-3 font-medium text-fg-muted text-sm transition-colors duration-200 ease-out-expo group-has-[#work-window-weekend:checked]/work:bg-accent group-has-[#work-window-weekend:checked]/work:text-accent-on group-has-[#work-window-weekend:focus-visible]/work:outline group-has-[#work-window-weekend:focus-visible]/work:outline-2 group-has-[#work-window-weekend:focus-visible]/work:outline-ring group-has-[#work-window-weekend:focus-visible]/work:outline-offset-2"
-            htmlFor={WEEKEND_ID}
-          >
-            주말
-          </label>
-        </div>
-      </fieldset>
+          <div className="inline-flex rounded-lg border border-border p-1">
+            <label
+              className="inline-flex min-h-9 cursor-pointer items-center rounded-md px-3 font-medium text-fg-muted text-sm transition-colors duration-200 ease-out-expo group-has-[#work-window-weekday:checked]/work:bg-accent group-has-[#work-window-weekday:checked]/work:text-accent-on group-has-[#work-window-weekday:focus-visible]/work:outline group-has-[#work-window-weekday:focus-visible]/work:outline-2 group-has-[#work-window-weekday:focus-visible]/work:outline-ring group-has-[#work-window-weekday:focus-visible]/work:outline-offset-2"
+              htmlFor={WEEKDAY_ID}
+            >
+              평일
+            </label>
+            <label
+              className="inline-flex min-h-9 cursor-pointer items-center rounded-md px-3 font-medium text-fg-muted text-sm transition-colors duration-200 ease-out-expo group-has-[#work-window-weekend:checked]/work:bg-accent group-has-[#work-window-weekend:checked]/work:text-accent-on group-has-[#work-window-weekend:focus-visible]/work:outline group-has-[#work-window-weekend:focus-visible]/work:outline-2 group-has-[#work-window-weekend:focus-visible]/work:outline-ring group-has-[#work-window-weekend:focus-visible]/work:outline-offset-2"
+              htmlFor={WEEKEND_ID}
+            >
+              주말
+            </label>
+          </div>
+        </fieldset>
+      </div>
 
       <div className="hidden group-has-[#work-window-weekday:checked]/work:block">
         <DayList days={weekdays} emptyKo="예보 구간에 평일이 없습니다." />

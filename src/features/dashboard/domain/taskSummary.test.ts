@@ -95,11 +95,13 @@ describe("carryOverStart", () => {
 describe("toTaskCard", () => {
   const row: TaskRow = {
     id: "t1",
+    plot_id: "p1",
     title: "물 주기",
     reason: "이레 강수량 0.1mm",
     priority: "high",
     done: false,
     done_at: null,
+    expired_at: null,
     generated_at: kst("2026-09-15T00:03:00").toISOString(),
     plots: { name: "상주 배추밭" },
   };
@@ -109,6 +111,16 @@ describe("toTaskCard", () => {
     expect(card.daysOpen).toBe(2);
     expect(card.titleKo).toBe("물 주기");
     expect(card.plotKo).toBe("상주 배추밭");
+    expect(card.plotId).toBe("p1");
+    expect(card.expired).toBe(false);
+  });
+
+  it("배치가 닫은 카드는 expired 다 — 이력이 '안 함'으로 표시하는 근거", () => {
+    const card = toTaskCard(
+      { ...row, expired_at: kst("2026-09-18T00:01:00").toISOString() },
+      kst("2026-09-18T06:00:00"),
+    );
+    expect(card.expired).toBe(true);
   });
 
   it("밭 이름이 없어도 죽지 않는다", () => {

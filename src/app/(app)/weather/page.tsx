@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import { Suspense } from "react";
 import { CloudRainIcon } from "@/components/icons";
 import { EmptyState } from "@/components/shared/EmptyState";
-import { SatelliteScan } from "@/components/shared/SatelliteScan";
 import { SectionHeading } from "@/components/shared/SectionHeading";
 import { PlotForecastRow } from "@/components/weather/PlotForecastRow";
+import { PlotRowSkeleton } from "@/components/weather/PlotRowSkeleton";
 import { listPlots } from "@/features/plots/plotStore";
 import { aiService } from "@/shared/aiService/client";
 import {
@@ -70,13 +70,10 @@ export default async function Page() {
             // 붙잡아, 이미 받아 온 예보까지 같이 기다리게 된다.
             <li key={plot.id}>
               <Suspense
+                // 목록 자리는 스켈레톤이 맞다 — 밭마다 로딩 연출을 띄우면 화면이
+                // 번쩍이고, 도착하는 순간 크기가 달라 아래가 밀린다.
                 fallback={
-                  <div className="rounded-xl border border-border bg-surface p-3">
-                    <SatelliteScan
-                      compact
-                      labelKo={`${plot.nameKo ?? "이름 없는 밭"} 예보를 읽는 중`}
-                    />
-                  </div>
+                  <PlotRowSkeleton nameKo={plot.nameKo ?? "이름 없는 밭"} />
                 }
               >
                 <PlotForecast
