@@ -5,6 +5,7 @@ master_seed_farm_db.py 와 나눈 이유: 갱신 주기가 다르다. 매주 이
 
 실행:  py -m pipeline.farm.seed_bulletins            전부
        py -m pipeline.farm.seed_bulletins --check    DB 안 열고 검사만
+       py -m pipeline.farm.seed_bulletins --prune    CSV 에서 사라진 행을 지우기까지
 """
 
 import sys
@@ -14,7 +15,7 @@ from app.core.db import get_engine, new_session
 from app.models.farm import DisasterBulletin, PestAlert, PestBulletin, WeeklyNote
 from pipeline.prep import check
 from pipeline.prep.seeding import count_rows, read_all, report, require_tables
-from pipeline.prep.table import upsert
+from pipeline.prep.table import prune, upsert
 
 BULLETIN_DIR = DATA_DIR / "bulletins"
 INIT_HINT = "py -m pipeline.farm.init_farm_db"
@@ -54,13 +55,18 @@ def _rows(name, data):
     return out
 
 
-def load(db, data):
+def load(db, data, 지우기=False):
     done = {}
     # data 에 있는 것만 넣는다 — main() 이 CSV 없는 표를 걸러낸 결과다
     for name, (model, key) in TABLES.items():
         if name not in data:
             continue
-        done[name] = upsert(db, model, _rows(name, data), key)
+        rows = _rows(name, data)
+        done[name] = upsert(db, model, rows, key)
+        if 지우기:
+            지움 = prune(db, model, rows, key)
+            if 지움:
+                print(f"  {name}: CSV 에서 사라진 {지움}행 지움")
     db.commit()
     return done
 
@@ -85,7 +91,9 @@ def main():
     require_tables(get_engine(), names, INIT_HINT)
     db = new_session()
     try:
-        done = load(db, data)
+        # ⚠ --prune 은 **CSV 가 그 표의 전부일 때만** 맞다. 게시물 표는 build_bulletins 가
+        #   매번 전량을 다시 내므로 성립한다. 일부만 담긴 CSV 로 돌리면 나머지가 다 날아간다
+        done = load(db, data, 지우기="--prune" in sys.argv)
     finally:
         db.close()
     report(data, names, done)

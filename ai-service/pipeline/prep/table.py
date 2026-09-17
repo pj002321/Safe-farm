@@ -8,7 +8,7 @@ from collections.abc import Callable, Iterable, Sequence
 from pathlib import Path
 from typing import Any
 
-from sqlalchemy import Engine, Select, inspect
+from sqlalchemy import Engine, Select, delete, inspect, select, tuple_
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
@@ -85,6 +85,35 @@ def upsert(
     else:  # 안하기
         stmt = stmt.on_conflict_do_nothing(index_elements=list(conflict))
     return db.execute(stmt).rowcount
+
+
+def prune(db: Session, model, rows: Sequence[dict], conflict: Sequence[str]) -> int:
+    """
+    # summary
+    CSV 에 없는 행을 지운다. upsert 의 짝이다 — 저쪽이 넣고 갱신하면 이쪽이 치운다.
+
+    # params
+    db: 세션<br>
+    model: 대상 표의 ORM 클래스<br>
+    rows: 이번 CSV 가 내놓은 행. 여기 없는 자연키가 지울 대상이다<br>
+    conflict: 자연키 컬럼 이름. upsert 에 준 것과 같아야 한다<br>
+
+    # returns
+    지운 행 수. **rows 가 비면 아무것도 지우지 않고 0 을 준다** — CSV 를 빠뜨린 사고와
+    "정말 다 지워야 하는 상황" 은 화면에서 똑같아 보이므로 위험한 쪽을 막는다
+
+    # examples
+        prune(db, WeeklyNote, rows, ["issue_year", "issue_no", "ordinal"])  -> 152
+    """
+    if not rows:
+        return 0
+    cols = [getattr(model, name) for name in conflict]
+    산것 = {tuple(r[name] for name in conflict) for r in rows}
+    # 지울 것만 추려 IN 에 넣는다. 반대로 하면 살릴 3,744개가 IN 절에 들어간다
+    지울것 = [tuple(k) for k in db.execute(select(*cols)).all() if tuple(k) not in 산것]
+    if not 지울것:
+        return 0
+    return db.execute(delete(model).where(tuple_(*cols).in_(지울것))).rowcount
 
 
 def key_dict(db: Session, stmt: Select, cast: Callable[[Any], Any] | None = None) -> dict:

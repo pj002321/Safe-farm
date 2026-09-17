@@ -6,13 +6,14 @@
 
 from dataclasses import dataclass
 
-from sqlalchemy import Select, select
+from sqlalchemy import Select, func, select
 from sqlalchemy.orm import Session
 
 from app.models.farm.crop import Crop
 from app.models.farm.crop_guide import CropGuide
 from app.models.farm.crop_stage import CropStage
 from app.models.farm.crop_variant import CropVariant
+from app.models.farm.disaster_bulletin import DisasterBulletin
 from app.models.farm.pest import PestBulletin
 from app.models.farm.variety import Variety
 from app.models.farm.weekly_note import WeeklyNote
@@ -115,7 +116,14 @@ _WEEKLY_QUERY = (
         WeeklyNote.period_from.label("period_from"),
         WeeklyNote.period_to.label("period_to"),
     )
-    .order_by(WeeklyNote.issue_year, WeeklyNote.issue_no, WeeklyNote.ordinal)
+    # 주제와 본문이 둘 다 같으면 같은 글이다. 본문만 보면 주제가 다른 절이 접힌다
+    .distinct(func.md5(WeeklyNote.topic + WeeklyNote.body))
+    .order_by(
+        func.md5(WeeklyNote.topic + WeeklyNote.body),
+        WeeklyNote.issue_year.desc(),
+        WeeklyNote.issue_no.desc(),
+        WeeklyNote.ordinal,
+    )
 )
 
 _PEST_QUERY = (
@@ -131,7 +139,40 @@ _PEST_QUERY = (
         PestBulletin.period_from.label("period_from"),
         PestBulletin.period_to.label("period_to"),
     )
-    .order_by(PestBulletin.issue_year, PestBulletin.issue_no, PestBulletin.ordinal)
+    # 해충 설명은 해마다 같은 문장이 다시 실린다(1,207행 중 유일 885)
+    .distinct(func.md5(PestBulletin.body))
+    .order_by(
+        func.md5(PestBulletin.body),
+        PestBulletin.issue_year.desc(),
+        PestBulletin.issue_no.desc(),
+        PestBulletin.ordinal,
+    )
+)
+
+_DISASTER_QUERY = (
+    select(
+        DisasterBulletin.hazard.label("재해"),
+        DisasterBulletin.crop_names.label("작물"),
+        DisasterBulletin.phase.label("단계"),
+        DisasterBulletin.body.label("본문"),
+        DisasterBulletin.issue_year.label("issue_year"),
+        DisasterBulletin.issue_month.label("issue_month"),
+        DisasterBulletin.ordinal.label("ordinal"),
+    )
+    # 같은 본문이 해마다 되풀이된다(1,881행 중 유일 614). 표에는 다 남기고 임베딩만
+    # 한 벌로 줄인다 — 중복을 넣으면 top-5 를 같은 문장이 평균 7칸 차지한다.
+    #
+    # ⚠ DISTINCT ON 은 **order_by 첫 항목이 distinct 식과 같아야** 한다(Postgres 규칙).
+    #    그 뒤의 issue_year desc 가 "여러 벌 중 가장 최근 호를 남긴다" 를 정한다.
+    #    붙이지 않으면 어느 해가 살아남을지 실행할 때마다 달라지고, external_id 가
+    #    흔들려 증분 색인이 매번 전량 재색인이 된다
+    .distinct(func.md5(DisasterBulletin.body))
+    .order_by(
+        func.md5(DisasterBulletin.body),
+        DisasterBulletin.issue_year.desc(),
+        DisasterBulletin.issue_month.desc(),
+        DisasterBulletin.ordinal,
+    )
 )
 
 SOURCES: tuple[DbEmbedSource, ...] = (
@@ -185,6 +226,15 @@ SOURCES: tuple[DbEmbedSource, ...] = (
         content_columns=("병해충", "등급", "작물군", "작물", "본문"),
         id_columns=("issue_year", "issue_no", "ordinal"),
         title_columns=("병해충", "등급"),
+    ),
+    DbEmbedSource(
+        name="disaster_bulletin",
+        statement=_DISASTER_QUERY,
+        # 재해·단계를 본문에 넣는다 — '우박' '사전대책' 이 그대로 검색어가 된다.
+        # 작물은 23% 가 비어 있고, 그때는 본문 안의 작물 이름이 유일한 단서다
+        content_columns=("재해", "작물", "단계", "본문"),
+        id_columns=("issue_year", "issue_month", "ordinal"),
+        title_columns=("재해", "작물", "단계"),
     ),
 )
 
