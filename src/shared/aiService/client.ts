@@ -164,7 +164,7 @@ function config(): { baseUrl: string; token: string } | null {
 
 async function call<T>(
   path: string,
-  init: RequestInit & { timeoutMs?: number } = {},
+  init: RequestInit & { timeoutMs?: number; revalidateSec?: number } = {},
 ): Promise<AiResult<T>> {
   const cfg = config();
   if (!cfg) {
@@ -176,7 +176,7 @@ async function call<T>(
     };
   }
 
-  const { timeoutMs = DEFAULT_TIMEOUT_MS, ...rest } = init;
+  const { timeoutMs = DEFAULT_TIMEOUT_MS, revalidateSec, ...rest } = init;
   // AbortSignal.timeout 은 Node 18+ 에 있다. setTimeout + controller 보다
   // 짧고, 타이머를 걷는 것을 잊을 여지가 없다.
   const signal = AbortSignal.timeout(timeoutMs);
@@ -190,9 +190,16 @@ async function call<T>(
         "X-Service-Token": cfg.token,
         ...rest.headers,
       },
-      // 내부 호출은 캐시하지 않는다. 상태 조회가 캐시되면 "이미 고쳤는데
-      // 화면은 계속 안 된다고 하는" 상황이 된다.
-      cache: "no-store",
+      // 기본은 캐시하지 않는다. 상태 조회가 캐시되면 "이미 고쳤는데 화면은
+      // 계속 안 된다고 하는" 상황이 되고, 작업 생성처럼 부수효과가 있는 호출은
+      // 애초에 캐시 대상이 아니다.
+      //
+      // 값이 자주 안 바뀌는 조회만 `revalidateSec` 으로 열어 준다. 경로에 좌표가
+      // 들어 있어 캐시 키가 밭마다 갈리고, Next 의 Data Cache 는 서버 전역이라
+      // 같은 자리를 보는 다른 사용자도 함께 덜 부른다.
+      ...(revalidateSec === undefined
+        ? { cache: "no-store" as const }
+        : { next: { revalidate: revalidateSec } }),
     });
 
     if (response.status === 401) {
@@ -246,8 +253,21 @@ export const aiService = {
       timeoutMs: 15_000,
     }),
   /** 밭 좌표 기준 7일 예보(기온·강수·최대풍속). Open-Meteo 를 그때그때 불러온다. */
+  /**
+   * 밭 좌표의 7일 예보.
+   *
+   * **한 시간 캐시한다.** 예보 원본(Open-Meteo)은 하루 몇 차례 모델을 갱신할
+   * 뿐이라 요청마다 부르는 건 낭비다 — 날씨 화면은 밭 수만큼 호출이 나간다.
+   *
+   * ⚠️ 하루(86400)로 두지 않은 이유: 이 응답은 "오늘부터 7일"이고 `revalidate`
+   *    는 자정이 아니라 **처음 담은 시각부터** 구르는 TTL 이다. 23시에 담기면
+   *    다음 날 22시까지 어제 기준 표가 남아, 표의 첫 줄이 "오늘"이 아니게 된다.
+   *    한 시간이면 자정을 넘겨도 어긋나는 구간이 한 시간으로 묶인다.
+   */
   plotForecast: (lat: number, lon: number) =>
-    call<PlotForecast>(`/v1/weather/plot?lat=${lat}&lon=${lon}`),
+    call<PlotForecast>(`/v1/weather/plot?lat=${lat}&lon=${lon}`, {
+      revalidateSec: 3600,
+    }),
   /**
    * 밭 하나만 즉시 판정해 오늘 할 일 카드를 만든다. 자정 배치를 기다리지 않고
    * 밭 등록·재배 추가 직후 호출한다(registerPlot/addCultivations).

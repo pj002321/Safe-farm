@@ -1,15 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import {
-  AlertTriangleIcon,
-  CloudRainIcon,
-  SnowflakeIcon,
-  SunIcon,
-  TyphoonIcon,
-  WindIcon,
-} from "@/components/icons";
-import { Badge } from "@/components/shared/Badge";
+import { useEffect, useRef, useState } from "react";
+import { SatelliteScan } from "@/components/shared/SatelliteScan";
 import type {
   SigunguGddFeatureCollection,
   SigunguRainFeatureCollection,
@@ -20,6 +12,22 @@ import {
   KakaoSdkScript,
   type KakaoSdkStatus,
 } from "@/shared/kakao/KakaoSdkScript";
+import { Legend, LiveIndicator, WarningIconRow } from "./SigunguLegend";
+import {
+  GDD_DEFAULT_COLOR,
+  type GddProperties,
+  LAYER_LABEL,
+  LAYER_SHORT,
+  type Layer,
+  MAP_CONTAINER_ID,
+  NATIONWIDE_CENTER,
+  NATIONWIDE_LEVEL,
+  outerRings,
+  POLL_MS,
+  type RainProperties,
+  type WarnProperties,
+  type WindProperties,
+} from "./sigunguLayers";
 
 /**
  * ---------------------------------------------
@@ -37,124 +45,118 @@ import {
  * ---------------------------------------------
  */
 
-const MAP_CONTAINER_ID = "sigungu-layer-map-canvas";
-const NATIONWIDE_LEVEL = 13;
-const NATIONWIDE_CENTER = { lat: 36.4, lng: 127.9 };
-const GDD_DEFAULT_COLOR = "#d1d5db";
-const POLL_MS = 5 * 60 * 1000;
-
-type Layer = "gdd" | "warn" | "rain" | "wind";
-type GddProperties =
-  SigunguGddFeatureCollection["features"][number]["properties"];
-type WarnProperties =
-  SigunguWarnFeatureCollection["features"][number]["properties"];
-type RainProperties =
-  SigunguRainFeatureCollection["features"][number]["properties"];
-type WindProperties =
-  SigunguWindFeatureCollection["features"][number]["properties"];
-
-interface Geometry {
-  type: "Polygon" | "MultiPolygon";
-  coordinates: unknown;
-}
-
-/** Polygon/MultiPolygon 의 외곽 고리들만 뽑는다(구멍 무시) — 기존 두 지도와 동일 규칙. */
-function outerRings(geometry: Geometry): number[][][] {
-  if (geometry.type === "Polygon") {
-    const coords = geometry.coordinates as number[][][];
-    return [coords[0]];
-  }
-  const coords = geometry.coordinates as number[][][][];
-  return coords.map((polygon) => polygon[0]);
-}
-
-type Selected =
-  | { layer: "gdd"; name: string; properties: GddProperties }
-  | { layer: "warn"; name: string; properties: WarnProperties }
-  | { layer: "rain"; name: string; properties: RainProperties }
-  | { layer: "wind"; name: string; properties: WindProperties };
+/** 레이어 하나의 상태. 실패를 **값으로** 들고 있어야 무한 로더가 안 생긴다. */
+type LayerState =
+  | SigunguGddFeatureCollection
+  | SigunguWarnFeatureCollection
+  | SigunguRainFeatureCollection
+  | SigunguWindFeatureCollection
+  | "error"
+  | null;
 
 export function SigunguLayerMap() {
   const [status, setStatus] = useState<KakaoSdkStatus>("loading");
   const [layer, setLayer] = useState<Layer>("gdd");
-  const [gddData, setGddData] = useState<SigunguGddFeatureCollection | null>(
-    null,
-  );
-  const [warnData, setWarnData] = useState<SigunguWarnFeatureCollection | null>(
-    null,
-  );
-  const [rainData, setRainData] = useState<SigunguRainFeatureCollection | null>(
-    null,
-  );
-  const [windData, setWindData] = useState<SigunguWindFeatureCollection | null>(
-    null,
-  );
-  const [error, setError] = useState(false);
-  const [selected, setSelected] = useState<Selected | null>(null);
+  /**
+   * 레이어별로 따로 들고, **보이는 것만** 받는다.
+   *
+   * 예전에는 마운트 때 `Promise.all` 로 넷을 전부 받았다. 응답 하나가 3.04MB
+   * (지오메트리가 98%)라 넷이면 12.15MB 고, 5Mbps 에서 첫 화면까지 7.2초였다 —
+   * 그중 셋은 화면에 없는 레이어였다. 지금은 1개만 받고, 이미 받은 것은 다시
+   * 받지 않는다.
+   * ⚠️ 지오메트리가 네 벌 오는 것 자체는 그대로다. 근본 해결은 ai-service 가
+   *    값만 주고 경계를 따로 캐시하는 것인데, 그건 양쪽 배포가 묶인다.
+   */
+  const [data, setData] = useState<Record<Layer, LayerState>>({
+    gdd: null,
+    warn: null,
+    rain: null,
+    wind: null,
+  });
+  // 선택은 **시군구 코드만** 들고 있는다. 속성 스냅샷을 들면 폴링으로 값이
+  // 새로 와도 카드가 옛 숫자를 계속 보여준다.
+  const [selectedCode, setSelectedCode] = useState<string | null>(null);
+  // 지도 인스턴스. state 가 아니라 ref 인 이유는 바뀌어도 렌더가 필요 없어서다.
+  const mapRef = useRef<kakao.maps.Map | null>(null);
 
-  // 특보·관측은 배치가 새로 돌면 화면을 안 새로고침해도 바뀐다 — 그 변화를
-  // 실제로 반영해야 "실시간" 이지, 정적으로 한 번 그려두면 흉내일 뿐이다.
-  // 이미 한 번 띄운 뒤엔 주기 조회가 실패해도 에러로 덮지 않는다 — 잠깐의
-  // 네트워크 흔들림 때문에 잘 보이던 지도가 사라지면 안 된다.
+  // 보이는 레이어만 받는다. 이미 받아 둔 레이어는 다시 안 받으므로 토글은
+  // 요청 0건으로 즉시 전환된다.
+  //
+  // 폴링은 **특보만** 한다. GDD 는 하루 한 번(서버가 date.today() 기준으로
+  // 계산한다), 강수·바람도 시간 단위라 5분마다 3MB 를 다시 받을 이유가 없다.
+  // 예전에는 넷을 전부 5분마다 받아 한 시간 체류에 146MB 가 나갔다.
   useEffect(() => {
-    let loadedOnce = false;
+    if (data[layer] && data[layer] !== "error") return;
+
+    let alive = true;
     const load = () =>
-      Promise.all([
-        fetch("/api/map/sigungu-gdd").then((res) => res.json()),
-        fetch("/api/map/sigungu-warn").then((res) => res.json()),
-        fetch("/api/map/sigungu-rain").then((res) => res.json()),
-        fetch("/api/map/sigungu-wind").then((res) => res.json()),
-      ])
-        .then(([gdd, warn, rain, wind]) => {
-          // ai-service 미연결("not-configured")도 200으로 온다 — features 유무로 가른다.
-          if ("features" in gdd) setGddData(gdd);
-          else if (!loadedOnce) setError(true);
-          if ("features" in warn) setWarnData(warn);
-          if ("features" in rain) setRainData(rain);
-          if ("features" in wind) setWindData(wind);
-          loadedOnce = true;
+      fetch(`/api/map/sigungu-${layer}`)
+        .then((res) => res.json())
+        .then((json) => {
+          if (!alive) return;
+          // ai-service 미연결("not-configured")도 200 으로 온다 — features 유무로 가른다.
+          setData((prev) => ({
+            ...prev,
+            [layer]: "features" in json ? json : "error",
+          }));
         })
         .catch(() => {
-          if (!loadedOnce) setError(true);
+          if (!alive) return;
+          // 이미 띄운 뒤의 일시 장애면 보이던 지도를 유지한다.
+          setData((prev) => ({ ...prev, [layer]: prev[layer] ?? "error" }));
         });
 
     load();
-    const interval = setInterval(load, POLL_MS);
-    return () => clearInterval(interval);
-  }, []);
+    const interval = layer === "warn" ? setInterval(load, POLL_MS) : null;
+    return () => {
+      alive = false;
+      if (interval) clearInterval(interval);
+    };
+  }, [layer, data]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: layer 는 재실행 신호다 — 레이어를 바꾸면 이전 선택 정보를 지운다.
   useEffect(() => {
-    setSelected(null);
+    setSelectedCode(null);
   }, [layer]);
 
+  /**
+   * 지도 인스턴스는 **세션에 하나**다.
+   *
+   * 예전에는 레이어를 바꿀 때마다, 그리고 폴링이 새 객체를 넣을 때마다
+   * `new sdk.maps.Map(...)` 을 다시 만들면서 중심·배율을 상수로 되돌렸다.
+   * 자기 군까지 확대해 둔 사용자가 **5분마다 전국 축척으로 튕겨 나갔고**,
+   * 두 레이어를 같은 자리에서 비교하는 것 자체가 불가능했다.
+   * 이제 여기서 한 번만 만들고, 이후에는 아무도 중심·배율을 건드리지 않는다.
+   */
   useEffect(() => {
-    if (status !== "ready") return;
-    const data =
-      layer === "gdd"
-        ? gddData
-        : layer === "warn"
-          ? warnData
-          : layer === "rain"
-            ? rainData
-            : windData;
-    if (!data) return;
+    if (status !== "ready" || mapRef.current) return;
 
     const container = document.getElementById(MAP_CONTAINER_ID);
     const sdk = window.kakao;
     if (!container || !sdk) return;
 
-    const map = new sdk.maps.Map(container, {
+    mapRef.current = new sdk.maps.Map(container, {
       center: new sdk.maps.LatLng(NATIONWIDE_CENTER.lat, NATIONWIDE_CENTER.lng),
       level: NATIONWIDE_LEVEL,
     });
+  }, [status]);
+
+  // 폴리곤만 갈아 끼운다. 지도는 그대로 있으므로 사용자가 보던 위치가 유지된다.
+  useEffect(() => {
+    const map = mapRef.current;
+    const current = data[layer];
+    const sdk = window.kakao;
+    if (!map || !sdk || !current || current === "error") return;
 
     const overlays: kakao.maps.Polygon[] = [];
-    for (const feature of data.features) {
+    for (const feature of current.features) {
       const color = feature.properties.color;
       // 특보 없는 시군구는 안 그린다 — 대부분의 날엔 전국이 이 상태라, GDD 처럼
       // 항상 색을 칠하면 정작 봐야 할 경고가 묻힌다.
       if (layer === "warn" && !color) continue;
+
+      const code = feature.properties.code;
+      const isSelected = code === selectedCode;
 
       const path = outerRings(feature.geometry).map((ring) =>
         ring.map(([lng, lat]) => new sdk.maps.LatLng(lat, lng)),
@@ -162,48 +164,42 @@ export function SigunguLayerMap() {
       const polygon = new sdk.maps.Polygon({
         path,
         fillColor: color ?? GDD_DEFAULT_COLOR,
-        fillOpacity: layer === "gdd" ? 0.6 : 0.5,
-        strokeWeight: 1,
-        strokeColor: "#ffffff",
-        strokeOpacity: 0.8,
+        fillOpacity: isSelected ? 0.85 : layer === "gdd" ? 0.6 : 0.5,
+        // 고른 곳을 **테두리로** 표시한다. 시군구 250개 중 227개가 44px 미만이라
+        // 손가락으로 정확히 누르기 어렵다 — 표시가 없으면 아래 카드의 숫자가
+        // 내가 누른 곳 것인지 옆 동네 것인지 알 방법이 없다.
+        strokeWeight: isSelected ? 3 : 1,
+        strokeColor: isSelected ? "#111111" : "#ffffff",
+        strokeOpacity: isSelected ? 1 : 0.8,
       });
       polygon.setMap(map);
       overlays.push(polygon);
 
       sdk.maps.event.addListener(polygon, "click", () => {
-        setSelected({
-          layer,
-          name: feature.properties.name,
-          properties: feature.properties,
-        } as Selected);
+        setSelectedCode(code);
       });
     }
 
-    // 레이어를 바꾸면 이전 레이어의 폴리곤을 지운다 — 같은 지도 인스턴스를 재사용하므로
-    // 지우지 않으면 두 레이어가 겹쳐 칠해진다.
     return () => {
       for (const overlay of overlays) overlay.setMap(null);
     };
-  }, [status, layer, gddData, warnData, rainData, windData]);
+  }, [layer, data, selectedCode]);
 
-  if (error) {
-    return (
-      <p className="text-fg-muted text-sm">
-        지역 기상 지도를 불러오지 못했습니다. ai-service
-        연결(AI_SERVICE_URL/AI_SERVICE_TOKEN)을 확인해 주세요.
-      </p>
-    );
-  }
+  const current = data[layer];
+  const failed = current === "error";
+  const ready = current !== null && current !== "error" ? current : null;
+  const asOf = ready?.asOf;
+  // SDK 가 아직이거나 이 레이어 데이터가 안 왔을 때만 로더를 띄운다.
+  // **실패는 로더가 아니다** — 예전에는 실패해도 계속 돌아서, 고장인지 느린
+  // 건지 알 수 없었다.
+  const loading = !failed && (status !== "ready" || !ready);
 
-  const asOf =
-    layer === "gdd"
-      ? gddData?.asOf
-      : layer === "warn"
-        ? warnData?.asOf
-        : layer === "rain"
-          ? rainData?.asOf
-          : windData?.asOf;
-  const hasWarning = warnData?.features.some((f) => f.properties.color) ?? true;
+  const warn = data.warn !== null && data.warn !== "error" ? data.warn : null;
+  const warnList = layer === "warn" ? (warn as typeof warn) : null;
+  const hasWarning = warnList?.features.some((f) => f.properties.color) ?? true;
+
+  const selected =
+    ready?.features.find((f) => f.properties.code === selectedCode) ?? null;
 
   return (
     <div className="flex flex-col gap-3">
@@ -212,73 +208,56 @@ export function SigunguLayerMap() {
         <LayerToggle layer={layer} onChange={setLayer} />
         <LiveIndicator />
       </div>
-      {layer === "warn" && warnData && <WarningIconRow data={warnData} />}
-      <div
-        className="h-[24rem] w-full overflow-hidden rounded-lg border border-border sm:h-[28rem]"
-        id={MAP_CONTAINER_ID}
-      />
+      {warnList && <WarningIconRow data={warnList} />}
+      {/*
+        지도 칸을 relative 로 두고 로더를 그 위에 덮는다. 컨테이너를 조건부로
+        렌더하면 카카오 SDK 가 붙을 div 가 사라져 지도가 영영 안 그려진다 —
+        그래서 **컨테이너는 항상 두고** 덮기만 한다.
+      */}
+      <div className="relative">
+        <div
+          className="h-[24rem] w-full overflow-hidden rounded-lg border border-border sm:h-[28rem]"
+          id={MAP_CONTAINER_ID}
+        />
+        {loading && (
+          <div className="absolute inset-0 grid place-items-center rounded-lg border border-border bg-surface">
+            <SatelliteScan labelKo={`${LAYER_LABEL[layer]} 지도를 읽는 중`} />
+          </div>
+        )}
+        {failed && (
+          <div className="absolute inset-0 grid place-items-center rounded-lg border border-border bg-surface p-6 text-center">
+            <div>
+              <p className="font-medium text-fg">
+                {LAYER_LABEL[layer]} 지도를 불러오지 못했습니다
+              </p>
+              <p className="mt-1 text-fg-muted text-sm">
+                잠시 후 다시 시도해 주세요.
+              </p>
+              <button
+                className="mt-4 inline-flex min-h-11 items-center rounded-md border border-border-strong px-4 font-medium text-fg text-sm transition-colors duration-200 ease-out-expo hover:border-accent hover:text-accent"
+                onClick={() => setData((prev) => ({ ...prev, [layer]: null }))}
+                type="button"
+              >
+                다시 시도
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
       <Legend asOf={asOf} layer={layer} />
-      {layer === "warn" && warnData && !hasWarning && (
+      {warnList && !hasWarning && (
         <p className="text-fg-muted text-sm">
           현재 발효 중인 기상특보가 없습니다.
         </p>
       )}
-      {selected && <RegionInfo selected={selected} />}
+      {selected && (
+        <RegionInfo layer={layer} properties={selected.properties} />
+      )}
     </div>
   );
 }
 
 /** 정적인 색칠 지도로는 "지금도 갱신되고 있다"는 게 안 느껴져서 붙인 맥박 표시. */
-function LiveIndicator() {
-  return (
-    <span className="inline-flex items-center gap-1.5 text-fg-subtle text-xs">
-      <span className="relative grid size-2 place-items-center">
-        <span className="absolute inset-0 animate-pulse-ring rounded-full bg-telemetry" />
-        <span className="size-1.5 rounded-full bg-telemetry" />
-      </span>
-      실시간 반영 중
-    </span>
-  );
-}
-
-/** 특보 종류마다 아이콘을 붙인다. 못 아는 종류(건조·풍랑 등)는 경고 삼각형으로 받는다. */
-const WARN_KIND_ICONS: Record<string, typeof AlertTriangleIcon> = {
-  태풍: TyphoonIcon,
-  강풍: WindIcon,
-  호우: CloudRainIcon,
-  대설: SnowflakeIcon,
-  한파: SnowflakeIcon,
-  폭염: SunIcon,
-};
-
-/** 전국에서 지금 발효 중인 특보 종류를 중복 없이 뽑아 아이콘 배지로 보여준다. */
-function WarningIconRow({ data }: { data: SigunguWarnFeatureCollection }) {
-  const kinds: string[] = [];
-  for (const feature of data.features) {
-    for (const kind of feature.properties.warnings ?? []) {
-      if (!kinds.includes(kind)) kinds.push(kind);
-    }
-  }
-  if (kinds.length === 0) return null;
-
-  return (
-    <div className="flex flex-wrap gap-2">
-      {kinds.map((kind) => {
-        const Icon = WARN_KIND_ICONS[kind] ?? AlertTriangleIcon;
-        return (
-          <Badge
-            icon={<Icon className="size-3.5" />}
-            key={kind}
-            tone="unsuitable"
-          >
-            {kind} 특보
-          </Badge>
-        );
-      })}
-    </div>
-  );
-}
-
 function LayerToggle({
   layer,
   onChange,
@@ -287,19 +266,19 @@ function LayerToggle({
   onChange: (layer: Layer) => void;
 }) {
   return (
-    <div className="inline-flex w-fit gap-1 rounded-lg border border-border p-1">
-      <ToggleButton active={layer === "gdd"} onClick={() => onChange("gdd")}>
-        생육 기상(GDD)
-      </ToggleButton>
-      <ToggleButton active={layer === "warn"} onClick={() => onChange("warn")}>
-        기상특보
-      </ToggleButton>
-      <ToggleButton active={layer === "rain"} onClick={() => onChange("rain")}>
-        강수량
-      </ToggleButton>
-      <ToggleButton active={layer === "wind"} onClick={() => onChange("wind")}>
-        바람
-      </ToggleButton>
+    <div className="grid w-full grid-cols-4 gap-1 rounded-lg border border-border p-1 sm:inline-flex sm:w-fit">
+      {(Object.keys(LAYER_LABEL) as Layer[]).map((id) => (
+        <ToggleButton
+          active={layer === id}
+          key={id}
+          onClick={() => onChange(id)}
+        >
+          {/* 좁으면 짧은 이름, 넓으면 전체 이름. 둘 다 DOM 에 있으므로 검색·
+              스크린리더는 전체 이름을 읽는다. */}
+          <span className="sm:hidden">{LAYER_SHORT[id]}</span>
+          <span className="hidden sm:inline">{LAYER_LABEL[id]}</span>
+        </ToggleButton>
+      ))}
     </div>
   );
 }
@@ -316,7 +295,9 @@ function ToggleButton({
   return (
     <button
       aria-pressed={active}
-      className={`rounded-md px-3 py-1.5 font-medium text-sm transition-colors duration-200 ease-out-expo ${
+      // min-h-11 = 44px. 예전 py-1.5 는 32px 라 장갑 낀 손으로는 4px 간격의
+      // 버튼 넷을 정확히 누르기 어려웠다(WCAG 2.5.5 / HIG 44).
+      className={`inline-flex min-h-11 items-center justify-center rounded-md px-3 font-medium text-sm transition-colors duration-200 ease-out-expo ${
         active ? "bg-accent text-accent-on" : "text-fg-muted hover:bg-surface-2"
       }`}
       onClick={onClick}
@@ -327,101 +308,37 @@ function ToggleButton({
   );
 }
 
-const GDD_LEGEND_ITEMS = [
-  { color: "#2563eb", labelKo: "평년보다 낮음" },
-  { color: "#93c5fd", labelKo: "평년과 비슷(낮은 쪽)" },
-  { color: "#fdba74", labelKo: "평년과 비슷(높은 쪽)" },
-  { color: "#dc2626", labelKo: "평년보다 높음" },
-  { color: GDD_DEFAULT_COLOR, labelKo: "데이터 없음" },
-];
-
-const WARN_COLOR = "#dc2626";
-
-// app/domain/weather_region.py 의 강수·바람 등급과 색을 그대로 맞춘다.
-const RAIN_LEGEND_ITEMS = [
-  { color: "#dbeafe", labelKo: "강수 없음" },
-  { color: "#93c5fd", labelKo: "약한 비" },
-  { color: "#3b82f6", labelKo: "보통 비" },
-  { color: "#f97316", labelKo: "강한 비" },
-  { color: "#dc2626", labelKo: "매우 강한 비" },
-  { color: GDD_DEFAULT_COLOR, labelKo: "데이터 없음" },
-];
-
-const WIND_LEGEND_ITEMS = [
-  { color: "#a7f3d0", labelKo: "약함" },
-  { color: "#6ee7b7", labelKo: "약간 강함" },
-  { color: "#fdba74", labelKo: "강함" },
-  { color: "#f97316", labelKo: "강풍주의보 수준" },
-  { color: "#dc2626", labelKo: "강풍경보 수준" },
-  { color: GDD_DEFAULT_COLOR, labelKo: "데이터 없음" },
-];
-
-function Legend({
+function RegionInfo({
   layer,
-  asOf,
+  properties,
 }: {
   layer: Layer;
-  asOf: string | null | undefined;
+  properties: GddProperties | WarnProperties | RainProperties | WindProperties;
 }) {
-  const items =
-    layer === "gdd"
-      ? GDD_LEGEND_ITEMS
-      : layer === "warn"
-        ? [{ color: WARN_COLOR, labelKo: "발효 중인 특보" }]
-        : layer === "rain"
-          ? RAIN_LEGEND_ITEMS
-          : WIND_LEGEND_ITEMS;
-
   return (
-    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-fg-muted text-xs">
-      {items.map((item) => (
-        <span className="flex items-center gap-1.5" key={item.color}>
-          <span
-            className="size-3 rounded-sm"
-            style={{ backgroundColor: item.color }}
-          />
-          {item.labelKo}
-        </span>
-      ))}
-      <span className="text-fg-subtle">기준일 {asOf ?? "정보 없음"}</span>
+    <div className="rounded-lg border border-border bg-surface px-4 py-3 text-sm">
+      <p className="font-medium text-fg">{properties.name}</p>
+      <p className="mt-0.5 text-fg-muted">{detail(layer, properties)}</p>
     </div>
   );
 }
 
-function RegionInfo({ selected }: { selected: Selected }) {
-  return (
-    <div className="rounded-lg border border-border bg-surface px-3 py-2 text-sm">
-      <p className="font-medium text-fg">{selected.name}</p>
-      {selected.layer === "gdd" ? (
-        selected.properties.deviationPct != null ? (
-          <p className="text-fg-muted">
-            누적 {selected.properties.actualGdd}GDD (평년{" "}
-            {selected.properties.normalGdd}GDD,{" "}
-            {selected.properties.deviationPct > 0 ? "+" : ""}
-            {selected.properties.deviationPct}%) · {selected.properties.label}
-          </p>
-        ) : (
-          <p className="text-fg-muted">
-            {selected.properties.label ?? "데이터 없음"}
-          </p>
-        )
-      ) : selected.layer === "warn" ? (
-        <p className="text-fg-muted">{selected.properties.label}</p>
-      ) : selected.layer === "rain" ? (
-        <p className="text-fg-muted">
-          {selected.properties.rainMm != null
-            ? `${selected.properties.rainMm}mm`
-            : "데이터 없음"}{" "}
-          · {selected.properties.label}
-        </p>
-      ) : (
-        <p className="text-fg-muted">
-          {selected.properties.windMax != null
-            ? `${selected.properties.windMax}m/s`
-            : "데이터 없음"}{" "}
-          · {selected.properties.label}
-        </p>
-      )}
-    </div>
-  );
+/** 레이어마다 다른 한 줄. 값이 없으면 "데이터 없음"으로 정직하게 적는다. */
+function detail(
+  layer: Layer,
+  p: GddProperties | WarnProperties | RainProperties | WindProperties,
+): string {
+  if (layer === "gdd") {
+    const g = p as GddProperties;
+    if (g.deviationPct == null) return g.label ?? "데이터 없음";
+    const sign = g.deviationPct > 0 ? "+" : "";
+    return `누적 ${g.actualGdd}GDD (평년 ${g.normalGdd}GDD, ${sign}${g.deviationPct}%) · ${g.label}`;
+  }
+  if (layer === "warn") return (p as WarnProperties).label ?? "특보 없음";
+  if (layer === "rain") {
+    const r = p as RainProperties;
+    return `${r.rainMm != null ? `${r.rainMm}mm` : "데이터 없음"} · ${r.label}`;
+  }
+  const w = p as WindProperties;
+  return `${w.windMax != null ? `${w.windMax}m/s` : "데이터 없음"} · ${w.label}`;
 }
