@@ -14,20 +14,23 @@ from app.models.farm.auth_user import auth_users
 from app.models.farm.base import FarmBase
 from app.models.farm.crop import Crop
 from app.models.farm.crop_disaster_rule import CropDisasterRule
+from app.models.farm.crop_guide import CropGuide
 from app.models.farm.crop_stage import CropStage
 from app.models.farm.crop_variant import CropVariant
-from app.models.farm.crop_guide import CropGuide
-from app.models.farm.variety import Variety
+from app.models.farm.disaster_bulletin import DisasterBulletin
 from app.models.farm.grid import Grid
 from app.models.farm.profile import Profile
 from app.models.farm.station import Station
 from app.models.farm.terms import Terms
 from app.models.farm.user_agreement import UserAgreement
+from app.models.farm.variety import Variety
 from app.models.farm.weather_forecast import WeatherForecast
 from app.models.farm.weather_obs_daily import WeatherObsDaily
+from app.models.farm.weekly_note import WeeklyNote
 
 __all__ = [
     "Crop",
+    "DisasterBulletin",
     "CropDisasterRule",
     "CropGuide",
     "CropStage",
@@ -41,5 +44,6 @@ __all__ = [
     "UserAgreement",
     "WeatherForecast",
     "WeatherObsDaily",
+    "WeeklyNote",
     "auth_users",
 ]

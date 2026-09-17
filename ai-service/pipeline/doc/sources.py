@@ -14,6 +14,7 @@ from app.models.farm.crop_guide import CropGuide
 from app.models.farm.crop_stage import CropStage
 from app.models.farm.crop_variant import CropVariant
 from app.models.farm.variety import Variety
+from app.models.farm.weekly_note import WeeklyNote
 
 
 @dataclass(frozen=True)
@@ -102,6 +103,20 @@ _CROP_GUIDE_QUERY = (
               CropGuide.section, CropGuide.topic)
 )
 
+_WEEKLY_QUERY = (
+    select(
+        WeeklyNote.topic.label("주제"),
+        WeeklyNote.crops.label("작물"),
+        WeeklyNote.body.label("본문"),
+        WeeklyNote.issue_year.label("issue_year"),
+        WeeklyNote.issue_no.label("issue_no"),
+        WeeklyNote.ordinal.label("ordinal"),
+        WeeklyNote.period_from.label("period_from"),
+        WeeklyNote.period_to.label("period_to"),
+    )
+    .order_by(WeeklyNote.issue_year, WeeklyNote.issue_no, WeeklyNote.ordinal)
+)
+
 SOURCES: tuple[DbEmbedSource, ...] = (
     DbEmbedSource(
         name="crop_stage",
@@ -135,6 +150,16 @@ SOURCES: tuple[DbEmbedSource, ...] = (
         # 자연키. guide_id 는 Identity 라 표를 다시 만들면 바뀐다
         id_columns=("작물", "작형", "구분", "주제"),
         title_columns=("작물", "작형", "주제"),
+    ),
+    DbEmbedSource(
+        name="weekly_note",
+        statement=_WEEKLY_QUERY,
+        # 주제·작물을 본문에 넣는다 — '노지고추' '마늘,양파' 가 그대로 검색어가 된다
+        content_columns=("주제", "작물", "본문"),
+        id_columns=("issue_year", "issue_no", "ordinal"),
+        title_columns=("issue_year", "issue_no", "주제"),
+        # period_from/to 는 meta 로 간다(build_meta 가 안 쓴 칸을 담는다).
+        # 시기 필터가 그걸 읽는다 — 다음 단계
     ),
 )
 
@@ -258,6 +283,12 @@ def build_meta(source: DbEmbedSource, row: dict[str, str]) -> dict[str, str]:
     # ★ 작물은 본문에도 있지만 meta 에도 넣는다. 검색이 작물로 후보를 줄이려면(vector_store 의
     #   crops 인자) 필터를 걸 자리가 필요한데, 본문은 텍스트라 LIKE 밖에 못 쓰고 그건 취약하다.
     #   모든 소스가 첫 컬럼을 '작물' 로 label 하고 있어 이 한 줄이 네 소스에 다 걸린다
-    if row.get("작물", "").strip():
-        meta["작물"] = row["작물"].strip()
+    작물 = row.get("작물", "").strip()
+    if 작물:
+        meta["작물"] = 작물
+        # ⚠ 배열로도 넣는다. weekly_notes.crops 는 '마늘,양파' 처럼 여럿이라 문자열 일치
+        #   필터(.in_)로는 '마늘' 검색에 안 걸린다. JSONB 배열이면 ?| 로 겹침을 본다.
+        #   pest_bulletins 도 작물이 여럿이라 같은 문제가 또 온다 — 여기서 한 번에 막는다.
+        #   이 키는 사람이 읽을 값이 아니라 generator 가 '참고값' 에서 뺀다
+        meta["작물들"] = [c.strip() for c in 작물.split(",") if c.strip()]
     return meta
