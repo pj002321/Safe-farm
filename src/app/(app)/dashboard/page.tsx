@@ -1,5 +1,10 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
+import { Suspense } from "react";
+import {
+  ForecastFallback,
+  ForecastPanel,
+} from "@/components/dashboard/ForecastPanel";
 import {
   PLOT_ONBOARDING_PATH,
   PlotStrip,
@@ -9,13 +14,8 @@ import {
   DeviationBanner,
   HazardBanner,
 } from "@/components/dashboard/StatusBanners";
-import {
-  SAMPLE_ALERT,
-  SAMPLE_FRESHNESS,
-  SAMPLE_WEEKEND,
-} from "@/components/dashboard/sample";
+import { SAMPLE_ALERT, SAMPLE_FRESHNESS } from "@/components/dashboard/sample";
 import { TaskBoard } from "@/components/dashboard/TaskBoard";
-import { WeekendForecast } from "@/components/dashboard/WeekendForecast";
 import { MapPinIcon } from "@/components/icons";
 import { ButtonLink } from "@/components/shared/Button";
 import { SectionHeading } from "@/components/shared/SectionHeading";
@@ -81,8 +81,16 @@ function stageKoOf(plot: PlotCard, now: Date): string | null {
 const SAMPLE_DEVIATION =
   "배추밭 생육이 인근 평균보다 6일 느립니다. 위성 관측이 5일 넘게 이어져 알려 드립니다.";
 
-export default async function DashboardPage() {
+export default async function DashboardPage({
+  searchParams,
+}: PageProps<"/dashboard">) {
   const profile = await getCurrentProfile();
+  // 고른 밭. 쿼리는 사용자가 고칠 수 있는 값이라 그대로 믿지 않는다 —
+  // `ForecastPanel` 이 내 밭 목록에서 찾아 확인하고, 없으면 최신 밭으로 돌아간다.
+  const params = await searchParams;
+  const requestedPlotId = Array.isArray(params.plot)
+    ? params.plot[0]
+    : params.plot;
 
   // 화면이 함께 쓰므로 블록 밖에 둔다. 조회가 실패하면 빈 배열 그대로 그려서
   // 홈이 통째로 죽지 않게 한다(아래 catch 와 같은 이유).
@@ -195,13 +203,23 @@ export default async function DashboardPage() {
             className="mb-3 font-semibold text-fg text-sm"
             id="forecast-heading"
           >
-            주말 날씨
+            밭에 나갈 수 있는 날
           </h2>
-          <WeekendForecast days={SAMPLE_WEEKEND} />
+
+          {/* 예보는 외부 호출이라 느릴 수 있다. 경계를 따로 둬서 할 일·텃밭이
+              이 호출을 기다리지 않게 한다. */}
+          {profile && (
+            <Suspense fallback={<ForecastFallback />}>
+              <ForecastPanel
+                requestedPlotId={requestedPlotId}
+                userId={profile.id}
+              />
+            </Suspense>
+          )}
 
           <p className="mt-3 rounded-md bg-surface-2 px-3.5 py-3 text-fg-muted text-xs leading-relaxed">
-            토·일 예보는 밭 좌표 기준입니다. 야외 작업을 언제 할지 정하는 데
-            쓰세요.
+            고른 밭의 좌표 기준 예보입니다. 동네 평균이 아니라 밭 기준이라, 야외
+            작업을 언제 할지 정하는 데 그대로 쓸 수 있습니다.
           </p>
         </section>
       </div>
