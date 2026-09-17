@@ -9,6 +9,8 @@ from typing import TypedDict
 
 from sqlalchemy.orm import Session
 
+import uuid
+
 from app.domain.suitability import CropProfile, SuitabilityResult, WeatherWindow
 from app.models.chunk import Chunk
 
@@ -16,7 +18,15 @@ from app.models.chunk import Chunk
 class GraphState(TypedDict):
     db: Session
     question: str
-    documents: list[Chunk]
+    user_id: uuid.UUID
+    plot_id: uuid.UUID | None
+    history_context: str | None   
+
+    route: str                  # plan이 정함: "tool" | "rag"
+    tool_calls: list            # plan이 고른 도구들
+    tool_result: str | None     # run_tools가 만든 결과 (예: build_plot_context 결과)
+
+    matches: list               # retrieve+rerank가 찾아온 (Chunk, 거리) 목록
     answer: str
 
 
