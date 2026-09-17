@@ -16,7 +16,7 @@ import { ArrowRightIcon } from "@/components/icons";
  * - 좁은 화면에서는 숨긴다. 거기서는 `PlotWizardDock` 이 같은 일을 하는데, 둘을
  *   같이 두면 화면 아래에 막대가 둘 쌓인다(그게 원래 문제였다).
  * - 라벨만 단계에 따라 갈아 끼운다. `group-has-[…]` 클래스를 반복문으로 만들 수
- *   없어서(Tailwind 가 클래스 문자열을 정적으로 읽는다) 네 벌을 리터럴로 적는다.
+ *   없어서(Tailwind 가 클래스 문자열을 정적으로 읽는다) 세 벌을 리터럴로 적는다.
  * - `<button>` 이 아니라 `<label>` 인 이유: 버튼으로 만들면 상태를 JS 로 들고
  *   있어야 하고, 폼 안의 button 은 실수로 제출을 일으킨다. 마지막 단계의
  *   제출만 진짜 `<button type="submit">` 이다.
@@ -25,9 +25,9 @@ import { ArrowRightIcon } from "@/components/icons";
  * ---------------------------------------------
  */
 
-/** 진행 막대 채움. 네 너비 중 현재 단계 하나만 맞는다. */
+/** 진행 막대 채움. 세 너비 중 현재 단계 하나만 맞는다. */
 const FILL =
-  "group-has-[#wizard-1:checked]/wizard:w-1/4 group-has-[#wizard-2:checked]/wizard:w-2/4 group-has-[#wizard-3:checked]/wizard:w-3/4 group-has-[#wizard-4:checked]/wizard:w-full";
+  "group-has-[#wizard-1:checked]/wizard:w-1/3 group-has-[#wizard-2:checked]/wizard:w-2/3 group-has-[#wizard-3:checked]/wizard:w-full";
 
 export function WizardNav() {
   return (
@@ -62,19 +62,10 @@ export function WizardNav() {
           />
           <NavRow
             className="hidden group-has-[#wizard-3:checked]/wizard:flex"
-            nextId="wizard-4"
-            nextKo="재배 정보"
             prevId="wizard-2"
             prevKo="텃밭 정보"
             stepKo="작물 선택"
             stepNo={3}
-          />
-          <NavRow
-            className="hidden group-has-[#wizard-4:checked]/wizard:flex"
-            prevId="wizard-3"
-            prevKo="작물 선택"
-            stepKo="재배 정보"
-            stepNo={4}
             submit
           />
         </div>
@@ -119,7 +110,7 @@ function NavRow({
 
       <span className="flex flex-1 items-center justify-center gap-2 text-sm">
         <span className="font-mono text-fg-subtle text-xs tabular-nums">
-          {stepNo} / 4
+          {stepNo} / 3
         </span>
         <span className="font-medium text-fg">{stepKo}</span>
       </span>

@@ -3,7 +3,6 @@ import { Button } from "@/components/shared/Button";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { Field } from "@/components/shared/Field";
 import type { PlotCard } from "@/features/plots/domain/plotSummary";
-import { cropById } from "./crops";
 import { plotFaceClass } from "./plotFace";
 import { ARM_CLASS, ARM_NONE_ID, DELETE_FORM_ID } from "./plotManage";
 
@@ -118,8 +117,11 @@ function PlotRow({
   onSave: (formData: FormData) => Promise<void>;
 }) {
   const armId = `arm-${plot.id}`;
-  const cropsKo =
-    plot.cropIds.length > 0 ? plot.cropIds.join(" · ") : "작물 미지정";
+  // 줄이라 카드보다 폭이 넉넉하다. `toCropKo` 처럼 "외 n" 으로 접지 않고 다 편다.
+  const cropNames = plot.cultivations
+    .map((cultivation) => cultivation.cropNameKo)
+    .filter((name): name is string => name !== null);
+  const cropsKo = cropNames.length > 0 ? cropNames.join(" · ") : "작물 미지정";
 
   return (
     // 겨냥되면 줄 전체가 물든다. `has-[:checked]` 는 이 <li> 가 겨냥 라디오의
@@ -142,7 +144,7 @@ function PlotRow({
           aria-hidden="true"
           className={`grid size-9 shrink-0 place-items-center rounded-full ${plotFaceClass(plot.id)}`}
         >
-          {cropById(plot.cropIds[0])?.icon ?? <FieldIcon />}
+          <FieldIcon />
         </span>
         <div className="min-w-0 flex-1">
           <p className="truncate font-medium text-fg">

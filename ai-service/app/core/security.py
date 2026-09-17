@@ -34,8 +34,7 @@ def _expected_token() -> str | None:
 
 
 async def require_service_token(
-    x_service_token: str | None = Header(default=None),
-) -> None:
+        x_service_token: str | None = Header(default=None),) -> None:
     """서비스 토큰을 검사하는 FastAPI 의존성.
 
     토큰이 **설정되지 않았으면 거부한다.** "설정이 없으면 통과"로 만들면
