@@ -48,7 +48,20 @@ export default async function Page() {
                   plot.latitude,
                   plot.longitude,
                 );
-                if (!result.ok) return null;
+                if (!result.ok) {
+                  return (
+                    <div
+                      className="rounded-lg border border-border border-dashed bg-surface-2/40 p-4 text-fg-muted text-sm"
+                      key={plot.id}
+                    >
+                      <span className="font-semibold text-fg">
+                        {plot.nameKo ?? "이름 없는 밭"}
+                      </span>{" "}
+                      예보를 지금 불러오지 못했습니다. 잠시 후 다시
+                      확인해주세요.
+                    </div>
+                  );
+                }
                 return (
                   <PlotForecastCard
                     cropNameKo={plot.cropNameKo}
