@@ -1,180 +1,125 @@
-import {
-  AlertTriangleIcon,
-  DropletIcon,
-  ThermometerIcon,
-  WindIcon,
-} from "@/components/icons";
+import { buildForecastAlerts } from "@/features/weather/domain/forecastAlerts";
 import type { PlotForecast } from "@/shared/aiService/client";
+import { DailyRows } from "./DailyRows";
+import { ForecastAlerts } from "./ForecastAlerts";
+import { GrowthSeriesBars } from "./GrowthSeriesBars";
+import { HourlyStrip } from "./HourlyStrip";
+import { StaleNotice } from "./StaleNotice";
+import { WeatherNow } from "./WeatherNow";
 
 /**
  * ---------------------------------------------
- * [Feature]: 밭 좌표 기준 7일 예보 카드
+ * [Feature]: 밭 예보 카드 — `/weather` 한 밭당 한 장
  *
  * [Description]
- * - `/weather` 탭 한 밭당 한 장. Open-Meteo 실시간 조회(`aiService.plotForecast`)
- *   결과를 그대로 나열한다 — 과거 관측(weather_obs_daily)과 달리 캐시하지 않는다.
- * - 최저기온이 2℃ 이하인 날은 서리 위험으로 보고 그 줄 아래 경고를 붙인다
- *   (스펙 V1-65). 임계값을 넘는지만 보므로 도메인 계산이 아니라 여기서 바로 판단한다.
+ * - **읽는 순서대로 쌓는다.** 위험 → 지금 → 하루 → 한 주 → 자세히.
+ *   예전 카드는 누적 강수량·GDD 막대·7일 표 순서였고 경고는 표 중간에 묻혀 있어,
+ *   가장 급한 것을 보려면 가장 많이 스크롤해야 했다.
+ * - **자세한 값은 접는다.** 습도·강수확률·누적강수·GDD 막대는 매일 볼 것이
+ *   아니라 궁금할 때 여는 값이다. 밭이 셋이면 카드도 셋인데 전부 펴 두면
+ *   화면이 3000px 가 된다(실측: 예전 카드 한 장이 872px).
+ *   `<details>` 라 JS 없이 열린다.
+ * - 판정은 여기서 하지 않는다. `buildForecastAlerts`(순수)가 만든 것을 얹는다.
  * ---------------------------------------------
  */
-
-/** 서리 위험 임계값(℃). 이 이하면 경고를 붙인다. */
-const FROST_THRESHOLD_C = 2;
-
-function rainfallLabel(mm: number | null): string {
-  return mm != null ? `${mm}mm` : "관측 없음";
-}
-
-/** 기온이 이 작물에 어떤 의미인지(V1-64) — 일반 날씨 앱은 숫자만 주지만
- * 여기는 그 숫자가 이 작물엔 스트레스인지 적온인지까지 병기한다. */
-function tempImpactKo(
-  tempMax: number | null,
-  tempMin: number | null,
-  impact: PlotForecast["cropImpact"],
-): string | null {
-  if (!impact || tempMax == null || tempMin == null) return null;
-  if (impact.upperTempC != null && tempMax > impact.upperTempC) {
-    return `${impact.cropNameKo} 고온 스트레스(상한 ${impact.upperTempC}℃)`;
-  }
-  if (tempMin < impact.baseTempC) {
-    return `${impact.cropNameKo} 생육 정지(기준 ${impact.baseTempC}℃)`;
-  }
-  return `${impact.cropNameKo} 생육 적온`;
-}
-
-/** 누적 강수량이 이 작물 단계의 필요량을 채우는지(V1-64). 필요량이 없으면(단계
- * 판정 불가) 해석하지 않는다 — 근거 없는 판단은 후보에서 뺀다(task_rules.py 방침). */
-function rainImpactKo(
-  rainfall7d: number | null,
-  impact: PlotForecast["cropImpact"],
-): string | null {
-  if (!impact || impact.waterNeedMm == null || rainfall7d == null) return null;
-  const stage = impact.stageName ? `${impact.stageName} ` : "";
-  return rainfall7d < impact.waterNeedMm
-    ? `${stage}단계 필요량(${impact.waterNeedMm}mm) 대비 부족 — 관수 권장`
-    : `${stage}단계 필요량 충족`;
-}
-
-/** 최근 하루치 GDD 막대(V1-69). 높이가 그날 기온이 얼마나 생육에 기여했는지를
- * 바로 보여줘, 생육 속도가 왜 그런지(더워서/추워서)를 숫자 없이도 읽게 한다. */
-function GrowthSeriesBars({
-  series,
-}: {
-  series: PlotForecast["growthSeries"] & object;
-}) {
-  const maxGdd = Math.max(...series.map((d) => d.gdd), 0.1);
-
-  return (
-    <div className="mt-3 border-border/60 border-t pt-3">
-      <p className="text-fg-muted text-xs">최근 하루치 적산온도(GDD)</p>
-      <div className="mt-2 flex items-end gap-1">
-        {series.map((day) => (
-          <div className="flex flex-col items-center gap-1" key={day.date}>
-            <div
-              className="w-3 rounded-t bg-accent"
-              style={{ height: `${(day.gdd / maxGdd) * 40 + 2}px` }}
-              title={`${day.date}: ${day.gdd}`}
-            />
-            <span className="font-mono text-[0.6rem] text-fg-subtle">
-              {day.date.slice(5)}
-            </span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
 
 interface PlotForecastCardProps {
   nameKo: string;
   cropNameKo: string | null;
   forecast: PlotForecast;
+  /** "오늘"을 가리는 기준일(YYYY-MM-DD). 서버 렌더라 밖에서 넣어 준다. */
+  todayIso: string;
+  /**
+   * 값이 있으면 이 예보는 **실시간이 아니라 보관해 둔 것**이다.
+   * 카드가 그 사실을 반드시 드러낸다 — 사흘 전 서리 예보를 오늘 것으로 읽으면
+   * 실제 피해가 난다.
+   */
+  cachedAt?: Date;
 }
 
 export function PlotForecastCard({
   nameKo,
   cropNameKo,
   forecast,
+  todayIso,
+  cachedAt,
 }: PlotForecastCardProps) {
+  const alerts = buildForecastAlerts(forecast);
+  const stage = forecast.cropImpact?.stageName;
+
   return (
-    <article className="rounded-lg border border-border bg-surface p-4">
-      <p className="font-semibold text-fg text-sm">{nameKo}</p>
-      <p className="text-fg-muted text-xs">{cropNameKo ?? "작물 미정"}</p>
-
-      <p className="mt-2 flex items-center gap-1.5 font-mono text-fg-muted text-xs tabular-nums">
-        <DropletIcon className="size-3.5 text-info" />
-        누적 강수량 3일 {rainfallLabel(forecast.rainfall3d)} · 5일{" "}
-        {rainfallLabel(forecast.rainfall5d)} · 7일{" "}
-        {rainfallLabel(forecast.rainfall7d)}
-      </p>
-      {rainImpactKo(forecast.rainfall7d, forecast.cropImpact) && (
-        <p className="mt-0.5 text-[0.7rem] text-info">
-          {rainImpactKo(forecast.rainfall7d, forecast.cropImpact)}
+    <article className="flex flex-col gap-4 rounded-xl border border-border bg-surface p-4">
+      <header className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+        <h3 className="font-semibold text-fg">{nameKo}</h3>
+        <p className="text-fg-muted text-sm">
+          {cropNameKo ?? "작물 미정"}
+          {stage && <span className="text-accent"> · {stage}</span>}
         </p>
-      )}
+      </header>
 
-      {forecast.growthSeries && forecast.growthSeries.length > 0 && (
-        <GrowthSeriesBars series={forecast.growthSeries} />
-      )}
+      {cachedAt && <StaleNotice cachedAt={cachedAt} />}
 
-      <div className="mt-3 flex flex-col gap-2">
-        {forecast.days.map((day) => {
-          const isFrostRisk =
-            day.tempMin != null && day.tempMin <= FROST_THRESHOLD_C;
-          const tempImpact = tempImpactKo(
-            day.tempMax,
-            day.tempMin,
-            forecast.cropImpact,
-          );
+      {/*
+        실황이 경고보다 **위**다. 경고는 색과 테두리로 이미 눈에 띄고, 없는 날이
+        대부분이다. 반면 "지금 몇 도인가"는 날씨 화면을 여는 기본 이유라 늘 있다.
+        경고를 맨 위에 두면 경고가 다섯 장인 날(실측 390px) 카드를 열었을 때
+        숫자가 한 개도 안 보인다.
+      */}
+      {forecast.current && <WeatherNow current={forecast.current} />}
 
-          return (
-            <div
-              className="border-border/60 border-t pt-2 first:border-t-0 first:pt-0"
-              key={day.date}
-            >
-              <div className="flex items-center gap-3">
-                <span className="w-16 shrink-0 font-mono text-fg-subtle text-xs">
-                  {day.date.slice(5)}
-                </span>
+      <ForecastAlerts alerts={alerts} />
 
-                <span className="inline-flex items-center gap-1 font-mono text-fg text-xs tabular-nums">
-                  <ThermometerIcon className="size-3.5 text-caution" />
-                  {day.tempMin ?? "–"}–{day.tempMax ?? "–"}℃
-                  {tempImpact && (
-                    <span className="font-sans text-fg-muted">
-                      ({tempImpact})
-                    </span>
-                  )}
-                </span>
+      <HourlyStrip hours={forecast.hours} />
 
-                <span className="inline-flex items-center gap-1 font-mono text-fg text-xs tabular-nums">
-                  <DropletIcon className="size-3.5 text-info" />
-                  {day.rainfallMm != null ? `${day.rainfallMm}mm` : "–"}
-                  {day.rainChance != null && ` (${day.rainChance}%)`}
-                </span>
+      <DailyRows
+        cropImpact={forecast.cropImpact}
+        days={forecast.days}
+        todayIso={todayIso}
+      />
 
-                <span className="inline-flex items-center gap-1 font-mono text-fg text-xs tabular-nums">
-                  <DropletIcon className="size-3.5 text-info" />
-                  {day.humidityPct != null ? `${day.humidityPct}%` : "–"}
-                </span>
+      <details className="border-border/60 border-t pt-3">
+        <summary className="cursor-pointer text-fg-muted text-xs hover:text-fg">
+          누적 강수량 · 생육 속도 자세히 보기
+        </summary>
 
-                <span className="ml-auto inline-flex items-center gap-1 font-mono text-fg text-xs tabular-nums">
-                  <WindIcon className="size-3.5 text-fg-muted" />
-                  {day.windMax != null ? `${day.windMax}m/s` : "–"}
-                </span>
-              </div>
+        <div className="mt-3 flex flex-col gap-4">
+          <section>
+            <h4 className="text-fg-muted text-xs">
+              누적 강수량 (최근접 관측소 실측)
+            </h4>
+            <dl className="mt-1 flex gap-4 font-mono text-fg text-sm tabular-nums">
+              <Window days={3} mm={forecast.rainfall3d} />
+              <Window days={5} mm={forecast.rainfall5d} />
+              <Window days={7} mm={forecast.rainfall7d} />
+            </dl>
+          </section>
 
-              {isFrostRisk && (
-                <p className="mt-1.5 flex items-start gap-1.5 rounded-md bg-unsuitable/10 px-2.5 py-1.5 text-[0.76rem] text-unsuitable leading-relaxed">
-                  <AlertTriangleIcon className="mt-0.5 size-3.5 shrink-0" />
-                  서리 위험 — 최저기온 {day.tempMin}℃. 덮개·부직포로 작물을
-                  덮거나 관수로 지열을 보호하세요.
-                </p>
-              )}
-            </div>
-          );
-        })}
-      </div>
+          {forecast.growthSeries && forecast.growthSeries.length > 0 && (
+            <GrowthSeriesBars series={forecast.growthSeries} />
+          )}
+        </div>
+      </details>
     </article>
+  );
+}
+
+/**
+ * 누적 강수량 한 칸.
+ *
+ * 관측이 없으면 0mm 가 아니라 "관측 없음"이다. 둘을 같게 적으면 "비가 안 왔다"와
+ * "모른다"가 뭉개져, 관수 판단이 뒤집힌다.
+ */
+function Window({ days, mm }: { days: number; mm: number | null }) {
+  return (
+    <div>
+      <dt className="font-sans text-fg-subtle text-xs">{days}일</dt>
+      <dd>
+        {mm != null ? (
+          `${mm}mm`
+        ) : (
+          <span className="text-fg-subtle">관측 없음</span>
+        )}
+      </dd>
+    </div>
   );
 }

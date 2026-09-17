@@ -125,8 +125,27 @@ export interface SigunguWindFeatureCollection {
   }>;
 }
 
-/** 밭 좌표 기준 7일 예보. `/weather` 탭이 그대로 목록으로 그린다. */
+/** 밭 좌표 기준 실황·시간별·7일 예보. `/weather` 탭이 그린다. */
 export interface PlotForecast {
+  /**
+   * 지금 이 자리의 관측값. Open-Meteo 가 예보와 **같은 요청**으로 준다.
+   * 응답에 current 가 없으면 null — 그때 화면은 실황 칸 자체를 그리지 않는다.
+   */
+  current: {
+    /** 관측 시각(현지). "몇 시 기준인지"를 안 적으면 실황은 의미가 없다. */
+    observedAt: string | null;
+    tempC: number | null;
+    humidityPct: number | null;
+    rainfallMm: number | null;
+    windMs: number | null;
+  } | null;
+  /** 지금부터 24시간. 서버가 **지난 시간을 잘라내고** 준다(00시부터 오지 않는다). */
+  hours: Array<{
+    time: string;
+    tempC: number | null;
+    rainfallMm: number | null;
+    rainChance: number | null;
+  }>;
   days: Array<{
     date: string;
     tempMax: number | null;
@@ -150,6 +169,18 @@ export interface PlotForecast {
     upperTempC: number | null;
     stageName: string | null;
     waterNeedMm: number | null;
+  } | null;
+  /**
+   * 이 밭이 속한 시군구에 지금 발효 중인 기상특보. 없으면 null.
+   *
+   * 지도의 특보 레이어와 **같은 판정 함수**를 쓴다(`service/warn_region.py`).
+   * 따로 계산하면 두 화면이 서로 다른 말을 하게 된다.
+   */
+  alert: {
+    warnings: string[];
+    label: string | null;
+    /** 기상청 스냅샷을 받아 둔 시각. 특보는 이 시각까지의 상태다. */
+    asOf: string | null;
   } | null;
 }
 
