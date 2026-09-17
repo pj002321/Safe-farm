@@ -186,7 +186,11 @@ export async function updatePlotBasics(
 /**
  * 텃밭을 지운다. 되돌릴 수 없다.
  *
- * 딸려 지울 것은 아직 없다 — `plots.id` 를 참조하는 테이블이 하나도 없다.
+ * `cultivations`·`plot_tasks` 는 `plots.id` 를 `on delete cascade` 로
+ * 참조하지만, DB 의 cascade 에 맡기지 않고 여기서 먼저 지운다 — cascade 가
+ * 도는 시점엔 이 plots 행이 이미 지워진 것으로 보여, "내 밭인가"를 plots 에
+ * 다시 조회하는 두 테이블의 RLS 정책이 항상 막는다(밭 삭제 자체가 실패한다).
+ * plots 행이 아직 있을 때 먼저 지우면 그 조회가 정상적으로 통과한다.
  * // ponytail: 하드 삭제. 되살리기가 필요해지면 deleted_at 컬럼 + 모든 읽기
  * //           경로의 필터로 올린다(정책 수정이 같이 따라온다).
  *
@@ -200,6 +204,20 @@ export async function deletePlot(
   if (!plotId) throw new Error("PLOT_NOT_FOUND");
 
   const supabase = await getSupabaseServer();
+
+  const tasksDeleted = await supabase
+    .from("plot_tasks")
+    .delete()
+    .eq("plot_id", plotId);
+  if (tasksDeleted.error) throw new Error(tasksDeleted.error.message);
+
+  const cultivationsDeleted = await supabase
+    .from("cultivations")
+    .delete()
+    .eq("plot_id", plotId);
+  if (cultivationsDeleted.error) {
+    throw new Error(cultivationsDeleted.error.message);
+  }
 
   const { data, error } = await supabase
     .from("plots")
