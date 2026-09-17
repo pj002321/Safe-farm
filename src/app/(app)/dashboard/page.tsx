@@ -20,6 +20,10 @@ import { TaskBoard } from "@/components/dashboard/TaskBoard";
 import { MapPinIcon } from "@/components/icons";
 import { ButtonLink } from "@/components/shared/Button";
 import { SectionHeading } from "@/components/shared/SectionHeading";
+import {
+  groupTasksByPlot,
+  totalOpenCount,
+} from "@/features/dashboard/domain/taskGrouping";
 import { listTaskCards } from "@/features/dashboard/taskStore";
 import {
   findCalendarByNameKo,
@@ -124,6 +128,10 @@ export default async function DashboardPage({
     }
   }
 
+  // 밭별로 묶는다. 카드가 없는 밭도 자리를 남기려고 밭 목록을 함께 넘긴다.
+  const taskGroups = groupTasksByPlot(tasks, plots);
+  const openCount = totalOpenCount(taskGroups);
+
   const now = new Date();
   const stripItems = plots.map((plot) =>
     toPlotStripItem(plot, now, stageKoOf(plot, now)),
@@ -198,6 +206,9 @@ export default async function DashboardPage({
           <div className="mb-3 flex items-baseline justify-between gap-3">
             <h2 className="font-semibold text-fg text-sm" id="tasks-heading">
               오늘 할 일
+              <span className="ml-1.5 font-mono text-fg-subtle text-xs">
+                {openCount}
+              </span>
             </h2>
             <div className="flex items-baseline gap-3">
               <p className="font-mono text-[0.68rem] text-fg-subtle">
@@ -211,7 +222,7 @@ export default async function DashboardPage({
               </Link>
             </div>
           </div>
-          <TaskBoard tasks={tasks} toggleTaskAction={toggleTask} />
+          <TaskBoard groups={taskGroups} toggleTaskAction={toggleTask} />
         </section>
 
         <section aria-labelledby="forecast-heading">
