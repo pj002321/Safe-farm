@@ -20,7 +20,16 @@ from sqlalchemy import select
 
 from app.core.config import DATA_DIR
 from app.core.db import get_engine, new_session
-from app.models.farm import Crop, CropDisasterRule, CropStage, CropVariant, Grid, Station
+from app.models.farm import (
+    Crop,
+    CropDisasterRule,
+    CropGuide,
+    CropStage,
+    CropVariant,
+    Grid,
+    Station,
+    Variety,
+)
 from pipeline.prep import check
 from pipeline.prep.seeding import count_rows, read_all, report, require_tables
 from pipeline.prep.table import key_dict, upsert
@@ -36,6 +45,8 @@ TABLES = [
     "crop_variants",
     "crop_stages",
     "crop_disaster_rules",
+    "varieties",        # crops·crop_variants 뒤. crop_id·variant_id 를 거기서 찾는다
+    "crop_guides",
     "grids",
     "stations",
 ]
@@ -47,6 +58,8 @@ UNIQUE = [
     ("crop_stages", ["crop_name", "maturity_type", "stage_order"]),
     # DB 의 UNIQUE 는 crop_id 로 걸리지만 CSV 는 자연키라 crop_name 으로 본다
     ("crop_disaster_rules", ["crop_name", "rule_kind", "stage_name", "severity"]),
+    ("varieties", ["variety_no"]),
+    ("crop_guides", ["crop_name", "cultivation_type", "section", "topic"]),
     ("grids", ["nx", "ny"]),
     ("stations", ["station_code"]),
 ]
@@ -98,13 +111,17 @@ def stage_problems(data: dict[str, list[dict]]) -> list[str]:
         stages.setdefault((row["crop_name"], row["maturity_type"]), []).append(row)
 
     problems: list[str] = []
+    missing = 0
     for variant in data["crop_variants"]:
         key = (variant["crop_name"], variant["maturity_type"])
         name = f"{key[0]}/{key[1]}"
 
         rows = stages.get(key)
         if not rows:
-            problems.append(f"{name}: 단계가 하나도 없다")
+            # 단계가 없는 것은 이제 정상이다 — 농작업일정 erajson 에 생육과정이 실린
+            # 작물만 crop_stages 가 나온다(141 중 21). 나머지는 GDD 판정만 못 한다.
+            # verify.py 의 단계연속() 도 같은 판단이다. 한쪽만 고치면 두 검사가 갈린다
+            missing += 1
             continue
 
         # 숫자로 못 바꾸는 값이 섞이면 아래 비교가 전부 무의미해진다. 여기서 끊는다
@@ -140,6 +157,9 @@ def stage_problems(data: dict[str, list[dict]]) -> list[str]:
         elif int(rows[-1]["gdd_to"]) != target:
             problems.append(f"{name}: 마지막 gdd_to {rows[-1]['gdd_to']}, gdd_target {target}")
 
+    if missing:
+        print(f"  · 생육단계가 없는 숙기 {missing}/{len(data['crop_variants'])}"
+              f" — 농작업일정에 생육과정이 실린 작물만 단계가 나온다")
     return problems
 
 
@@ -172,9 +192,15 @@ def load(db, data: dict[str, list[dict]]) -> dict[str, int]:
             "maturity_type": r["maturity_type"],
             "gdd_target": r["gdd_target"],
             "days_to_harvest": r["days_to_harvest"],
+            # 심는 방법과 창. 확정표 §A 의 순(旬)을 날짜로 편 값이다.
+            # ⚠ gdd_target 역산이 쓰는 파종일(중앙일 하나)과 **다른 값**이다
+            "sow_method": r["sow_method"],
+            "sow_from": r["sow_from"],
+            "sow_to": r["sow_to"],
         }
         for r in data["crop_variants"]
     ]
+
     done["crop_variants"] = upsert(db, CropVariant, rows, ["crop_id", "maturity_type"])
     db.flush()
 
@@ -198,6 +224,69 @@ def load(db, data: dict[str, list[dict]]) -> dict[str, int]:
         for r in data["crop_stages"]
     ]
     done["crop_stages"] = upsert(db, CropStage, rows, ["variant_id", "stage_order"])
+
+    # ── varieties ─────────────────────────────────────────────────
+    # 작물 → 그 작물의 숙기 행들. "숙기가 비었으면 유일한 행" 규칙을 여기서 푼다
+    variants_by_crop: dict[str, dict[str, int]] = {}
+    for (crop_name, maturity, vid) in db.execute(
+        select(Crop.name, CropVariant.maturity_type, CropVariant.variant_id)
+        .join(CropVariant, CropVariant.crop_id == Crop.crop_id)
+    ):
+        variants_by_crop.setdefault(crop_name, {})[maturity] = vid
+
+    def _variant_for(crop_name: str, maturity: str | None) -> int | None:
+        """품종의 숙기로 crop_variants 를 고른다. 13작물 밖이면 None.
+
+        숙기가 비었는데 그 작물의 숙기 행이 하나뿐이면 그 행이다 (확정표 §D-2 — 11작물은
+        MID 한 행). 둘 이상인데 숙기가 비었으면 고를 수 없으니 None 으로 둔다.
+        """
+        options = variants_by_crop.get(crop_name)
+        if not options:
+            return None
+        if maturity:
+            return options.get(maturity)
+        return next(iter(options.values())) if len(options) == 1 else None
+
+    rows = [
+        {
+            "variety_no": r["variety_no"],
+            # read_csv 가 빈 칸을 None 으로 준다. NOT NULL 이라 빈 문자열로 맞춘다
+            "crop_group": r["crop_group"] or "",
+            "crop_name": r["crop_name"],
+            "variety_group": r["variety_group"] or "",
+            "name": r["name"],
+            "maturity_raw": r["maturity_raw"],
+            "maturity_type": r["maturity_type"],
+            "use": r["use"],
+            "zone": r["zone"],
+            "bred_year": _int(r["bred_year"]),
+            "breeder": r["breeder"],
+            "summary": r["summary"],
+            "body": r["body"],
+            "source_file": r["source_file"],
+            "crop_id": crop_id.get(r["crop_name"]),
+            "variant_id": _variant_for(r["crop_name"], r["maturity_type"]),
+        }
+        for r in data["varieties"]
+    ]
+    done["varieties"] = upsert(db, Variety, rows, ["variety_no"])
+
+    # ── crop_guides ────────────────────────────────────────────────
+    rows = [
+        {
+            "crop_name": r["crop_name"],
+            "cultivation_type": r["cultivation_type"] or "",   # read_csv 가 빈 칸을 None 으로 준다. UNIQUE 때문에 빈 문자열로
+            "section": r["section"],
+            "topic": r["topic"],
+            "body": r["body"],
+            "source_file": r["source_file"],
+            "source_loc": r["source_loc"],
+            "crop_id": crop_id.get(r["crop_name"]),
+        }
+        for r in data["crop_guides"]
+    ]
+    done["crop_guides"] = upsert(db, CropGuide, rows,
+                                 ["crop_name", "cultivation_type", "section", "topic"])
 
     rows = [
         {

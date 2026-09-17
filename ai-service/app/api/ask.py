@@ -6,6 +6,7 @@
 app/service/ask_history.py 에 있다 — 이 파일은 그걸 부르기만 한다.
 """
 from __future__ import annotations
+
 import json
 import uuid
 from collections.abc import Iterator
@@ -29,6 +30,11 @@ from app.service.ask_history import complete_answer, record_question, submit_fee
 router = APIRouter(prefix="/v1", tags=["ask"])
 
 DAILY_LIMIT_MESSAGE = f"오늘 질문 가능 횟수({DAILY_ASK_LIMIT}회)를 모두 사용했습니다. 내일 다시 시도해 주세요."
+
+# 후보를 받아 리랭커로 줄인다. 값의 근거는 pipeline/doc/golden.py 주석 참고
+# (2026-09-17 실측: 10→5 와 20→4 가 같은 점수라 왕복이 적은 쪽을 쓴다)
+CANDIDATES = 10
+TOP_K = 5
 
 
 def _sse(history: AskHistory, matches: list[AskMatch], tokens: Iterator[str], db: Session) -> Iterator[str]:
@@ -61,7 +67,11 @@ def ask(request: AskRequest, db: Session = Depends(get_db)) -> AskResponse | Str
         history = record_question(db, request.user_id, request.question, message=BLOCKED_MESSAGE)
         return AskResponse(matches=[], message=BLOCKED_MESSAGE, history_id=str(history.id))
 
-    matches = rerank(request.question, retrieve_with_score(db, request.question))
+    # 후보 CANDIDATES 개를 받아 리랭커로 TOP_K 개까지 줄인다. 자르지 않으면 10개가 통째로
+    # 프롬프트에 들어가 관련 없는 조각이 답변을 흐린다 — 골든셋 실측에서 5개면 충분했다
+    matches = rerank(
+        request.question, retrieve_with_score(db, request.question, CANDIDATES)
+    )[:TOP_K]
     found = [(chunk, dist) for chunk, dist in matches if dist < NO_MATCH_DISTANCE]
 
     history = record_question(db, request.user_id, request.question)

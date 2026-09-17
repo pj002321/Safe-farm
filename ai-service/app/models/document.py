@@ -28,7 +28,8 @@ class Document(Base):
     content = Column(Text, nullable=False)  # 임베딩 대상. content_columns 만 조립함
 
     # content_columns 에 안 넣은 나머지. 숫자 본문에 넣으면 문서가 다 비슷해져 검색 흐려짐.
-    # 보여주기·필터링용인데 아직 읽는 코드 없음.
+    # 검색은 본문(벡터)이 하고, 답변에 쓸 숫자는 여기서 꺼낸다 —
+    # app/knowledge/generator.py 의 build_context 가 조각 본문 뒤에 붙인다.
     meta = Column(JSONB, nullable=False, server_default="{}")
 
     # 재임베딩 스위치. 대상은 content 뿐 — meta 만 바뀌면 재임베딩 안 함.
