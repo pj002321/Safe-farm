@@ -22,6 +22,7 @@ from app.api import ask as ask_api
 from app.api import map as map_api
 from app.api import status as status_api
 from app.api import tasks as tasks_api
+from app.api import alerts as alerts_api
 from app.api import weather as weather_api
 from app.core import config
 
@@ -41,6 +42,7 @@ app.include_router(map_api.router)
 app.include_router(ask_api.router)
 app.include_router(weather_api.router)
 app.include_router(tasks_api.router)
+app.include_router(alerts_api.router)
 
 @app.get("/health")
 def health() -> dict[str, object]:

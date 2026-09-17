@@ -135,7 +135,12 @@ function EmptyTasks() {
   );
 }
 
-function TaskCard({
+/**
+ * 카드 한 장. 이전 기록 화면(`dashboard/history`)도 이걸 그대로 쓴다 —
+ * 그쪽은 "3건 + 더보기"도, "오늘은 할 일이 없습니다" 빈 상태도 맞지 않아
+ * 목록 구성만 따로 하고 카드는 공유한다.
+ */
+export function TaskCard({
   task,
   toggleTaskAction,
 }: {
@@ -172,6 +177,14 @@ function TaskCard({
             <Badge size="sm" tone={priority.tone}>
               {priority.labelKo}
             </Badge>
+            {/* 이월된 미완료에만 붙인다. 오늘 생긴 카드(daysOpen 0)에 "1일째"를
+                붙이면 전부 배지를 달게 되어 구분이 사라진다. 완료 카드에도 안
+                붙인다 — 끝난 일이 며칠 걸렸는지는 여기서 할 얘기가 아니다. */}
+            {!task.done && task.daysOpen > 0 && (
+              <Badge size="sm" tone="neutral">
+                {task.daysOpen + 1}일째
+              </Badge>
+            )}
             <span className="font-mono text-[0.68rem] text-fg-subtle">
               {task.plotKo}
             </span>
