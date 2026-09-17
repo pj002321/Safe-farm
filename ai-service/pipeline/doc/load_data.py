@@ -3,6 +3,9 @@
 본문이 그대로면 건드리지 않는다(content_hash 비교). 바뀐 행은 갱신하면서 조각을
 지우고, 그 자리를 chunk.py 가 다시 채운다 — 세 단계가 이 규칙 하나로 이어진다.
 
+소스에서 사라진 행의 문서는 지운다. 남기면 옛 본문이 임베딩된 채로 검색에 계속
+걸려서, 답변이 지금 DB 에 없는 값을 근거로 나온다.
+
 실행: python -m pipeline.doc.load_data
 """
 
@@ -49,12 +52,13 @@ def load_source(db, source: DbEmbedSource) -> dict[str, int]:
     source: 읽을 소스<br>
 
     # returns
-    처리 건수. 키는 new·updated·unchanged·skipped 네 개로 고정이다.
-    skipped 는 본문이 빈 행 — 임베딩할 것이 없어 문서를 만들지 않는다
+    처리 건수. 키는 new·updated·unchanged·skipped·deleted 다섯 개로 고정이다.
+    skipped 는 본문이 빈 행 — 임베딩할 것이 없어 문서를 만들지 않는다.
+    deleted 는 소스에서 사라진 행의 문서 — 조각까지 같이 지운다
 
     # examples
         load_source(db, SOURCES[0])
-        -> {'new': 17, 'updated': 0, 'unchanged': 0, 'skipped': 0}
+        -> {'new': 65, 'updated': 6, 'unchanged': 0, 'skipped': 0, 'deleted': 11}
     """
     rows = read_rows(source, db)
 
@@ -63,7 +67,11 @@ def load_source(db, source: DbEmbedSource) -> dict[str, int]:
         doc.external_id: doc for doc in db.query(Document).filter(Document.source == source.name)
     }
 
-    stat = {"new": 0, "updated": 0, "unchanged": 0, "skipped": 0}
+    stat = {"new": 0, "updated": 0, "unchanged": 0, "skipped": 0, "deleted": 0}
+
+    # 이번 실행에서 쿼리가 실제로 내놓은 식별자. 루프가 끝난 뒤 existing 에서
+    # 이걸 빼면 남는 것이 고아다
+    seen: set[str] = set()
 
     for line_no, row in enumerate(rows, start=1):
         content = build_content(source, row)
@@ -72,6 +80,7 @@ def load_source(db, source: DbEmbedSource) -> dict[str, int]:
             continue
 
         external_id = build_external_id(source, row, line_no)
+        seen.add(external_id)
         digest = content_hash(content)
         title = build_title(source, row)
         meta = build_meta(source, row)
@@ -98,6 +107,19 @@ def load_source(db, source: DbEmbedSource) -> dict[str, int]:
             doc.title, doc.meta = title, meta
             stat["unchanged"] += 1
 
+    # 소스에서 사라진 행의 문서. 위 루프는 쿼리가 내놓은 행만 돌기 때문에 여기
+    # 남은 것들은 아무도 건드리지 않는다 — 옛 본문이 임베딩까지 끝난 채로 검색에
+    # 계속 걸린다. 더미 시절 '상추 EARLY' 11건이 실제로 그랬다(2026-09-16).
+    #
+    # upsert 는 지우지 않는다. 이 프로젝트에서 같은 함정을 crops·crop_variants·
+    # crop_stages 에서 이미 밟았다 — 넣는 쪽만 만들면 지우는 쪽이 늘 빠진다.
+    #
+    # chunks 는 Document.chunks 의 cascade="all, delete-orphan" 이 같이 지운다
+    for external_id, doc in existing.items():
+        if external_id not in seen:
+            db.delete(doc)
+            stat["deleted"] += 1
+
     db.commit()
     return stat
 
@@ -115,16 +137,17 @@ def main() -> None:
     """
     db = new_session()
     try:
-        total = {"new": 0, "updated": 0, "unchanged": 0, "skipped": 0}
+        total = {"new": 0, "updated": 0, "unchanged": 0, "skipped": 0, "deleted": 0}
         for source in SOURCES:
             stat = load_source(db, source)
             print(
                 f"[{source.name}] 새로 {stat['new']} / 갱신 {stat['updated']} "
-                f"/ 그대로 {stat['unchanged']} / 본문없음 {stat['skipped']}"
+                f"/ 그대로 {stat['unchanged']} / 본문없음 {stat['skipped']} "
+                f"/ 지움 {stat['deleted']}"
             )
             for key in total:
                 total[key] += stat[key]
-        print(f"합계: 새로 {total['new']} / 갱신 {total['updated']}")
+        print(f"합계: 새로 {total['new']} / 갱신 {total['updated']} / 지움 {total['deleted']}")
         print("이어서 python -m pipeline.doc.chunk 를 실행하세요.")
     finally:
         db.close()

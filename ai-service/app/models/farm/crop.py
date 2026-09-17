@@ -24,7 +24,18 @@ class Crop(FarmBase):
 
     # GDD 기준온도(℃). 이 온도 아래에서는 생육이 멈춘 것으로 보고 적산에서 뺀다.
     # 작물마다 달라서 여기 둔다 — GDD 계산의 입력값이다
-    base_temp = Column(Numeric(4, 1), nullable=False)
+    #
+    # ⚠ nullable 이다(2026-09-17). 이 표의 역할이 "GDD 엔진 테이블" 에서 "작물 사전" 으로
+    #   바뀌었기 때문이다 — 농사로 원본의 133작물이 다 들어오는데 확정표 §B-2 가 덮는
+    #   기준온도는 16작물뿐이다. 값이 없는 작물은 **GDD 판정만 건너뛰고** 카탈로그·검색·
+    #   답변에는 다 나온다.
+    #   NOT NULL 이면 117작물이 통째로 안 들어가고, 그러면 varieties·crop_guides 의
+    #   crop_id 가 전부 NULL 이 되며 crop_disaster_rules 34행은 부모를 못 찾아 KeyError 다.
+    #
+    # ⚠ **이 값을 읽어 계산하는 코드는 None 을 먼저 걸러야 한다.** 지금은 그런 경로가 없다
+    #   (domain/gdd.py 는 BASE_TEMP_C=5.0 고정값을 쓰는 지역 지도용이다). 작물별 GDD 를
+    #   붙일 때 그 함수가 None 을 만나면 그 작물은 계산 대상에서 뺀다
+    base_temp = Column(Numeric(4, 1))
 
     # GDD 상한온도(℃). 이 위로는 발육이 더 빨라지지 않아 (upper − base) 로 잘린다.
     #

@@ -29,10 +29,34 @@ class CropVariant(FarmBase):
     maturity_type = Column(Text, nullable=False)
 
     # 수확까지 쌓아야 할 누적 GDD. crop_stages 의 마지막 gdd_to 와 같은 값이다
-    gdd_target = Column(Integer, nullable=False)
+    #
+    # ⚠ nullable 이다(2026-09-17). crops.base_temp 와 같은 이유 — 141 숙기 중 목표값이
+    #   역산된 것은 21개뿐이다(확정표 §C, 일별 기온 역산이 있어야 나온다).
+    #   값이 있는 숙기만 crop_stages 가 딸리므로, 단계가 있으면 목표값도 있다는 관계는
+    #   그대로다. 그 짝은 master_seed 의 stage_problems() 가 검사한다
+    gdd_target = Column(Integer)
 
     # 파종부터 수확까지 대략 며칠. 판정은 GDD 로 하고 이건 사용자에게 보여주는 참고값
     days_to_harvest = Column(Integer)
+
+    # 심는 방법. '씨뿌림' · '아주심기' · '모내기' · '파종'.
+    # 작물마다 말이 다르다 — 벼는 모내기, 무는 씨뿌림이다. 화면 문구가 이 값을 받는다
+    sow_method = Column(Text)
+
+    # 심어도 되는 기간. 'MM-DD' 두 개다(연도 없음 — 해마다 같은 창이 돌아온다).
+    #
+    # ⚠ **하루가 아니라 창이다.** 확정표 §A 는 '아주심기 8.중~9.상' 처럼 순(旬)으로
+    #   적혀 있고, 그 양 끝을 날짜로 편 값이다 — 08-21 ~ 09-10.
+    #   순의 중앙일(5·15·25)을 끝으로 쓰면 실제로 심어도 되는 날이 창 밖으로 밀린다.
+    #
+    # ⚠ gdd_target 역산이 쓰는 파종일과 **다른 값이다.** 저건 중앙일 하나(08-25)이고
+    #   이건 기간이다. 역산 쪽을 이 값으로 바꾸면 21개 목표값이 전부 어긋난다
+    #   (safefarm-crop-data 의 spec.py `_파종일` 주석).
+    #
+    # 정본은 safefarm-crop-data 의 작물_확정표.md §A.
+    # nullable 인 이유: §A 에 줄이 없는 작물이 들어올 수 있다
+    sow_from = Column(Text)
+    sow_to = Column(Text)
 
     __table_args__ = (
         # 한 작물에 같은 숙기가 둘일 수 없다. CSV 적재 때 중복 삽입도 여기서 걸린다
