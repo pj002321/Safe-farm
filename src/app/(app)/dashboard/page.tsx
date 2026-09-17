@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import { SignOutButton } from "@/components/auth/SignOutButton";
 import {
   PLOT_ONBOARDING_PATH,
   PlotStrip,
@@ -207,9 +206,7 @@ export default async function DashboardPage() {
         </section>
       </div>
 
-      <div className="border-border border-t pt-6">
-        <SignOutButton size="sm" variant="ghost" />
-      </div>
+      <div className="border-border border-t pt-6"></div>
     </main>
   );
 }
