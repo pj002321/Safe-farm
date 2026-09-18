@@ -22,8 +22,9 @@ from app.core.security import require_service_token
 from app.domain.ask_suggest import suggest_questions
 from app.domain.guardrail import BLOCKED_MESSAGE, is_blocked_topic
 from app.domain.history_context import HISTORY_RULE
+from app.graph.nodes import plan, retrieve, route_after_plan, run_tools
+from app.graph.state import GraphState
 from app.knowledge.generator import stream_answer
-from app.knowledge.retriever import find_matches
 from app.knowledge.vector_store import neighbors
 from app.models.farm.ask_history import AskHistory
 from app.schemas.ask import (
@@ -34,7 +35,7 @@ from app.schemas.ask import (
     AskResponse,
     AskSuggestions,
 )
-from app.service.ask_context import build_plot_context, plot_focus
+from app.service.ask_context import plot_focus
 from app.service.ask_history import (
     complete_answer,
     recent_turns,
@@ -124,13 +125,26 @@ def ask(request: AskRequest, db: Session = Depends(get_db)) -> AskResponse | Str
             quota=_quota(db, request.user_id),
         )
 
-    # 이력을 **이번 질문을 남기기 전에** 읽는다. 뒤로 미루면 방금 한 질문이
+     # 이력을 **이번 질문을 남기기 전에** 읽는다. 뒤로 미루면 방금 한 질문이
     # 자기 자신의 맥락으로 딸려 들어간다.
     history_context = HISTORY_RULE(recent_turns(db, request.user_id))
 
-    # 후보를 넓게 받아 같은 소스 쏠림을 풀고 어휘 겹침으로 순서를 보정한다.
-    # 세부 로직·값의 근거는 app/knowledge/retriever.py의 find_matches 주석 참고.
-    found = find_matches(db, request.question)
+    # plan 이 밭 조회가 필요한지 정하고, 필요할 때만 run_tools 로 밭 정보를 가져온다.
+    # retrieve 는 route 와 무관하게 항상 돈다 — app/graph/nodes.py 의 plan 주석 참고.
+    # graph.invoke() 를 안 쓰는 이유: generate 노드가 스트리밍을 못 해서 여기선
+    # 노드를 직접 불러 matches/tool_result 만 뽑고, 답변은 그대로 stream_answer 로 흘린다.
+    state: GraphState = {
+        "db": db,
+        "question": request.question,
+        "user_id": request.user_id,
+        "plot_id": request.plot_id,
+        "history_context": history_context,
+    }
+    state.update(plan(state))
+    if route_after_plan(state) == "run_tools":
+        state.update(run_tools(state))
+    state.update(retrieve(state))
+    found = state["matches"]
 
     history = record_question(db, request.user_id, request.question)
     quota = _quota(db, request.user_id)
@@ -142,13 +156,14 @@ def ask(request: AskRequest, db: Session = Depends(get_db)) -> AskResponse | Str
         AskMatch(body=chunk.body, distance=dist, source_title=chunk.document.title)
         for chunk, dist in found
     ]
-    plot_context = build_plot_context(db, request.plot_id) if request.plot_id else None
+    plot_context = state.get("tool_result")
     # 뽑힌 조각의 같은 문서 앞뒤 조각을 LLM 에만 더 준다. 출처 칩(ask_matches)은 5개 그대로 —
     # "방울토마토 물" 의 정답은 뽑힌 조각의 바로 옆 조각이었다 — 골든 hint 29→31.
     # hit 은 같은 소스라 안 움직인다
     evidence = found + neighbors(db, found)
     return StreamingResponse(
-        _sse(history, ask_matches, stream_answer(request.question, evidence, plot_context), db),
+        _sse(history, ask_matches, stream_answer(request.question, evidence, plot_context),
+db),
         media_type="text/event-stream",
     )
 
