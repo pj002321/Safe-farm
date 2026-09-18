@@ -285,12 +285,19 @@ export async function softDeletePlot(
 
   if (cultivationError) throw new Error(cultivationError.message);
 
-  // 할 일 카드는 **실제로 지운다.** `plot_tasks` 에는 `deleted_at` 이 없고,
-  // 대시보드 조회(`taskStore.listTaskCards`)가 `plots.deleted_at` 을 안 보므로
-  // 남겨 두면 숨긴 밭의 할 일이 그대로 뜬다. 규칙에서 나온 파생 자료라
-  // ai-service 가 다시 만들어 주니 지워도 잃는 자료가 없다
-  // (`20260917000000_plot_tasks_delete.sql` 이 delete 권한을 준 이유).
+  // 할 일 카드는 **실제로 지운다.** 규칙에서 나온 파생 자료라 ai-service 가 다시
+  // 만들어 준다(`20260917000000_plot_tasks_delete.sql` 이 delete 권한을 준 이유).
   // 되돌릴 수 없는 단계라 밭을 숨긴 뒤 맨 마지막에 둔다.
+  //
+  // 조회가 안 가려서 지우는 것은 아니다 — `taskStore.listTaskCards` ·
+  // `listTaskHistory` 는 `plots!inner` 조인에 `deleted_at is null` 을 걸어 숨긴
+  // 밭의 카드를 이미 가린다. 새 카드가 더 생기지 않는 것도 ai-service 의
+  // `generate_daily_tasks` 가 지운 밭을 건너뛰기 때문이다.
+  //
+  // ⚠️ 잃는 것이 아주 없지는 않다. `done = true` 인 카드는 규칙으로 다시 만들 수
+  //    없는 **실제 작업 이력**이다(별도 이력 테이블을 두지 않은 이유 —
+  //    `20260916010000_plot_tasks.sql` 첫 문단). 밭을 되살리는 기능이 생기면
+  //    그때는 여기를 지우지 않는 쪽으로 바꿔야 한다.
   const tasksDeleted = await supabase
     .from("plot_tasks")
     .delete()
