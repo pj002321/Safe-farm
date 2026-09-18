@@ -132,7 +132,7 @@ export async function addCultivations(formData: FormData): Promise<void> {
   try {
     await insertCultivations(
       plotId,
-      toCultivationInputs(selections, variantIdByCropId),
+      toCultivationInputs(selections, variantIdByCropId, kstDateString()),
     );
   } catch {
     fail(
@@ -160,6 +160,11 @@ export async function addCultivations(formData: FormData): Promise<void> {
  *
  * 등록·작물 추가 때는 값을 한 번만 받고 고칠 방법이 없었다 — 파종일이 GDD
  * 적산의 기준점이라 잘못 적으면 생육 단계·오늘 할 일 판정이 계속 어긋난다.
+ *
+ * 오늘보다 뒤의 날짜는 `GROWING` 이 아니라 `PLANNED` 로 넣는다 — 아직 심지
+ * 않았는데 "자라는 중"이 되는 것을 막는다. 폼은 `max` 로 달력을 오늘에서
+ * 끊지만(`CultivationList`) 이 액션 자체가 공개 POST 라 여기서 다시 본다.
+ * `toCultivationInputs` 와 같은 판정이다.
  */
 export async function editCultivationSowing(formData: FormData): Promise<void> {
   await requireConsent();
@@ -170,10 +175,12 @@ export async function editCultivationSowing(formData: FormData): Promise<void> {
 
   const known = formData.get("sowingStatus") === "known";
   const sowingDate = String(formData.get("sowingDate") ?? "").trim() || null;
+  // 심을 예정일로 남기되 상태만 PLANNED 로 둠. 날짜를 지우면 "미정"과 구별이 안 된다.
+  const future = sowingDate !== null && sowingDate > kstDateString();
 
   try {
     await updateCultivationSowing(cultivationId, {
-      status: known && sowingDate ? "GROWING" : "PLANNED",
+      status: known && sowingDate && !future ? "GROWING" : "PLANNED",
       sowingDate: known ? sowingDate : null,
     });
   } catch {

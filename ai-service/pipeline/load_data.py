@@ -6,6 +6,7 @@ from app.models.disaster_rule import DisasterRule
 from app.models.normal import Normal
 from app.models.weather import WeatherDaily
 from pipeline.kma_client import (
+    NORMAL_SOURCE_BY_TMST,
     fetch_daily_lst_min,
     fetch_normals,
     fetch_solar_term_crop,
@@ -51,9 +52,15 @@ def load_alerts(db, api_key):
     return len(rows)
 
 
-def load_normals(db, api_key, stn):
-    """관측소 연중 평년값(365일치, 1991~2020)을 normals 에 upsert."""
-    rows = normalize_normals(fetch_normals(api_key, stn))
+def load_normals(db, api_key, stn, tmst=2021):
+    """관측소 연중 평년값(365일치)을 normals 에 upsert.
+
+    tmst 가 기준연도다 — 2021 은 1991~2020(source='kma'), 2011 은 1981~2010('kma-1981').
+    둘은 source 가 달라 같은 날짜에 공존한다. 읽는 쪽(app/service/gdd_region.py)이
+    새 기준을 우선하고 없을 때만 옛 기준을 쓴다.
+    """
+    source = NORMAL_SOURCE_BY_TMST[tmst]
+    rows = normalize_normals(fetch_normals(api_key, stn, tmst=tmst), source=source)
 
     for row in rows:
         stmt = pg_insert(Normal).values(**row)

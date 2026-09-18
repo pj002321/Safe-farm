@@ -2,7 +2,6 @@ import { CalendarIcon, SproutIcon } from "@/components/icons";
 import { SowingStatusOption } from "@/components/plot/CropCards";
 import { Badge } from "@/components/shared/Badge";
 import { Button, ButtonLink } from "@/components/shared/Button";
-import { EmptyState } from "@/components/shared/EmptyState";
 import { GrowthGauge } from "@/components/shared/GrowthGauge";
 import {
   type CultivationCard,
@@ -93,14 +92,25 @@ export function CultivationList({
   onEditSowing,
 }: CultivationListProps) {
   if (cards.length === 0) {
+    // 버튼을 달지 않는다. 작물이 0건이면 바로 아래에 작물 선택 폼이 펼쳐진 채로
+    // 나오므로(`plots/[id]/page.tsx`), 여기에 버튼을 두면 같은 일을 시키는 것이
+    // 둘이 된다. `EmptyState` 는 액션이 필수라 쓰지 않고 안내만 낸다 — "막다른
+    // 빈 화면을 만들지 않는다"는 그 규약의 취지는 아래 폼이 채운다.
+    // 예전에는 여기 버튼이 `/plots/new` 로 갔다. 밭은 이미 있는데 밭이 하나 더
+    // 생겼다 — 밭 상세에 작물을 더하는 폼이 나중에 붙으면서 어긋난 링크다.
     return (
-      <EmptyState
-        actionHref="/plots/new"
-        actionKo="작물 심기"
-        bodyKo="심은 작물을 알려 주시면 그 자리의 기상 관측으로 생육 단계를 계산해 드립니다."
-        icon={<SproutIcon />}
-        titleKo="아직 심은 작물이 없습니다"
-      />
+      <div className="rounded-lg border border-border border-dashed bg-surface-2/40 px-6 py-8 text-center">
+        <span className="mx-auto grid size-12 place-items-center rounded-full bg-accent-subtle text-2xl text-accent">
+          <SproutIcon />
+        </span>
+        <p className="mt-4 font-semibold text-fg text-lg">
+          아직 심은 작물이 없습니다
+        </p>
+        <p className="mx-auto mt-2 max-w-md text-balance text-fg-muted text-sm leading-relaxed">
+          아래에서 심은 작물을 골라 주시면 그 자리의 기상 관측으로 생육 단계를
+          계산해 드립니다.
+        </p>
+      </div>
     );
   }
 
@@ -258,6 +268,9 @@ function CultivationItem({
                   className="w-full rounded-md border border-border bg-surface px-3 py-2 text-fg text-sm transition-colors hover:border-accent focus:border-accent"
                   defaultValue={card.sowingDate ?? ""}
                   id={`sowing-date-${card.id}`}
+                  // 미래 날짜를 고르면 심지도 않은 작물이 "자라는 중"이 된다.
+                  // 달력을 오늘에서 끊고, 같은 판정을 `editCultivationSowing` 이 한 번 더 한다.
+                  max={today}
                   name="sowingDate"
                   type="date"
                 />

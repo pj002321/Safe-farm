@@ -16,6 +16,7 @@ import { parsePlotRegistration } from "@/features/plots/domain/registerPlot";
 import { insertPlot } from "@/features/plots/plotStore";
 import { aiService } from "@/shared/aiService/client";
 import { requireUser } from "@/shared/auth/session";
+import { kstDateString } from "@/shared/utils/kstDate";
 /**
  * ---------------------------------------------
  * [Feature]: 텃밭 등록 제출
@@ -74,7 +75,7 @@ export async function registerPlot(formData: FormData): Promise<void> {
 
   await insertCultivations(
     plotId,
-    toCultivationInputs(selections, variantIdByCropId),
+    toCultivationInputs(selections, variantIdByCropId, kstDateString()),
   );
 
   // 자정 배치를 기다리지 않고 등록 직후 오늘 할 일을 채운다. ai-service 가
