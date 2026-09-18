@@ -1,15 +1,14 @@
 import "server-only";
 
-import { nearestStation } from "@/shared/geo/nearestStation";
+import { stationsByDistance } from "@/shared/geo/nearestStation";
 import { listStations } from "@/shared/geo/stationStore";
 import {
   type ArrivalForecast,
   type ArrivalRule,
-  forecastArrival_1,
   forecastArrival_2,
-  type MonthlyNormal,
 } from "@/shared/growth/forecast";
 import { type DailyTemp, recentDailyGdd } from "@/shared/growth/gdd";
+import { listMonthlyNormals } from "@/shared/growth/normalStore";
 import {
   recommendTasks_2,
   type TaskAdvice,
@@ -35,11 +34,7 @@ import {
 import { buildStageTimeline, type StageStep } from "./domain/stageTimeline";
 import { buildTimeline, type TimelineEntry } from "./domain/timeline";
 import { listCultivationEvents } from "./eventStore";
-import {
-  listMonthlyNormals,
-  listObservations,
-  listStages,
-} from "./growthStore";
+import { listObservations, listStages } from "./growthStore";
 
 /**
  * ---------------------------------------------
@@ -52,11 +47,9 @@ import {
  * - **규칙 변형(`_1`/`_2`)을 고르는 자리가 이 파일이다.** 아래 세 상수의 오른쪽만
  *   바꾸면 화면 전체가 그 규칙으로 돈다. 고르고 나면 진 쪽 함수는 지운다 —
  *   남겨 두면 다음 사람이 어느 쪽이 도는지 코드에서 알 수 없다.
- * - 도달 예측은 **평년값이 있으면 `_2`, 없으면 `_1`** 이다(2026-09-18). 시금치를 9/1 에
- *   심은 밭이 `_1`(최근 7일 평균 반복)로 "수확 10/23" 을 냈는데, 평년으로 하루씩 쌓으면
- *   11/19 다 — 가을엔 하루 GDD 가 9월 17 → 10월 11 → 11월 5 로 떨어지는데 `_1` 은 9월
- *   속도가 계속된다고 본다. `normals` 표(관측소 176곳)가 생겨 `_2` 를 쓸 수 있게 됐다.
- *   다만 밭 관측소 109곳 중 24곳(공항·신설)은 평년값이 없어 그 밭은 `_1` 로 남는다.
+ * - 도달 예측은 **예보 → 평년값** 순으로 메운다. 예보가 닿는 날은 예보 기온으로,
+ *   그 밖은 그 달의 평년 기온으로 쌓는다(`forecastArrival_2`). 평년값은 밭에서
+ *   가까운 관측소 것을 읽고, 없으면 다음으로 가까운 곳으로 물러선다.
  * - 소유 확인은 `getCultivationCard(plotId, ...)` 가 밭 id 를 같이 걸어서 한다.
  * ---------------------------------------------
  */
@@ -64,13 +57,13 @@ import {
 /** ── 규칙 선택 ─────────────────────────────────────────────── */
 
 /**
- * 평년값이 있으면 `_2`(예보 밖을 그 달 평년으로 메움), 없으면 `_1`(최근 평균 반복).
- * "고르고 나면 진 쪽을 지운다" 는 이 파일 규칙의 예외다 — 둘 다 진 게 아니라,
- * 평년값 없는 관측소 24곳이 있는 동안 `_1` 이 그쪽의 유일한 답이다.
+ * `forecastArrival_1` 은 최근 기온이 계속된다고 본다. 계절이 바뀌는 구간에서
+ * 도달일이 크게 어긋나 `_2`(평년값 외삽)로 간다.
+ *
+ * ⚠️ `_1` 을 아직 지우지 않았다. `normals` 가 비어 있는 환경에서는 `_2` 가
+ *    "모른다"만 내놓으므로, 적재 상태를 확인하기 전까지 되돌릴 자리를 남긴다.
  */
-function arrivalRuleFor(normals: readonly MonthlyNormal[]): ArrivalRule {
-  return normals.length > 0 ? forecastArrival_2 : forecastArrival_1;
-}
+const ARRIVAL_RULE: ArrivalRule = forecastArrival_2;
 
 /** `recommendTasks_1` 은 단계만 본다. 기상 경고를 같이 내려면 `_2`. */
 const TASK_RULE: TaskRule = recommendTasks_2;
@@ -83,6 +76,14 @@ const HORIZON_DAYS = 120;
 
 /** 최근 기온 평균을 낼 때 보는 기간. `growthGauge` 와 같은 값이다. */
 const RECENT_WINDOW_DAYS = 7;
+
+/**
+ * 평년값을 물어볼 관측소 수. 가까운 순으로 이만큼만 본다.
+ *
+ * 가장 가까운 곳에 평년값이 없을 수 있어 1 로는 부족하고(`normalStore.ts` 참고),
+ * 전부 받아 오면 쓰지도 않을 관측소 몇천 행을 매 요청마다 읽는다.
+ */
+const NORMAL_STATION_CANDIDATES = 3;
 
 /** ── 반환 모양 ─────────────────────────────────────────────── */
 
@@ -159,27 +160,43 @@ export async function loadCultivationDetail(
    * `plotStrip.ts` 가 생육단계를 인자로 받는 것과 같은 이유다.
    */
   weather: TaskWeather | null = null,
+  /**
+   * 내일부터의 예보 기온. 도달 예측이 이 구간을 먼저 쓰고, 그 밖을 평년값으로
+   * 메운다. `weather` 와 같은 이유로 여기서 직접 읽지 않는다 — 예보 조회는
+   * `features/monitoring` 에 있고 features 끼리는 import 할 수 없다.
+   */
+  forecast: readonly DailyTemp[] = [],
 ): Promise<CultivationDetail | null> {
   const card = await getCultivationCard(plot.id, cultivationId);
   if (card === null) return null;
 
-  const [events, station, stagesByVariant] = await Promise.all([
+  const [events, nearby, stagesByVariant] = await Promise.all([
     listCultivationEvents(card.id),
-    listStations().then((stations) => nearestStation(plot, stations)),
+    listStations().then((stations) => stationsByDistance(plot, stations)),
     listStages([card.variantId]),
   ]);
   const stages = stagesByVariant.get(card.variantId) ?? [];
+  // 관측은 가장 가까운 한 곳에서만 읽는다. 평년값은 그 곳에 없을 수 있어
+  // 가까운 순으로 몇 곳을 후보로 넘긴다(`normalStore.ts` 참고).
+  const station = nearby[0] ?? null;
 
   // 관측은 파종일부터 읽는다. 단계 보정이 더 뒤를 가리켜도 앞 구간이 있어야
   // "보정 전에는 어땠나"를 그릴 수 있다.
-  const [observations, normals]: [DailyTemp[], MonthlyNormal[]] =
+  const [observations, normals] = await Promise.all([
     station === null || card.sowingDate === null
-      ? [[], []]
-      : await Promise.all([
-          listObservations(station.stationCode, card.sowingDate),
-          // 같은 관측소의 월별 평년값. 없으면 빈 배열 → 아래서 _1 로 내려간다
-          listMonthlyNormals(station.stationCode),
-        ]);
+      ? Promise.resolve<DailyTemp[]>([])
+      : listObservations(station.stationCode, card.sowingDate),
+    listMonthlyNormals(
+      nearby
+        .slice(0, NORMAL_STATION_CANDIDATES)
+        .map((point) => point.stationCode),
+    ).catch((error) => {
+      // 평년값이 없으면 예보 끝에서 멈출 뿐, 게이지와 타임라인은 그대로다.
+      // 화면 전체를 죽일 이유가 없다.
+      console.error("[cultivation] 평년값 조회 실패", error);
+      return [];
+    }),
+  ]);
 
   const override = latestOverride(events);
   const rebase =
@@ -238,13 +255,12 @@ export async function loadCultivationDetail(
   const recent = observations.slice(-RECENT_WINDOW_DAYS);
   const arrival = (targetGdd: number): ArrivalForecast | null => {
     if (gauge === null || card.baseTempC === null) return null;
-    return arrivalRuleFor(normals)({
+    return ARRIVAL_RULE({
       accumulatedGdd: gauge.accumulatedGdd,
       targetGdd,
       baseTempC: card.baseTempC,
       upperTempC: card.upperTempC,
-      // 예보를 적재하는 코드가 아직 없다. 빈 배열이면 규칙이 전 구간을 메운다.
-      forecast: [],
+      forecast,
       recent,
       normals,
       today,

@@ -2,6 +2,7 @@ import "server-only";
 
 import { nearestStation } from "@/shared/geo/nearestStation";
 import { listStations } from "@/shared/geo/stationStore";
+import type { DailyTemp } from "@/shared/growth/gdd";
 import { getSupabaseServer } from "@/shared/supabase/server";
 import {
   buildWeatherSeries,
@@ -115,6 +116,37 @@ export interface WeatherPlot {
   longitude: number;
   gridX: number;
   gridY: number;
+}
+
+/**
+ * 내일부터 `days` 일치 예보 기온. 도달 예측(`shared/growth/forecast.ts`)이 쓴다.
+ *
+ * `loadWeatherSeries` 와 따로 두는 이유는 보는 기간이 다르기 때문이다. 차트는
+ * 오늘 앞뒤 일주일이면 되지만 도달 예측은 **예보가 닿는 끝까지** 필요하다 —
+ * 그만큼 평년값 외삽 구간이 줄고 답이 정확해진다.
+ *
+ * 기온이 없는 날은 뺀다. `DailyTemp` 는 둘 다 있어야 GDD 를 낼 수 있고, 여기서
+ * 0 으로 채우면 그날치 적산이 조용히 사라진다.
+ */
+export async function loadForecastTemps(
+  plot: Pick<WeatherPlot, "gridX" | "gridY">,
+  today: string,
+  days = 10,
+): Promise<DailyTemp[]> {
+  const gridId = await findGridId(plot);
+  if (gridId === null) return [];
+
+  const rows = await listForecast(
+    gridId,
+    shiftDate(today, 1),
+    shiftDate(today, days),
+  );
+
+  return rows.flatMap((row) =>
+    row.tempMaxC === null || row.tempMinC === null
+      ? []
+      : [{ date: row.date, tempMaxC: row.tempMaxC, tempMinC: row.tempMinC }],
+  );
 }
 
 export interface PlotWeather {

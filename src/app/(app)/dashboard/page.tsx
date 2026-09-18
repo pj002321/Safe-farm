@@ -83,8 +83,19 @@ function stageKoOf(plot: PlotCard, now: Date): string | null {
   return stageAt(calendar, days).nameKo;
 }
 
-/** 위성 위상차가 길게 벌어졌을 때만 나온다. null 이면 배너를 그리지 않는다. */
-const SAMPLE_DEVIATION =
+/**
+ * 위성 위상차가 길게 벌어졌을 때만 나온다. null 이면 배너를 그리지 않는다.
+ *
+ * ⚠️ **퍼블용 고정 문구다**(`components/dashboard/sample.ts` 의 값들과 같은
+ *    성격). 배추를 심지 않은 사용자에게도 이 문장이 그대로 나가므로, 실사용자를
+ *    받기 전에 치워야 한다. 주말 예보·특보가 그랬듯 조회가 붙으면 사라진다.
+ *
+ * 켜려면 `shared/growth/phaseShift.ts` 에 위상차(일)를 넘겨 받은 값으로 문장을
+ * 만든다. 그 입력은 NDVI 곡선을 기준 곡선과 견줘야 나오는데, 지금 있는 것은
+ * `/v1/satellite/observations` 의 **올해 한 구간**뿐이라 견줄 대상이 없다.
+ * 그래서 이 상수만 아직 남아 있다.
+ */
+const SAMPLE_DEVIATION: string | null =
   "배추밭 생육이 인근 평균보다 6일 느립니다. 위성 관측이 5일 넘게 이어져 알려 드립니다.";
 
 export default async function DashboardPage({

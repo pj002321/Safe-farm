@@ -13,7 +13,10 @@ import { SectionHeading } from "@/components/shared/SectionHeading";
 import { loadCultivationDetail } from "@/features/cultivations/detailStore";
 import { cardTitle } from "@/features/cultivations/domain/cultivationCard";
 import { summarizeWeather } from "@/features/monitoring/domain/weatherSeries";
-import { loadWeatherSeries } from "@/features/monitoring/weatherStore";
+import {
+  loadForecastTemps,
+  loadWeatherSeries,
+} from "@/features/monitoring/weatherStore";
 import { getPlotDetail } from "@/features/plots/plotStore";
 import { getCurrentProfile } from "@/shared/auth/profileStore";
 import { kstDateString } from "@/shared/utils/kstDate";
@@ -56,12 +59,22 @@ export default async function Page({
   if (!plot) notFound();
 
   const today = kstDateString();
-  const weather = await loadWeatherSeries(plot, today);
+  // 차트용 계열과 도달 예측용 예보는 보는 기간이 달라 따로 읽는다. 둘 다
+  // `features/monitoring` 이라 서로를 기다릴 이유가 없어 나란히 받는다.
+  const [weather, forecast] = await Promise.all([
+    loadWeatherSeries(plot, today),
+    loadForecastTemps(plot, today).catch((error) => {
+      // 예보가 없으면 평년값만으로 메운다. 예측 하나 때문에 화면을 죽이지 않는다.
+      console.error("[cultivation] 예보 조회 실패", error);
+      return [];
+    }),
+  ]);
   const detail = await loadCultivationDetail(
     plot,
     cultivationId,
     today,
     summarizeWeather(weather.series),
+    forecast,
   );
   if (!detail) notFound();
 

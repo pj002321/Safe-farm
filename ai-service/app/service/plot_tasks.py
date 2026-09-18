@@ -192,7 +192,12 @@ def generate_tasks_for_plot(db: Session, plot: Plot) -> list[PlotTask]:
 
 
 def generate_daily_tasks(db: Session) -> int:
-    """모든 밭을 판정한다. 매일 00시(KST) 배치의 진입점.
+    """살아 있는 밭을 판정한다. 매일 00시(KST) 배치의 진입점.
+
+    삭제는 soft delete 라 지운 밭도 `plots` 에 그대로 남아 있다(`deleted_at`).
+    거르지 않으면 지운 밭에 매일 카드가 새로 쌓인다 — 화면에는 Next 쪽 조인
+    조건(`taskStore.listTaskCards` 의 `plots.deleted_at is null`)이 가려 주므로
+    보이지 않고, 그래서 더 늦게 발견된다. ask_context.py 와 같은 조건이다.
 
     ⚠️ **밭 하나의 실패가 나머지를 막지 않는다.** 예전에는
        `sum(... for plot in plots)` 한 줄이라, 밭 하나에서 예외가 나면 그 자리에서
@@ -207,7 +212,7 @@ def generate_daily_tasks(db: Session) -> int:
        rollback 이 필요한 이유: 예외가 난 세션은 다음 질의부터 전부 거부한다.
        걷어내지 않으면 격리해도 나머지 밭이 줄줄이 실패한다.
     """
-    plots = db.query(Plot).all()
+    plots = db.query(Plot).filter(Plot.deleted_at.is_(None)).all()
 
     created = 0
     for plot in plots:

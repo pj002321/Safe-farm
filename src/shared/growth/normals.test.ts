@@ -1,62 +1,77 @@
 import { describe, expect, it } from "vitest";
-import { type NormalRow, toMonthlyNormals } from "./normals";
+import { foldMonthlyNormals, type NormalDay } from "./normals";
 
-const row = (
-  source: string,
-  month: number,
-  tempMaxC: number | null,
-  tempMinC: number | null,
-): NormalRow => ({ source, month, tempMaxC, tempMinC });
+/** 한 달치 행을 같은 값으로 만든다. 평균이 그 값 그대로 나와야 한다. */
+function month(m: number, max: number, min: number, days = 30): NormalDay[] {
+  return Array.from({ length: days }, () => ({
+    month: m,
+    tempMaxC: max,
+    tempMinC: min,
+  }));
+}
 
-describe("toMonthlyNormals", () => {
-  it("일별을 달로 접는다 — 달마다 평균 하나", () => {
-    const got = toMonthlyNormals([
-      row("kma", 9, 28, 18),
-      row("kma", 9, 26, 16),
-      row("kma", 10, 20, 10),
+describe("foldMonthlyNormals", () => {
+  it("월별 평균을 낸다", () => {
+    const rows = [
+      { month: 9, tempMaxC: 28, tempMinC: 20 },
+      { month: 9, tempMaxC: 26, tempMinC: 18 },
+    ];
+    expect(foldMonthlyNormals(rows)).toEqual([
+      { month: 9, tempMaxC: 27, tempMinC: 19 },
     ]);
-    expect(got).toEqual([
-      { month: 9, tempMaxC: 27, tempMinC: 17 },
-      { month: 10, tempMaxC: 20, tempMinC: 10 },
+  });
+
+  it("월 오름차순으로 돌려준다", () => {
+    const rows = [...month(12, 5, -3), ...month(3, 12, 2), ...month(7, 29, 22)];
+    expect(foldMonthlyNormals(rows).map((row) => row.month)).toEqual([
+      3, 7, 12,
     ]);
   });
 
-  it("달 차례로 나온다 — 12월 뒤에 1월이 오는 입력이어도", () => {
-    const got = toMonthlyNormals([row("kma", 12, 5, -3), row("kma", 1, 3, -6)]);
-    expect(got.map((m) => m.month)).toEqual([1, 12]);
-  });
-
-  it("kma(1991~2020)가 있으면 kma-1981 은 섞지 않는다", () => {
-    // 같은 관측소에 두 기준이 같이 있는 곳이 70곳이다. 섞으면 반반 값이 된다
-    const got = toMonthlyNormals([
-      row("kma", 9, 28, 18),
-      row("kma-1981", 9, 20, 10),
+  it("소수 한 자리로 자른다", () => {
+    const rows = [
+      { month: 5, tempMaxC: 23.34, tempMinC: 11.11 },
+      { month: 5, tempMaxC: 23.35, tempMinC: 11.12 },
+    ];
+    expect(foldMonthlyNormals(rows)).toEqual([
+      { month: 5, tempMaxC: 23.3, tempMinC: 11.1 },
     ]);
-    expect(got).toEqual([{ month: 9, tempMaxC: 28, tempMinC: 18 }]);
   });
 
-  it("kma 가 없으면 kma-1981 로 내려간다", () => {
-    const got = toMonthlyNormals([row("kma-1981", 9, 20, 10)]);
-    expect(got).toEqual([{ month: 9, tempMaxC: 20, tempMinC: 10 }]);
-  });
-
-  it("결측일은 평균에서 뺀다", () => {
-    const got = toMonthlyNormals([
-      row("kma", 9, 30, 20),
-      row("kma", 9, null, 18),
-      row("kma", 9, 26, null),
+  it("최고·최저 중 하나라도 없는 달은 뺀다", () => {
+    const rows = [
+      { month: 1, tempMaxC: 2, tempMinC: null },
+      { month: 2, tempMaxC: 5, tempMinC: -1 },
+    ];
+    expect(foldMonthlyNormals(rows)).toEqual([
+      { month: 2, tempMaxC: 5, tempMinC: -1 },
     ]);
-    expect(got).toEqual([{ month: 9, tempMaxC: 30, tempMinC: 20 }]);
   });
 
-  it("행이 없거나 아는 source 가 없으면 빈 배열 — _2 가 null 을 내고 _1 로 넘어간다", () => {
-    expect(toMonthlyNormals([])).toEqual([]);
-    expect(toMonthlyNormals([row("open-meteo", 9, 28, 18)])).toEqual([]);
+  it("빈 값을 0 으로 세지 않는다", () => {
+    // null 이 평균의 분모에 들어가면 27 이 아니라 18 이 나온다.
+    const rows = [
+      { month: 9, tempMaxC: 28, tempMinC: 20 },
+      { month: 9, tempMaxC: null, tempMinC: 18 },
+      { month: 9, tempMaxC: 26, tempMinC: 16 },
+    ];
+    expect(foldMonthlyNormals(rows)).toEqual([
+      { month: 9, tempMaxC: 27, tempMinC: 18 },
+    ]);
   });
 
-  it("1~12 밖의 달은 버린다", () => {
-    expect(
-      toMonthlyNormals([row("kma", 13, 1, 1), row("kma", 0, 1, 1)]),
-    ).toEqual([]);
+  it("월 범위를 벗어난 행은 버린다", () => {
+    const rows = [
+      { month: 0, tempMaxC: 9, tempMinC: 1 },
+      { month: 13, tempMaxC: 9, tempMinC: 1 },
+      { month: 6, tempMaxC: 27, tempMinC: 19 },
+    ];
+    expect(foldMonthlyNormals(rows)).toEqual([
+      { month: 6, tempMaxC: 27, tempMinC: 19 },
+    ]);
+  });
+
+  it("빈 입력이면 빈 배열", () => {
+    expect(foldMonthlyNormals([])).toEqual([]);
   });
 });
