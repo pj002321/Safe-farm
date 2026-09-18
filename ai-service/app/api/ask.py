@@ -19,16 +19,14 @@ from sqlalchemy.orm import Session
 from app.core.config import DAILY_ASK_LIMIT
 from app.core.db import get_db
 from app.core.security import require_service_token
-from app.knowledge.retriever import retrieve_with_score
-from app.knowledge.vector_store import neighbors
 from app.domain.ask_suggest import suggest_questions
 from app.domain.diversity import diversify
-from app.schemas.ask import AskFeedbackRequest, AskMatch, AskRequest, AskResponse, NO_MATCH_DISTANCE
 from app.domain.guardrail import BLOCKED_MESSAGE, is_blocked_topic
 from app.domain.history_context import HISTORY_RULE
 from app.knowledge.generator import stream_answer
 from app.knowledge.reranker import rerank
 from app.knowledge.retriever import retrieve_with_score
+from app.knowledge.vector_store import neighbors
 from app.models.farm.ask_history import AskHistory
 from app.schemas.ask import (
     NO_MATCH_DISTANCE,
@@ -85,7 +83,7 @@ def _sse(
     quota: AskQuota,
 ) -> Iterator[str]:
     """meta → matches → 토큰 → done 순으로 흘려보낸다.
-
+    Server-Sent-Event: SSE
     meta 가 맨 앞인 이유는 프런트가 history_id 를 먼저 받아야 피드백을 보낼 대상을
     알고, 잔여 횟수를 곧바로 줄여 보여줄 수 있어서다.
 
@@ -167,7 +165,12 @@ def ask(request: AskRequest, db: Session = Depends(get_db)) -> AskResponse | Str
     # hit 은 같은 소스라 안 움직인다
     evidence = found + neighbors(db, found)
     return StreamingResponse(
-        _sse(history, ask_matches, stream_answer(request.question, evidence, plot_context), db),
+        _sse(
+            history,
+            ask_matches,
+            stream_answer(request.question, evidence, plot_context, history_context),
+            db,
+        ),
         media_type="text/event-stream",
     )
 
