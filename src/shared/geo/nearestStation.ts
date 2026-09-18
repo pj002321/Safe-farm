@@ -79,3 +79,24 @@ export function nearestStation(
 
   return best;
 }
+
+/**
+ * 가까운 순으로 늘어놓은 관측소.
+ *
+ * `nearestStation` 은 관측(`weather_obs_daily`)용이라 한 곳이면 되지만, 평년값
+ * (`normals`)은 **관측소마다 있고 없고가 갈린다.** 가장 가까운 곳에 평년값이
+ * 없을 때 다음 곳으로 물러설 수 있어야 해서 순서까지 필요하다.
+ *
+ * 거리가 같으면 원래 순서를 지킨다(`sort` 가 안정 정렬이다) — `nearestStation`
+ * 이 `<` 로 앞의 것을 남기는 것과 같은 답이 나온다.
+ */
+export function stationsByDistance(
+  plot: { latitude: number; longitude: number },
+  stations: readonly StationPoint[],
+): StationPoint[] {
+  return [...stations].sort(
+    (a, b) =>
+      distanceKm(plot.latitude, plot.longitude, a.latitude, a.longitude) -
+      distanceKm(plot.latitude, plot.longitude, b.latitude, b.longitude),
+  );
+}
