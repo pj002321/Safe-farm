@@ -31,6 +31,7 @@ from app.core.config import DATA_DIR
 
 ASOS_MAX_STN = 300
 NORMAL_STATIONS_PATH = DATA_DIR / "ref" / "normal_stations.csv"
+NORMAL_FALLBACK_PATH = DATA_DIR / "ref" / "normal_fallback.csv"
 
 
 def is_asos(stn: str | int) -> bool:
@@ -69,10 +70,23 @@ def save_normal_stations(stations: list[dict], key: str = "stn") -> int:
     return len(stations)
 
 
-def with_normals(stations: list[dict], key: str = "stn") -> list[dict]:
-    """ASOS 이면서 평년값이 있는 관측소만 남긴다. 목록 파일이 없으면 ASOS 전체를 준다 —
-    최초 1회(목록을 아직 안 만든 상태)에 후보가 0 이 되어 매핑이 통째로 깨지는 것을 막는다.
+def normal_fallback() -> dict[str, str]:
+    """평년값이 없는 관측소 → 평년값을 빌려올 관측소. 파일이 없으면 빈 dict.
+
+    normal_fallback.py 가 올해 실측으로 닮음을 재서 만든다(규칙은 그 파일 docstring).
+    여기 있는 관측소는 실측은 자기 것을 쓰고 평년값만 짝의 것을 쓴다.
     """
-    있는것 = normal_stations()
+    if not NORMAL_FALLBACK_PATH.exists():
+        return {}
+    with NORMAL_FALLBACK_PATH.open(encoding="utf-8-sig") as f:
+        return {row["stn"]: row["normal_stn"] for row in csv.DictReader(f) if row.get("stn")}
+
+
+def with_normals(stations: list[dict], key: str = "stn") -> list[dict]:
+    """ASOS 이면서 평년값을 **쓸 수 있는** 관측소만 남긴다 — 자기 것이 있거나, 빌려올 짝이 있거나.
+    목록 파일이 없으면 ASOS 전체를 준다 — 최초 1회(목록을 아직 안 만든 상태)에 후보가 0 이 되어
+    매핑이 통째로 깨지는 것을 막는다.
+    """
+    있는것 = normal_stations() | set(normal_fallback())
     asos = asos_only(stations, key)
     return [s for s in asos if s[key] in 있는것] or asos

@@ -105,15 +105,21 @@ def sigungu_gdd_deviation(
     today = today or date.today()
     start = date(today.year, 1, 1)
     stations = sorted({row["station"] for row in sigungu_stations})
+    # 평년값은 normal_station 에서 본다. 평년값이 없는 관측소(공항·신설)는 실측만 자기 것을 쓰고
+    # 평년값을 닮은 짝에서 빌린다(pipeline/region/normal_fallback.py). 칸이 없으면 자기 자신 —
+    # 옛 CSV 와도 그대로 맞는다
+    normal_stations = sorted(
+        {row.get("normal_station") or row["station"] for row in sigungu_stations}
+    )
 
     actual_by_stn = _actual_gdd_by_station(db, stations, start, today)
-    normal_by_stn = _normal_gdd_by_station(db, stations, start, today)
+    normal_by_stn = _normal_gdd_by_station(db, normal_stations, start, today)
 
     out: dict[str, dict] = {}
     for row in sigungu_stations:
         stn = row["station"]
         actual = actual_by_stn.get(stn)
-        normal = normal_by_stn.get(stn)
+        normal = normal_by_stn.get(row.get("normal_station") or stn)
 
         deviation_pct = None
         if actual is not None and normal is not None and normal > 0:

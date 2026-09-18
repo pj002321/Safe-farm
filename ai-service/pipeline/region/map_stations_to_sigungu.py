@@ -16,7 +16,7 @@ import json
 import math
 
 from app.core.config import DATA_DIR
-from pipeline.region.asos import with_normals
+from pipeline.region.asos import normal_fallback, with_normals
 
 SIGUNGU_PATH = DATA_DIR / "ref" / "sigungu.geojson"
 STATIONS_PATH = DATA_DIR / "stations.csv"
@@ -76,6 +76,9 @@ def main() -> None:
     # 공항·레이더·신설 관측소가 섞여 250개 중 76개가 회색이 된다 — 셋 다 겪은 뒤의 자리다.
     # 이유 전체는 pipeline/region/asos.py 의 docstring.
     candidates = with_normals(stations)
+    # 평년값이 없는 관측소는 실측만 자기 것을 쓰고 평년값은 짝(normal_fallback.csv)의 것을 쓴다.
+    # station 은 비·바람·오늘 기온이 보는 곳, normal_station 은 평년 GDD 가 보는 곳 — 대개 같다
+    빌릴곳 = normal_fallback()
 
     rows = []
     unmatched = []
@@ -108,6 +111,7 @@ def main() -> None:
                 "station": station["stn"],
                 "station_name": station["name"],
                 "method": method,
+                "normal_station": 빌릴곳.get(station["stn"], station["stn"]),
             }
         )
 
