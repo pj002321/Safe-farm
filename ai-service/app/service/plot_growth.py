@@ -12,6 +12,7 @@ ask_context.py 의 `_lead` 와 같은 기준이다.
 
 from __future__ import annotations
 
+import uuid
 from dataclasses import dataclass
 from datetime import date, timedelta
 
@@ -27,6 +28,8 @@ class PlotGrowth:
     """필지 하나의 생육 상태 스냅샷. stage_name 이 None 이면 계산은 됐지만 해당하는
     단계 구간을 못 찾은 것이다(마지막 단계를 넘어섰거나 마스터 데이터 공백)."""
 
+    # 대표 재배 건 id. advices 캐시 키(cultivation_id + 날짜)로 report.py 가 쓴다.
+    cultivation_id: uuid.UUID
     crop_name_ko: str
     days_since_planting: int
     accumulated_gdd: float
@@ -35,6 +38,11 @@ class PlotGrowth:
     # 아래 둘은 stage_name 이 None 이면 같이 None/False 다 — 작업카드 판정(task_rules.py)이 씀
     water_need_mm: float | None
     fertilize_needed: bool
+    # 씨뿌림→수확 총 목표 GDD. 역산이 안 끝난 숙기는 None(리포트 화면의 진행 게이지는
+    # 이때 숨긴다 — 분모 없는 진행률은 거짓 숫자다).
+    gdd_target: int | None
+    # 현재 단계가 끝나는(=다음 단계가 시작하는) 누적 GDD. stage_name 이 None 이면 같이 None.
+    stage_gdd_to: int | None
 
 
 def nearest_station(db: Session, plot: Plot) -> Station | None:
@@ -226,7 +234,10 @@ def compute_plot_growth(db: Session, plot: Plot, station: Station) -> PlotGrowth
         .first()
     )
 
+    variant = db.query(CropVariant).filter(CropVariant.variant_id == cultivation.variant_id).first()
+
     return PlotGrowth(
+        cultivation_id=cultivation.id,
         crop_name_ko=crop.name,
         days_since_planting=(date.today() - cultivation.sowing_date).days,
         accumulated_gdd=round(accumulated, 1),
@@ -234,4 +245,6 @@ def compute_plot_growth(db: Session, plot: Plot, station: Station) -> PlotGrowth
         guide_text=stage.guide_text if stage else None,
         water_need_mm=float(stage.water_need_mm) if stage and stage.water_need_mm is not None else None,
         fertilize_needed=bool(stage.fertilize_needed) if stage else False,
+        gdd_target=variant.gdd_target if variant else None,
+        stage_gdd_to=stage.gdd_to if stage else None,
     )

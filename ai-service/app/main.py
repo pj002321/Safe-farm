@@ -22,6 +22,7 @@ from app.api import alerts as alerts_api
 from app.api import ask as ask_api
 from app.api import crop as crop_api
 from app.api import map as map_api
+from app.api import reports as reports_api
 from app.api import satellite as satellite_api
 from app.api import status as status_api
 from app.api import tasks as tasks_api
@@ -47,6 +48,7 @@ app.include_router(crop_api.router)
 app.include_router(variety_api.router)
 app.include_router(weather_api.router)
 app.include_router(tasks_api.router)
+app.include_router(reports_api.router)
 app.include_router(alerts_api.router)
 app.include_router(satellite_api.router)
 

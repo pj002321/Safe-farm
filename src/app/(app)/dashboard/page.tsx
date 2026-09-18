@@ -176,6 +176,11 @@ export default async function DashboardPage({
               텃밭 관리
             </ButtonLink>
           )}
+          {plots.length > 0 && (
+            <ButtonLink href="/dashboard/report" variant="secondary">
+              AI 리포트
+            </ButtonLink>
+          )}
           <ButtonLink
             href={PLOT_ONBOARDING_PATH}
             icon={<MapPinIcon />}

@@ -31,9 +31,15 @@ import { useOptimistic, useTransition } from "react";
 interface PlotSelectProps {
   plots: readonly { id: string; nameKo: string | null }[];
   selectedId: string;
+  /** 고른 밭을 반영할 경로. 홈 말고 다른 화면(예: 리포트)이 쓸 때만 넘긴다. */
+  basePath?: string;
 }
 
-export function PlotSelect({ plots, selectedId }: PlotSelectProps) {
+export function PlotSelect({
+  plots,
+  selectedId,
+  basePath = "/dashboard",
+}: PlotSelectProps) {
   const router = useRouter();
   // 전환 중임을 알린다. 표시가 없으면 누르고도 바뀐 게 없어 보여 다시 누르게 된다.
   const [pending, startTransition] = useTransition();
@@ -68,7 +74,7 @@ export function PlotSelect({ plots, selectedId }: PlotSelectProps) {
           const next = event.target.value;
           startTransition(() => {
             setShownId(next);
-            router.replace(`/dashboard?plot=${next}`, { scroll: false });
+            router.replace(`${basePath}?plot=${next}`, { scroll: false });
           });
         }}
         value={shownId}
