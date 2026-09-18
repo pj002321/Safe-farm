@@ -118,9 +118,10 @@ def _crop_for_cultivation(db: Session, cultivation: Cultivation) -> Crop | None:
        터지면서 **자정 배치 전체가 죽었다** — 밭 하나의 데이터 결손이 모든
        사용자의 할 일을 막았다.
 
-       0 이나 추정값으로 메우지 않는다. 그러면 틀린 생육단계가 나오고, 그 위에서
-       만들어진 물·비료 카드는 근거가 거짓이 된다. "근거를 못 만들면 카드를
-       만들지 않는다"는 스펙 규칙대로 판정을 보류한다.
+       0 이나 추정값으로 메우지 않는다. 지역 지도용 기본값(`BASE_TEMP_C`)을 끌어
+       쓰면 작물별 값인 척하는 틀린 숫자가 되고, 그 위에서 나온 생육단계와 물·비료
+       카드는 근거가 거짓이 된다. "근거를 못 만들면 카드를 만들지 않는다"는 스펙
+       규칙대로 판정을 보류한다.
     """
     variant = db.query(CropVariant).filter(CropVariant.variant_id == cultivation.variant_id).first()
     if variant is None:
@@ -135,7 +136,8 @@ def daily_gdd_series(
     db: Session, plot: Plot, station: Station, days: int = 14
 ) -> list[dict] | None:
     """최근 days 일간 하루치 GDD. 생육 속도가 왜 그런지(더워서/추워서)를 막대로
-    보여주는 용도 — 기르는 중인 재배 건이 없으면 None(compute_plot_growth 와 같은 판정)."""
+    보여주는 용도 — 기르는 중인 재배 건이 없거나 그 작물의 base_temp 가 비어 있으면
+    None(compute_plot_growth 와 같은 판정)."""
     cultivation = _lead_cultivation(db, plot)
     if cultivation is None:
         return None
@@ -170,7 +172,8 @@ def daily_gdd_series(
 def crop_interpretation(db: Session, plot: Plot, station: Station) -> dict | None:
     """기상 수치를 이 밭 작물 기준과 견줄 근거(V1-64). base/upper 는 고온·저온
     스트레스 판정에, 현재 단계의 water_need_mm 은 관수 판정(rainfall_totals 의
-    7일 창과 짝)에 쓴다. 기르는 중인 재배 건이 없으면 None."""
+    7일 창과 짝)에 쓴다. 기르는 중인 재배 건이 없거나
+    그 작물의 base_temp 가 비어 있으면 None."""
     cultivation = _lead_cultivation(db, plot)
     if cultivation is None:
         return None
@@ -189,7 +192,7 @@ def crop_interpretation(db: Session, plot: Plot, station: Station) -> dict | Non
 
 def compute_plot_growth(db: Session, plot: Plot, station: Station) -> PlotGrowth | None:
     """밭의 대표 재배 건을 골라 파종일부터 오늘까지 GDD 를 누적, 현재 생육단계를
-    계산한다. 기르는 중인 재배 건이 없거나 파종일을 모르면 None."""
+    계산한다. 기르는 중인 재배 건이 없거나 파종일·base_temp 를 모르면 None."""
     cultivation = _lead_cultivation(db, plot)
     if cultivation is None:
         return None

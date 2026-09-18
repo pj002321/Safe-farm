@@ -1,4 +1,4 @@
-"""sigungu_station.csv 의 관측소 전체(중복 제거)에 대해 올해 1/1~오늘 일통계를 적재한다.
+"""ASOS 관측소 전체의 올해 1/1~오늘 일통계를 적재한다.
 
 weather_daily 는 plot_id 로 키가 잡혀 있어 텃밭 전용이다. 관측소 자체 데이터를
 담을 테이블을 새로 만드는 대신, "stn:<관측소번호>" 를 합성 plot_id 로 써서 같은
@@ -8,39 +8,100 @@ weather_daily 는 plot_id 로 키가 잡혀 있어 텃밭 전용이다. 관측�
 lat/lon 은 천리안 LST 조회에만 쓰이는데 관측소 단위로는 그 값이 필요 없어
 with_lst=False 로 건너뛰므로 더미(0, 0)를 넘긴다.
 
-실행: py -3.12 -m pipeline.region.fetch_region_weather
+⚠ 후보를 sigungu_station.csv 에서 읽지 않는다. 그건 "지도가 배정한 곳" 이지
+"관측이 있는 곳" 이 아니다. 그걸 읽었더니 ASOS 121개 중 26개의 실측이 통째로 비었다 —
+184 제주·185 고산·188 성산·102 백령도처럼 실제로 관측하는 곳이 섞여 있었고,
+제주시는 실측을 182 제주공항에서 받도록 배정돼 있어 184 제주가 목록에 없었다.
+그 결과 밭 상세(stations 테이블)가 제주 관측소를 쓰지 못했다.
+fetch_all_normals 가 겪은 것과 같은 함정이다 — **받는 쪽은 배정을 보지 않는다.**
+
+빈손으로 오는 관측소가 있다(레이더·도서·신설 등). 0일치는 정상이고, 그 관측소는
+map·stations 후보에서 자연히 빠진다.
+
+--year 로 지난 해도 받는다. 기본은 올해(1/1~오늘)고, 지난 해를 주면 그 해 1/1~12/31 이다.
+지도·밭 계산은 `date(today.year, 1, 1)` 부터만 보므로 과거 연도를 넣어도 지금 화면은 안 바뀐다
+(app/service/gdd_region.py). 과거를 받는 이유는 **올해 편차가 얼마나 특별한지** 재기 위해서다 —
+2026년 편차가 +11.5% 인데 작년도 그랬다면 평범한 해고, 작년이 +3% 였다면 정말 이상한 해다.
+지도 색 경계(app/domain/gdd.py 의 _TIERS)를 정하려면 그 비교가 있어야 한다.
+
+실행: py -m pipeline.region.fetch_region_weather [--year 2025]
+      ⚠ API 를 관측소 수만큼 부른다. 두 창에서 동시에 돌리지 말 것 —
+        같은 키의 동시 접속이 막혀 ConnectTimeout 이 난다
 """
 
+import argparse
 import csv
 from datetime import date
+
+from sqlalchemy import text
 
 from app.core.config import DATA_DIR, KMA_API_KEY
 from app.core.db import new_session
 from app.domain.gdd import station_plot_id
 from pipeline.load_data import load_weather_daily
+from pipeline.region.asos import asos_only, save_no_rain_stations
 
-STATION_MAP_PATH = DATA_DIR / "ref" / "sigungu_station.csv"
+STATIONS_PATH = DATA_DIR / "stations.csv"
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser(description="ASOS 전체 일통계 적재")
+    parser.add_argument(
+        "--year", type=int, default=None,
+        help="받을 연도. 생략하면 올해(1/1~오늘). 지난 해를 주면 그 해 1/1~12/31",
+    )
+    args = parser.parse_args()
+
     if not KMA_API_KEY:
         raise SystemExit("KMA_API_KEY 가 없습니다 — ai-service/.env.local 확인")
 
-    with STATION_MAP_PATH.open(encoding="utf-8") as f:
-        stations = sorted({row["station"] for row in csv.DictReader(f)})
+    with STATIONS_PATH.open(encoding="utf-8-sig") as f:
+        asos = asos_only(list(csv.DictReader(f)))
+    asos.sort(key=lambda s: int(s["stn"]))
 
     today = date.today()
-    tm1, tm2 = f"{today.year}0101", today.strftime("%Y%m%d")
+    if args.year is None or args.year == today.year:
+        tm1, tm2 = f"{today.year}0101", today.strftime("%Y%m%d")
+    else:
+        if args.year > today.year:
+            raise SystemExit(f"{args.year}년은 아직 오지 않았습니다")
+        tm1, tm2 = f"{args.year}0101", f"{args.year}1231"
+    print(f"{tm1} ~ {tm2} · 관측소 {len(asos)}개\n")
 
+    빈곳 = []
     db = new_session()
     try:
-        for i, stn in enumerate(stations, 1):
+        # ⚠ [i/n] 은 순번이지 관측소 번호가 아니다. station= 뒤를 본다
+        for i, s in enumerate(asos, 1):
             n = load_weather_daily(
-                db, station_plot_id(stn), KMA_API_KEY, stn, 0, 0, tm1, tm2, with_lst=False
+                db, station_plot_id(s["stn"]), KMA_API_KEY, s["stn"], 0, 0, tm1, tm2,
+                with_lst=False,
             )
-            print(f"[{i}/{len(stations)}] station={stn}: {n}일치")
+            print(f"[{i}/{len(asos)}] station={s['stn']} {s.get('name', '')}: {n}일치")
+            if not n:
+                빈곳.append(s)
+
+        # 기온은 오는데 강수가 통째로 없는 관측소를 찾아 남긴다. 공항 관측이 그렇다 —
+        # 배정되면 그 시군구의 강수 칸이 빈다(asos.py 의 usable docstring 참고)
+        # 이번에 받은 기간만 본다. 전 기간을 보면 옛 해에 강수를 관측하다 그만둔 곳까지
+        # 섞여서, "지금 강수가 오는가" 라는 물음에 옛 사실로 답하게 된다
+        비없음 = [r[0] for r in db.execute(text(
+            "select substring(plot_id from 5) from weather_daily "
+            "where plot_id like 'stn:%' and date between :a and :b "
+            "group by 1 having count(rain) = 0 and count(tmax) > 0"
+        ), {"a": f"{tm1[:4]}-{tm1[4:6]}-{tm1[6:]}", "b": f"{tm2[:4]}-{tm2[4:6]}-{tm2[6:]}"})]
+        번호 = {s["stn"]: s for s in asos}
+        save_no_rain_stations([번호[s] for s in 비없음 if s in 번호])
     finally:
         db.close()
+
+    print(f"\n실측 있음 {len(asos) - len(빈곳)}/{len(asos)}개")
+    if 빈곳:
+        목록 = ", ".join(s["stn"] + " " + s.get("name", "") for s in 빈곳)
+        print(f"0일치 {len(빈곳)}개: {목록}")
+    if 비없음:
+        목록 = ", ".join(s + " " + 번호.get(s, {}).get("name", "") for s in sorted(비없음, key=int))
+        print(f"강수 관측 없음 {len(비없음)}개 → data/ref/no_rain_stations.csv: {목록}")
 
 
 if __name__ == "__main__":

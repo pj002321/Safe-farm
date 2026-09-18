@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { ObservationChart } from "@/components/landing/chart/ObservationChart";
+import { ObservationChart } from "@/components/monitoring/chart/ObservationChart";
 import { Card } from "@/components/shared/Card";
 import { Reveal } from "@/components/shared/Reveal";
 import { SectionHeading } from "@/components/shared/SectionHeading";
