@@ -95,7 +95,9 @@ PER_SOURCE = 2    # 앞에 둘 같은 소스 수. 1 은 근거 둘이 한 소스
 TOP_K = 5
 
 
-def find_matches(db: Session, question: str) -> list[tuple[Chunk, float]]:
+def find_matches(
+    db: Session, question: str, fallback_crops: Collection[str] | None = None
+) -> list[tuple[Chunk, float]]:
     """
     # summary
     질문과 관련 있는 조각을 찾아 순위까지 정리한다. retrieve_with_score 로 넓게 받고,
@@ -106,6 +108,10 @@ def find_matches(db: Session, question: str) -> list[tuple[Chunk, float]]:
     # params
     db: 세션<br>
     question: 사용자 질문<br>
+    fallback_crops: 질문에서 작물을 못 찾았을 때(find_crops 가 빈 집합) 대신 쓸 작물들.
+        graph의 retrieve 노드가 이 밭에서 기르는 작물을 넘긴다 — "밀린 일"처럼 질문에
+        작물이 없는데 필터 없이 전체를 보면 우연히 벡터가 가까운 무관한 작물 문서가
+        섞여 들어온다. None 이면 예전처럼 필터 없이 전체를 본다<br>
 
     # returns
     (Chunk, 거리) 목록. 가까운 순, 관련 있는 것만. 하나도 없으면 빈 리스트
@@ -113,7 +119,8 @@ def find_matches(db: Session, question: str) -> list[tuple[Chunk, float]]:
     # examples
         find_matches(db, "상추 발아기 물주기")  -> [(Chunk(id=7), 0.21), ...]
     """
-    candidates = retrieve_with_score(db, question, CANDIDATES)
+    crops = find_crops(question, known_crops(db)) or fallback_crops
+    candidates = retrieve_with_score(db, question, CANDIDATES, crops=crops)
     picked = diversify(
         candidates, key=lambda m: m[0].document.source, per_key=PER_SOURCE, limit=TOP_K
     )

@@ -21,7 +21,7 @@ from app.knowledge.embedder import get_client
 from app.knowledge.generator import stream_answer
 from app.knowledge.retriever import find_matches
 from app.knowledge.vector_store import neighbors
-from app.service.ask_context import build_plot_context
+from app.service.ask_context import build_plot_context, plot_crop_names
 from app.tools.tools import TOOL_SPECS
 
 WeatherFetcher = Callable[[str], Awaitable[WeatherWindow]]
@@ -277,8 +277,13 @@ def retrieve(state: GraphState) -> GraphState:
     보여줄 matches(top-k)와 LLM 에 줄 근거(evidence)의 크기가 다르기 때문이다
     ("방울토마토 물"의 정답이 뽑힌 조각의 바로 옆 조각이었다 — 골든 hint 29→31).
 
+    plot_id 가 있으면 이 밭의 작물을 find_matches 의 fallback_crops 로 넘긴다 —
+    질문에 작물 이름이 없을 때("밀린 일 알려줘") 필터 없이 전체를 보면 우연히
+    벡터가 가까운 무관한 작물 문서가 섞여 들어온다(2026-09-18, '밀린 일' -> '밀'
+    문서로 답한 사례).
+
     # params
-    state: db, question 을 읽는다<br>
+    state: db, question, plot_id, user_id 를 읽는다<br>
 
     # returns
     {"matches": [...], "evidence": [...]}. matches 는 find_matches 결과 그대로,
@@ -288,7 +293,11 @@ def retrieve(state: GraphState) -> GraphState:
         retrieve({"db": db, "question": "고추 물 언제 줘야 해?"})
         -> {'matches': [(Chunk(id=7), 0.21), ...], 'evidence': [...]}
     """
-    matches = find_matches(state["db"], state["question"])
+    plot_id = state.get("plot_id")
+    fallback_crops = (
+        plot_crop_names(state["db"], plot_id, state["user_id"]) if plot_id else None
+    )
+    matches = find_matches(state["db"], state["question"], fallback_crops=fallback_crops)
     return {"matches": matches, "evidence": matches + neighbors(state["db"], matches)}
 
 

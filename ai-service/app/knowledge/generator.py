@@ -37,11 +37,26 @@ SYSTEM_PROMPT = (
     # 자료에 없는 것 — 참고2 가 "교육비·물가·지하철 노선…" 을 열거한 것과 같은 자리
     "이 자료에 없는 것: 농약 등록 기준·희석배수, 품종별 가격·시세, 지역별 판로, 사진 없는 확진. "
     "이것을 물으면 없다고 말하고 어디서 확인할지만 알려라."
+    "대답의 마침표는 친절하게 '~요', '~입니다' 형식으로 끝낸다."
+    
 )
 
 # 검색 필터용 키. 사람이 읽을 값이 아니라 '참고값' 에서 뺀다
 # ('작물' 은 그대로 둔다 — 그건 사람이 읽는 값이다)
 META_SKIP = frozenset({"작물들"})
+
+# documents.source 는 pipeline/doc/sources.py 의 영문 키 그대로다(적재 매칭용 식별자라
+# 못 바꾼다 — 바꾸면 기존 문서를 전부 새 문서로 오인해 재청킹·재임베딩된다).
+# 답변에 [출처 · 제목] 으로 그대로 노출되므로 여기서만 한글로 바꿔 보여준다
+SOURCE_LABELS = {
+    "crop_stage": "생육단계 정보",
+    "variety_summary": "품종 요약",
+    "variety_body": "품종 상세정보",
+    "crop_guide": "작물 재배 가이드",
+    "weekly_note": "주간농사정보",
+    "pest_bulletin": "병해충 속보",
+    "disaster_bulletin": "농업재해 속보",
+}
 
 def build_context(matches: list[tuple[Chunk, float]]) -> str:
     """
@@ -75,8 +90,9 @@ def build_context(matches: list[tuple[Chunk, float]]) -> str:
         # ⚠ 제목을 앞에 박는다. 이게 없으면 LLM 이 **다른 문서의 참고값을 이 문서에 갖다 붙인다** —
         #   "상추 수확까지 며칠" 에 crop_stage 의 days_to_harvest=31 을 품종 '미홍' 의 값으로
         #   답한 사례가 있었다(2026-09-17). 소스가 늘수록 섞일 자리가 는다
-        머리 = f"[{chunk.document.source} · {chunk.document.title}]" if chunk.document.title \
-            else f"[{chunk.document.source}]"
+        source = SOURCE_LABELS.get(chunk.document.source, chunk.document.source)
+        머리 = f"[{source} · {chunk.document.title}]" if chunk.document.title \
+            else f"[{source}]"
         본문 = f"{머리}\n{chunk.body}"
         blocks.append(f"{본문}\n참고값: {numbers}" if numbers else 본문)
     return "\n\n".join(blocks)
