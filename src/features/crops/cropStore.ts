@@ -1,5 +1,9 @@
 import "server-only";
 
+import {
+  MATURITY_FALLBACK_ORDER,
+  type MaturityType,
+} from "@/shared/growth/maturity";
 import { getSupabaseServer } from "@/shared/supabase/server";
 import { kstDateString } from "@/shared/utils/kstDate";
 import { type CropOption, toCropOption } from "./domain/cropOption";
@@ -34,7 +38,7 @@ export async function listCropOptions(): Promise<CropOption[]> {
   const { data, error } = await supabase
     .from("crops")
     .select(
-      "crop_id, name, difficulty, crop_variants(days_to_harvest, sow_method, sow_from, sow_to)",
+      "crop_id, name, difficulty, crop_variants(maturity_type, days_to_harvest, sow_method, sow_from, sow_to)",
     )
     .not("base_temp", "is", null)
     .order("crop_id");
@@ -62,21 +66,26 @@ export async function listCropOptions(): Promise<CropOption[]> {
  *   "수확 시기를 지났습니다" 를 띄웠다(조생 1416 · 중생 1526 · 만생 1602 GDD).
  *   조생은 셋 중 가장 짧아 어긋나면 **늘 이르게** 틀린다. 중생은 가운데라 덜 어긋난다.
  *
- *   MID 가 없으면 EARLY, 그것도 없으면 LATE 다. 2026-09-18 기준 89작물 중 88개에
- *   MID 가 있고 메밀만 EARLY+LATE 다.
+ *   MID 가 없으면 EARLY, 그것도 없으면 LATE 다(`shared/growth/maturity.ts` 의
+ *   `MATURITY_FALLBACK_ORDER` — 화면의 기본값과 같은 파일에서 온다). 2026-09-18 기준
+ *   89작물 중 88개에 MID 가 있고 메밀만 EARLY+LATE 다.
  *
- * ⚠️ **여전히 사용자가 고르는 것이 아니다.** 숙기가 여럿인 작물이 23개인데 폼에
- *   선택지가 없다. 폼에 숙기 라디오를 넣으면 이 함수가 그 값을 받아야 한다.
+ * ★ 2026-09-18 — **사용자가 고르면 그것이 이긴다.** `maturityByCropId` 를 주면 그 숙기를
+ *   먼저 쓰고, 안 주거나 그 숙기가 없으면 위 우선순위로 떨어진다. 폼에 라디오가 뜨는 작물은
+ *   숙기가 둘 이상인 23개뿐이라, 나머지 56작물은 여전히 이 우선순위로 정해진다.
  *
  * `cropId` 로 되돌려 주는 이유는 호출자가 작물별 파종 정보(날짜·방식)와 다시
  * 이어 붙여야 해서다. 배열로 주면 품종이 없는 작물이 중간에 빠졌을 때 자리가
  * 밀려 엉뚱한 파종 정보와 짝지어진다. 품종이 하나도 없는 작물(마스터 공백)은
  * 맵에서 빠진다 — 호출자가 그 작물을 건너뛴다.
  */
-const MATURITY_PRIORITY = ["MID", "EARLY", "LATE"] as const;
-
 export async function resolveVariantIds(
   cropIds: readonly number[],
+  /**
+   * 폼에서 고른 숙기(`maturity.<cropId>`). 고르지 않았거나 그 숙기가 없는 작물은
+   * 위 우선순위(MID→EARLY→LATE)로 떨어진다 — 라디오가 안 뜨는 56작물이 그 경우다.
+   */
+  maturityByCropId?: ReadonlyMap<number, string>,
 ): Promise<Map<number, number>> {
   if (cropIds.length === 0) return new Map();
 
@@ -90,14 +99,26 @@ export async function resolveVariantIds(
 
   if (error) throw new Error(error.message);
 
+  /**
+   * 작을수록 먼저다.
+   *   -1  사용자가 고른 숙기
+   *  0~2  MID → EARLY → LATE
+   *    3  모르는 숙기 — 버리지 않고 맨 뒤로 보낸다. 그것뿐이면 그거라도 쓴다
+   */
+  const score = (cropId: number, maturity: string) => {
+    if (maturityByCropId?.get(cropId) === maturity) return -1;
+    const i = MATURITY_FALLBACK_ORDER.indexOf(maturity as MaturityType);
+    return i === -1 ? MATURITY_FALLBACK_ORDER.length : i;
+  };
+
   const best = new Map<number, { variantId: number; rank: number }>();
   for (const row of data ?? []) {
-    // 모르는 숙기가 들어와도 버리지 않는다 — 맨 뒤로 보내고, 그것뿐이면 그걸 쓴다
-    const rank = MATURITY_PRIORITY.indexOf(row.maturity_type);
-    const score = rank === -1 ? MATURITY_PRIORITY.length : rank;
+    // 고른 숙기가 실제로 없는 경우(자료가 바뀐 뒤 옛 폼)에도 등록이 막히지 않는다 —
+    // 아무것도 -1 을 못 받으면 우선순위로 떨어질 뿐이다
+    const rank = score(row.crop_id, row.maturity_type);
     const found = best.get(row.crop_id);
-    if (!found || score < found.rank) {
-      best.set(row.crop_id, { variantId: row.variant_id, rank: score });
+    if (!found || rank < found.rank) {
+      best.set(row.crop_id, { variantId: row.variant_id, rank });
     }
   }
 

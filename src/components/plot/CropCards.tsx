@@ -9,7 +9,11 @@ import {
   SearchIcon,
   SproutIcon,
 } from "@/components/icons";
-import type { CropOption } from "@/features/crops/domain/cropOption";
+import type {
+  CropOption,
+  MaturityOption,
+} from "@/features/crops/domain/cropOption";
+import { DEFAULT_MATURITY } from "@/shared/growth/maturity";
 
 /**
  * ---------------------------------------------
@@ -203,6 +207,7 @@ export function CropCards({
               <div className="hidden flex-col gap-3 border-border border-t bg-surface-2/60 p-4 group-has-[>label>input:checked]/crop:flex">
                 <CropSowingFields
                   cropId={crop.cropId}
+                  maturities={crop.maturities}
                   maxDate={maxSowingDate}
                   required={selected.has(crop.cropId)}
                   sowingWindowKo={crop.sowingWindowKo}
@@ -241,12 +246,15 @@ function CropSowingFields({
   required,
   maxDate,
   sowingWindowKo,
+  maturities,
 }: {
   cropId: number;
   required: boolean;
   maxDate?: string;
   /** "3.1~3.31에 씨를 뿌립니다". 마스터에 파종 창이 없는 작물은 null 이고 문구를 생략한다. */
   sowingWindowKo: string | null;
+  /** 고를 수 있는 숙기. 조·중·만 차례다. 둘 이상일 때만 라디오를 띄운다. */
+  maturities: readonly MaturityOption[];
 }) {
   return (
     <div className="group/sowing flex flex-col gap-3">
@@ -298,6 +306,33 @@ function CropSowingFields({
         <p className="hidden text-fg-subtle text-xs group-has-[input[value=unknown]:checked]/sowing:block">
           이 작물은 보통 <span className="text-fg">{sowingWindowKo}</span>.
         </p>
+      )}
+
+      {/* 숙기가 하나뿐인 56작물(2026-09-18)에는 안 띄운다 — 고를 것도 없는 칸이
+          카드의 3분의 1을 채운다. 기본값은 서버(resolveVariantIds)의 대체 순서와 **같은 파일**
+          (shared/growth/maturity.ts)에서 온다 — 따로 적으면 화면과 서버가 다른 것을 고른다.
+          ⚠️ required 를 걸지 않는다. 안 고르면 서버가 중생으로 떨어뜨리므로 막을 이유가 없고,
+             hidden 인 카드에 required 를 걸면 등록 버튼이 조용히 죽는다(위 docstring). */}
+      {maturities.length >= 2 && (
+        <fieldset className="flex flex-col gap-1.5">
+          <legend className="font-medium text-fg text-xs">품종 숙기</legend>
+          <div className="flex gap-2">
+            {maturities.map((m) => (
+              <CropMaturityOption
+                cropId={cropId}
+                defaultChecked={m.type === DEFAULT_MATURITY}
+                key={m.type}
+                // 조·중·만이라는 말이 초보자에게 안 통할 수 있다. 일수를 같이 적으면 고를 수 있다
+                labelKo={
+                  m.daysToHarvest
+                    ? `${m.labelKo} ${m.daysToHarvest}일`
+                    : m.labelKo
+                }
+                value={m.type}
+              />
+            ))}
+          </div>
+        </fieldset>
       )}
 
       <fieldset className="flex gap-2">
@@ -352,6 +387,37 @@ export function SowingStatusOption({
       <span className="select-none text-fg-muted text-xs leading-relaxed">
         {labelKo}
       </span>
+    </label>
+  );
+}
+
+/**
+ * 숙기 라디오 한 칸. `CropSowingMethod` 와 같은 모양이되 이름만 다르다.
+ *
+ * 숙기가 바뀌면 재배 일수와 목표 GDD 가 같이 바뀐다 — 배추 45~55일, 밀 216~264일.
+ * 조생종은 셋 중 가장 짧아 잘못 고르면 **늘 이르게** 틀린다(수확 시기를 지났다고 뜬다).
+ */
+function CropMaturityOption({
+  cropId,
+  value,
+  labelKo,
+  defaultChecked,
+}: {
+  cropId: number;
+  value: string;
+  labelKo: string;
+  defaultChecked?: boolean;
+}) {
+  return (
+    <label className="flex-1 cursor-pointer rounded-md border border-border bg-surface px-2.5 py-1.5 text-center text-xs transition-colors duration-200 ease-out-expo has-[:checked]:border-accent has-[:checked]:bg-accent-subtle has-[:checked]:text-accent has-[:focus-visible]:outline has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-ring has-[:focus-visible]:outline-offset-2">
+      <input
+        className="sr-only"
+        defaultChecked={defaultChecked}
+        name={`maturity.${cropId}`}
+        type="radio"
+        value={value}
+      />
+      {labelKo}
     </label>
   );
 }

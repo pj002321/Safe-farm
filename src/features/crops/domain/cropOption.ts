@@ -1,3 +1,9 @@
+import {
+  MATURITY_LABEL_KO,
+  MATURITY_TYPES,
+  type MaturityType,
+} from "@/shared/growth/maturity";
+
 /**
  * ---------------------------------------------
  * [Feature]: 작물 마스터 행 → 선택 카드 값 (순수 함수)
@@ -12,6 +18,15 @@
  * ---------------------------------------------
  */
 
+/** 숙기 한 갈래. 화면이 라디오 한 칸을 그리는 데 쓴다. */
+export interface MaturityOption {
+  type: MaturityType;
+  /** "조생종" · "중생종" · "만생종" */
+  labelKo: string;
+  /** 이 숙기만의 재배 일수. 없으면 null — 라벨에 일수를 안 적는다. */
+  daysToHarvest: number | null;
+}
+
 export interface CropOption {
   cropId: number;
   nameKo: string;
@@ -20,6 +35,13 @@ export interface CropOption {
   difficultyKo: string;
   /** "약 80일" · "80~95일". 품종이 없으면 null — 화면이 자리를 비운다. */
   durationKo: string | null;
+  /**
+   * 고를 수 있는 숙기. **조·중·만 차례로** 정렬돼 있다.
+   *
+   * 길이가 2 이상일 때만 화면이 라디오를 띄운다 — 2026-09-18 기준 89작물 중 23개다.
+   * 하나뿐인 56작물에 "중생종" 한 칸짜리 선택지를 띄우면 고를 것도 없는 칸이 화면을 채운다.
+   */
+  maturities: MaturityOption[];
   /** "3.1~3.31에 씨를 뿌립니다" · 없으면 null — 화면이 자리를 비운다. 지역 보정은 아직 없다(V1-22). */
   sowingWindowKo: string | null;
   /** 오늘이 파종 창 안인가. 카드에 "지금 심기 좋음" 배지를 띄운다. */
@@ -32,6 +54,7 @@ export interface CropOptionRow {
   difficulty: string | null;
   /** Supabase 조인 결과. 품종이 없으면 빈 배열이다. */
   crop_variants: {
+    maturity_type: string | null;
     days_to_harvest: number | null;
     sow_method: string | null;
     sow_from: string | null;
@@ -54,6 +77,7 @@ export function toCropOption(
     difficultyLevel: toDifficultyLevel(row.difficulty),
     difficultyKo: row.difficulty ?? "보통",
     durationKo: toDurationKo(row.crop_variants),
+    maturities: toMaturities(row.crop_variants),
     sowingWindowKo: toSowingWindowKo(row.crop_variants),
     sowingNow: isSowingSeason(todayMmDd, row.crop_variants),
   };
@@ -88,6 +112,34 @@ export function toDurationKo(
   const min = Math.min(...days);
   const max = Math.max(...days);
   return min === max ? `약 ${min}일` : `${min}~${max}일`;
+}
+
+/**
+ * 고를 수 있는 숙기를 조·중·만 차례로.
+ *
+ * ⚠️ **`crop_variants` 가 준 차례를 믿지 않는다.** Supabase 조인 결과의 순서는 보장이 없고,
+ *   설령 `variant_id` 순이어도 그것이 조·중·만 순이라는 근거가 없다. 코드가 차례를 정한다.
+ * ⚠️ 모르는 숙기 값은 버린다. 화면에 라디오를 그려야 하는데 이름을 붙일 수 없어서다 —
+ *   DB CHECK 가 셋만 받으므로 실제로는 안 들어온다.
+ *   차례·라벨은 `shared/growth/maturity.ts` 하나에서 온다 — 여기에 다시 적지 않는다.
+ */
+export function toMaturities(
+  variants: readonly {
+    maturity_type: string | null;
+    days_to_harvest: number | null;
+  }[],
+): MaturityOption[] {
+  return MATURITY_TYPES.flatMap((type) => {
+    const found = variants.find((v) => v.maturity_type === type);
+    if (!found) return [];
+    return [
+      {
+        type,
+        labelKo: MATURITY_LABEL_KO[type],
+        daysToHarvest: found.days_to_harvest,
+      },
+    ];
+  });
 }
 
 /** `crop_variants` 의 파종 창 세 칸. `MM-DD` 문자열이고 연도가 없다. */

@@ -57,7 +57,8 @@ export async function insertCultivations(
   // 한 밭에 고르는 작물 수만큼이라 왕복이 적고, 같은 품종을 둘 고르면 한 번으로 끝난다
   const startByVariant = new Map<number, number | null>();
   for (const input of inputs) {
-    if (input.sowingType !== "SEEDLING" || startByVariant.has(input.variantId)) continue;
+    if (input.sowingType !== "SEEDLING" || startByVariant.has(input.variantId))
+      continue;
     const { data: stages, error: stageError } = await supabase
       .from("crop_stages")
       .select("stage_order, stage_name, gdd_from, gdd_to") // 비율 판정에 끝값이 필요하다
@@ -75,7 +76,9 @@ export async function insertCultivations(
       sowing_type: input.sowingType,
       // 씨앗은 null(0 부터). 모종은 이식 단계. 표가 의심스러우면 null — domain/seedlingStart.ts
       start_stage_order:
-        input.sowingType === "SEEDLING" ? (startByVariant.get(input.variantId) ?? null) : null,
+        input.sowingType === "SEEDLING"
+          ? (startByVariant.get(input.variantId) ?? null)
+          : null,
     })),
   );
 

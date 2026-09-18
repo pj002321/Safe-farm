@@ -10,7 +10,12 @@ describe("seedlingStartStage", () => {
     expect(
       seedlingStartStage([
         { stage_order: 1, stage_name: "씨뿌림", gdd_from: 0, gdd_to: 106 },
-        { stage_order: 2, stage_name: "아주심기, 웃거름, 김매기", gdd_from: 106, gdd_to: 209 },
+        {
+          stage_order: 2,
+          stage_name: "아주심기, 웃거름, 김매기",
+          gdd_from: 106,
+          gdd_to: 209,
+        },
         { stage_order: 3, stage_name: "결구기", gdd_from: 209, gdd_to: 742 },
       ]),
     ).toBe(2);
@@ -40,7 +45,12 @@ describe("seedlingStartStage", () => {
   it("양파 MID: 아주심기 969/1085 = 89% 면 표를 의심하고 null", () => {
     expect(
       seedlingStartStage([
-        { stage_order: 1, stage_name: "잎과 줄기 신장기", gdd_from: 0, gdd_to: 90 },
+        {
+          stage_order: 1,
+          stage_name: "잎과 줄기 신장기",
+          gdd_from: 0,
+          gdd_to: 90,
+        },
         { stage_order: 2, stage_name: "줄기비대기", gdd_from: 90, gdd_to: 969 },
         { stage_order: 3, stage_name: "아주심기", gdd_from: 969, gdd_to: 1085 },
       ]),
@@ -67,7 +77,9 @@ describe("seedlingStartStage", () => {
 
   it("전체가 0 이면 나눗셈을 피하고 null", () => {
     expect(
-      seedlingStartStage([{ stage_order: 1, stage_name: "아주심기", gdd_from: 0, gdd_to: 0 }]),
+      seedlingStartStage([
+        { stage_order: 1, stage_name: "아주심기", gdd_from: 0, gdd_to: 0 },
+      ]),
     ).toBeNull();
   });
 

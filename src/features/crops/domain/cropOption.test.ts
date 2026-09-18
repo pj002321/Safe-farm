@@ -140,12 +140,14 @@ describe("toCropOption", () => {
     difficulty: "보통",
     crop_variants: [
       {
+        maturity_type: "EARLY",
         days_to_harvest: 80,
         sow_method: "아주심기",
         sow_from: "04-01",
         sow_to: "05-20",
       },
       {
+        maturity_type: "MID",
         days_to_harvest: 95,
         sow_method: "아주심기",
         sow_from: "04-01",
@@ -161,6 +163,10 @@ describe("toCropOption", () => {
       difficultyLevel: 2,
       difficultyKo: "보통",
       durationKo: "80~95일",
+      maturities: [
+        { type: "EARLY", labelKo: "조생종", daysToHarvest: 80 },
+        { type: "MID", labelKo: "중생종", daysToHarvest: 95 },
+      ],
       sowingWindowKo: "4.1~5.20에 모종으로 심습니다",
       sowingNow: true,
     });
