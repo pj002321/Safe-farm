@@ -159,8 +159,13 @@ def ask(request: AskRequest, db: Session = Depends(get_db)) -> AskResponse | Str
     # hit 은 같은 소스라 안 움직인다
     evidence = found + neighbors(db, found)
     return StreamingResponse(
-        _sse(history, ask_matches, stream_answer(request.question, evidence, plot_context),
-db, quota),
+        _sse(
+            history,
+            ask_matches,
+            stream_answer(request.question, evidence, plot_context, history_context),
+            db,
+            quota,
+        ),
         media_type="text/event-stream",
     )
 
