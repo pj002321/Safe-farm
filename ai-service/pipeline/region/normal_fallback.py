@@ -42,7 +42,7 @@ from sqlalchemy import text
 from app.core.config import DATA_DIR
 from app.core.db import new_session
 from app.domain.gdd import daily_gdd
-from pipeline.region.asos import asos_only, normal_stations
+from pipeline.region.asos import asos_only, excluded_stations, normal_stations
 from pipeline.region.map_stations_to_sigungu import haversine_km
 
 STATIONS_PATH = DATA_DIR / "stations.csv"
@@ -114,7 +114,11 @@ def main() -> None:
     finally:
         db.close()
 
-    필요 = sorted((s for s in asos if s in 일별 and s not in set(보유)), key=int)
+    # 평지 밭의 기준이 못 되는 관측소는 짝을 만들지 않는다 — 만들면 usable 에서 다시 걸러
+    # 지지만, 목록에 남으면 "왜 여기가 있지" 를 두 번 묻게 된다(asos.py 의 usable docstring)
+    뺄것 = excluded_stations()
+    필요 = sorted((s for s in asos if s in 일별 and s not in set(보유) and s not in 뺄것), key=int)
+    보유 = [s for s in 보유 if s not in 뺄것]
     out = []
     거부 = []
     for s in 필요:

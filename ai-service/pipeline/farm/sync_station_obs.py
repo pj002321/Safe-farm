@@ -44,7 +44,13 @@ from sqlalchemy import text
 
 from app.core.config import DATA_DIR
 from app.core.db import new_session
-from pipeline.region.asos import is_asos, normal_fallback, normal_stations
+from pipeline.region.asos import (
+    excluded_stations,
+    is_asos,
+    no_rain_stations,
+    normal_fallback,
+    normal_stations,
+)
 
 MASTER_PATH = DATA_DIR / "master" / "stations.csv"
 
@@ -63,9 +69,11 @@ def main() -> None:
             "group by 1 having count(*) >= :n"
         ), {"n": MIN_ROWS}).all()
         실측있음 = {r[0] for r in rows if is_asos(r[0])}
-        # ② 평년값을 쓸 수 있는 곳만. 레이더·도서·공항이 여기서 걸러진다(docstring 참고)
+        # ② 평년값을 쓸 수 있고 ③ 강수도 관측하는 곳만. 레이더·도서·공항이 여기서 걸러진다
         평년쓸수있음 = normal_stations() | set(normal_fallback())
-        쓸것 = sorted(실측있음 & 평년쓸수있음, key=int)
+        쓸것 = sorted(
+            (실측있음 & 평년쓸수있음) - no_rain_stations() - excluded_stations(), key=int
+        )
 
         with (DATA_DIR / "stations.csv").open(encoding="utf-8-sig") as f:
             좌표 = {r["stn"]: r for r in csv.DictReader(f)}

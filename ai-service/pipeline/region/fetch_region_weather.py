@@ -25,11 +25,13 @@ map·stations 후보에서 자연히 빠진다.
 import csv
 from datetime import date
 
+from sqlalchemy import text
+
 from app.core.config import DATA_DIR, KMA_API_KEY
 from app.core.db import new_session
 from app.domain.gdd import station_plot_id
 from pipeline.load_data import load_weather_daily
-from pipeline.region.asos import asos_only
+from pipeline.region.asos import asos_only, save_no_rain_stations
 
 STATIONS_PATH = DATA_DIR / "stations.csv"
 
@@ -57,6 +59,15 @@ def main() -> None:
             print(f"[{i}/{len(asos)}] station={s['stn']} {s.get('name', '')}: {n}일치")
             if not n:
                 빈곳.append(s)
+
+        # 기온은 오는데 강수가 통째로 없는 관측소를 찾아 남긴다. 공항 관측이 그렇다 —
+        # 배정되면 그 시군구의 강수 칸이 빈다(asos.py 의 usable docstring 참고)
+        비없음 = [r[0] for r in db.execute(text(
+            "select substring(plot_id from 5) from weather_daily where plot_id like 'stn:%' "
+            "group by 1 having count(rain) = 0 and count(tmax) > 0"
+        ))]
+        번호 = {s["stn"]: s for s in asos}
+        save_no_rain_stations([번호[s] for s in 비없음 if s in 번호])
     finally:
         db.close()
 
@@ -64,6 +75,9 @@ def main() -> None:
     if 빈곳:
         목록 = ", ".join(s["stn"] + " " + s.get("name", "") for s in 빈곳)
         print(f"0일치 {len(빈곳)}개: {목록}")
+    if 비없음:
+        목록 = ", ".join(s + " " + 번호.get(s, {}).get("name", "") for s in sorted(비없음, key=int))
+        print(f"강수 관측 없음 {len(비없음)}개 → data/ref/no_rain_stations.csv: {목록}")
 
 
 if __name__ == "__main__":

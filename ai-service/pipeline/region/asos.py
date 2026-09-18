@@ -32,6 +32,8 @@ from app.core.config import DATA_DIR
 ASOS_MAX_STN = 300
 NORMAL_STATIONS_PATH = DATA_DIR / "ref" / "normal_stations.csv"
 NORMAL_FALLBACK_PATH = DATA_DIR / "ref" / "normal_fallback.csv"
+NO_RAIN_PATH = DATA_DIR / "ref" / "no_rain_stations.csv"
+EXCLUDED_PATH = DATA_DIR / "ref" / "excluded_stations.csv"
 
 
 def is_asos(stn: str | int) -> bool:
@@ -80,6 +82,60 @@ def normal_fallback() -> dict[str, str]:
         return {}
     with NORMAL_FALLBACK_PATH.open(encoding="utf-8-sig") as f:
         return {row["stn"]: row["normal_stn"] for row in csv.DictReader(f) if row.get("stn")}
+
+
+def usable(stations: list[dict], key: str = "stn") -> list[dict]:
+    """지도·밭이 쓸 수 있는 관측소만 남긴다. 조건 셋을 다 넘어야 한다.
+
+    ⚠ **"실측이 있다" 와 "밭 기준으로 쓸 수 있다" 는 다른 사실이다.** 이걸 이어 붙였다가
+    세 번 틀렸다. 조건마다 걸러지는 것이 다르다.
+
+      ① 평년값을 쓸 수 있을 것 — 없으면 GDD 편차를 못 낸다(with_normals)
+      ② 강수를 관측할 것 — 142 대구(공)·153 김해(공)·158 광주(공)·161 사천(공) 은 261일 내내
+         기온·바람만 있고 rain 이 전부 NULL 이다(실측). 공항 관측은 강수를 항공기상 쪽으로만
+         보고한다. 배정되면 그 시군구의 강수 칸이 통째로 빈다.
+         목록은 no_rain_stations.csv — fetch_region_weather 가 받아 본 결과로 갱신한다.
+      ③ 평지의 보통 기후를 대표할 것 — excluded_stations.csv 의 명시적 제외.
+
+    ⚠ ③ 을 데이터로 판정하려다 두 번 실패했다. "평년값 유무" 로는 부산 레이더가 3.3km 앞
+    부산에서 빌려 통과했고 대관령은 자기 평년값이 있어 통과했다. "이웃과 다른 정도" 로는
+    105 강릉(+48.6%)이 최상위로 뜬다 — 이웃이 대관령·북강릉뿐이라 상대적으로 튄 것이지
+    강릉은 정상적인 평지 관측소다. 반대로 장수·태백·제천처럼 실제 산간인 정상 관측소도 아래에
+    섞인다. **기후가 다른 것이 정상인 곳이 많아 "다르다" 가 기준이 못 된다.**
+    실제 구분은 관측소 종류(레이더·원양도서·고지대)이고 그건 자동 판정이 안 된다.
+    그래서 사람이 정하고 근거를 파일에 적는다. 관측소가 늘면 그때 사람이 본다.
+    """
+    빼기 = no_rain_stations() | excluded_stations()
+    return [s for s in with_normals(stations, key) if s[key] not in 빼기]
+
+
+def excluded_stations() -> set[str]:
+    """평지 밭의 기준이 될 수 없어 손으로 뺀 관측소. 파일이 없으면 빈 집합.
+
+    reason 칸에 왜 뺐는지가 적혀 있다 — 지우거나 되살릴 때 그 근거를 먼저 본다.
+    """
+    if not EXCLUDED_PATH.exists():
+        return set()
+    with EXCLUDED_PATH.open(encoding="utf-8-sig") as f:
+        return {row["stn"] for row in csv.DictReader(f) if row.get("stn")}
+
+
+def no_rain_stations() -> set[str]:
+    """강수를 관측하지 않는 관측소 번호. 파일이 없으면 빈 집합."""
+    if not NO_RAIN_PATH.exists():
+        return set()
+    with NO_RAIN_PATH.open(encoding="utf-8-sig") as f:
+        return {row["stn"] for row in csv.DictReader(f) if row.get("stn")}
+
+
+def save_no_rain_stations(stations: list[dict], key: str = "stn") -> int:
+    """강수를 관측하지 않는 관측소 목록을 파일로 남긴다. fetch_region_weather 가 끝에 부른다."""
+    with NO_RAIN_PATH.open("w", encoding="utf-8", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(["stn", "name"])
+        for s in sorted(stations, key=lambda x: int(x[key])):
+            writer.writerow([s[key], s.get("name", "")])
+    return len(stations)
 
 
 def with_normals(stations: list[dict], key: str = "stn") -> list[dict]:
