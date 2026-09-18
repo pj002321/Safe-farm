@@ -149,6 +149,12 @@ def generate_tasks_for_plot(db: Session, plot: Plot) -> list[PlotTask]:
 
 
 def generate_daily_tasks(db: Session) -> int:
-    """모든 밭을 판정한다. 배치 스크립트(pipeline)가 부르는 진입점."""
-    plots = db.query(Plot).all()
+    """살아 있는 밭을 판정한다. 배치 스크립트(pipeline)가 부르는 진입점.
+
+    삭제는 soft delete 라 지운 밭도 `plots` 에 그대로 남아 있다(`deleted_at`).
+    거르지 않으면 지운 밭에 매일 카드가 새로 쌓인다 — 화면에는 Next 쪽 조인
+    조건(`taskStore.listTaskCards` 의 `plots.deleted_at is null`)이 가려 주므로
+    보이지 않고, 그래서 더 늦게 발견된다. ask_context.py 와 같은 조건이다.
+    """
+    plots = db.query(Plot).filter(Plot.deleted_at.is_(None)).all()
     return sum(len(generate_tasks_for_plot(db, plot)) for plot in plots)
