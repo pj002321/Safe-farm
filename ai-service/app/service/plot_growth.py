@@ -106,11 +106,29 @@ def _start_gdd(db: Session, cultivation: Cultivation) -> float:
 
 
 def _crop_for_cultivation(db: Session, cultivation: Cultivation) -> Crop | None:
-    """재배 건의 작물 마스터. variant 가 없거나 끝의 crop 이 없으면 None."""
+    """재배 건의 작물 마스터. variant 가 없거나, 끝의 crop 이 없거나,
+    **기준온도(base_temp)가 비어 있으면** None.
+
+    ⚠️ base_temp 를 여기서 함께 거른다. 이 값은 GDD 계산의 전제라 없으면 생육을
+       낼 수 없는데, 쓰는 곳이 셋이다(daily_gdd_series · crop_interpretation ·
+       compute_plot_growth). 셋 다 이미 `crop is None` 을 검사하므로, 호출부마다
+       가드를 흩뿌리는 대신 조회 한 곳에서 "쓸 수 없는 작물"로 처리한다.
+
+       운영에서 실제로 마스터에 base_temp 가 빈 작물이 있었고, float(None) 이
+       터지면서 **자정 배치 전체가 죽었다** — 밭 하나의 데이터 결손이 모든
+       사용자의 할 일을 막았다.
+
+       0 이나 추정값으로 메우지 않는다. 그러면 틀린 생육단계가 나오고, 그 위에서
+       만들어진 물·비료 카드는 근거가 거짓이 된다. "근거를 못 만들면 카드를
+       만들지 않는다"는 스펙 규칙대로 판정을 보류한다.
+    """
     variant = db.query(CropVariant).filter(CropVariant.variant_id == cultivation.variant_id).first()
     if variant is None:
         return None
-    return db.query(Crop).filter(Crop.crop_id == variant.crop_id).first()
+    crop = db.query(Crop).filter(Crop.crop_id == variant.crop_id).first()
+    if crop is None or crop.base_temp is None:
+        return None
+    return crop
 
 
 def daily_gdd_series(
