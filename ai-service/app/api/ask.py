@@ -22,10 +22,8 @@ from app.core.security import require_service_token
 from app.domain.ask_suggest import suggest_questions
 from app.domain.guardrail import BLOCKED_MESSAGE, is_blocked_topic
 from app.domain.history_context import HISTORY_RULE
-from app.graph.nodes import plan, retrieve, route_after_plan, run_tools
+from app.graph.graph import graph as ask_graph
 from app.graph.state import GraphState
-from app.knowledge.generator import stream_answer
-from app.knowledge.vector_store import neighbors
 from app.models.farm.ask_history import AskHistory
 from app.schemas.ask import (
     AskFeedbackRequest,
@@ -68,12 +66,15 @@ def _event(name: str, payload: object) -> str:
 
 def _sse(
     history: AskHistory,
-    matches: list[AskMatch],
-    tokens: Iterator[str],
+    graph_state: GraphState,
     db: Session,
     quota: AskQuota,
 ) -> Iterator[str]:
-    """meta → matches → 토큰 → done 순으로 흘려보낸다.
+    """meta → matches → 토큰 → done 순으로 흘려보낸다. ask-flow 그래프(app/graph/graph.py)를
+    직접 스트리밍으로 돌린다 — stream_mode=["updates", "custom"] 로 "retrieve" 노드가
+    끝난 시점의 matches 와 "generate" 노드가 get_stream_writer 로 흘리는 토큰
+    (app/graph/nodes.py 의 generate 참고)을 같이 받는다. retrieve 가 generate 보다
+    먼저 끝나므로 matches 이벤트가 토큰보다 먼저 나가는 순서는 그대로 유지된다.
 
     meta 가 맨 앞인 이유는 프런트가 history_id 를 먼저 받아야 피드백을 보낼 대상을
     알고, 잔여 횟수를 곧바로 줄여 보여줄 수 있어서다.
@@ -81,18 +82,26 @@ def _sse(
     스트림이 끝나면 전체 답변을 ask_history 에 채운다 — 토큰마다 커밋하면 DB 왕복이
     토큰 수만큼 늘어난다.
 
-    LLM 호출이 중간에 끊기면 error 이벤트를 보낸다. 조용히 끝내면 프런트는 짧은
-    답변을 정상 완료로 읽는다. 여기까지 온 질문은 이미 한 번 차감됐으므로 받은
-    데까지는 이력에 남긴다.
+    그래프 실행 중 예외(plan/retrieve 의 DB 오류 포함)가 나면 error 이벤트를 보낸다.
+    조용히 끝내면 프런트는 짧은 답변을 정상 완료로 읽는다. 여기까지 온 질문은 이미
+    한 번 차감됐으므로 받은 데까지는 이력에 남긴다.
     """
     yield _event("meta", {"historyId": str(history.id), "quota": quota.model_dump()})
-    yield _event("matches", [m.model_dump() for m in matches])
 
     parts: list[str] = []
     try:
-        for token in tokens:
-            parts.append(token)
-            yield _event("token", token)
+        for mode, chunk in ask_graph.stream(graph_state, stream_mode=["updates", "custom"]):
+            if mode == "custom":
+                parts.append(chunk["piece"])
+                yield _event("token", chunk["piece"])
+                continue
+            output = chunk.get("retrieve")
+            if output is not None:
+                matches = [
+                    AskMatch(body=c.body, distance=dist, source_title=c.document.title)
+                    for c, dist in output["matches"]
+                ]
+                yield _event("matches", [m.model_dump() for m in matches])
     except Exception:  # noqa: BLE001 — 원인별 분기가 없다. 어느 쪽이든 화면이 할 일은 같다
         complete_answer(db, history, "".join(parts))
         yield _event("error", STREAM_FAILED_MESSAGE)
@@ -129,43 +138,23 @@ def ask(request: AskRequest, db: Session = Depends(get_db)) -> AskResponse | Str
     # 자기 자신의 맥락으로 딸려 들어간다.
     history_context = HISTORY_RULE(recent_turns(db, request.user_id))
 
-    # plan 이 밭 조회가 필요한지 정하고, 필요할 때만 run_tools 로 밭 정보를 가져온다.
-    # retrieve 는 route 와 무관하게 항상 돈다 — app/graph/nodes.py 의 plan 주석 참고.
-    # graph.invoke() 를 안 쓰는 이유: generate 노드가 스트리밍을 못 해서 여기선
-    # 노드를 직접 불러 matches/tool_result 만 뽑고, 답변은 그대로 stream_answer 로 흘린다.
-    state: GraphState = {
+    # plan(밭 조회 필요 여부)부터 retrieve·generate 까지 그래프가 전부 맡는다 —
+    # ask_graph.stream(..., stream_mode=["updates", "custom"]) 이 노드 완료 이벤트와
+    # generate 의 토큰을 같이 내보내므로 _sse 안에서 그대로 그래프를 돌린다
+    # (app/graph/nodes.py 의 generate 주석 참고).
+    graph_state: GraphState = {
         "db": db,
         "question": request.question,
         "user_id": request.user_id,
         "plot_id": request.plot_id,
         "history_context": history_context,
     }
-    state.update(plan(state))
-    if route_after_plan(state) == "run_tools":
-        state.update(run_tools(state))
-    state.update(retrieve(state))
-    found = state["matches"]
 
     history = record_question(db, request.user_id, request.question)
     quota = _quota(db, request.user_id)
 
-    ask_matches = [
-        AskMatch(body=chunk.body, distance=dist, source_title=chunk.document.title)
-        for chunk, dist in found
-    ]
-    plot_context = state.get("tool_result")
-    # 뽑힌 조각의 같은 문서 앞뒤 조각을 LLM 에만 더 준다. 출처 칩(ask_matches)은 5개 그대로 —
-    # "방울토마토 물" 의 정답은 뽑힌 조각의 바로 옆 조각이었다 — 골든 hint 29→31.
-    # hit 은 같은 소스라 안 움직인다
-    evidence = found + neighbors(db, found)
     return StreamingResponse(
-        _sse(
-            history,
-            ask_matches,
-            stream_answer(request.question, evidence, plot_context, history_context),
-            db,
-            quota,
-        ),
+        _sse(history, graph_state, db, quota),
         media_type="text/event-stream",
     )
 

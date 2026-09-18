@@ -24,7 +24,8 @@ class GraphState(TypedDict):
     tool_calls: list            # plan이 고른 도구들
     tool_result: str | None     # run_tools가 만든 결과 (예: build_plot_context 결과)
 
-    matches: list               # retrieve+rerank가 찾아온 (Chunk, 거리) 목록
+    matches: list               # retrieve+rerank가 찾아온 (Chunk, 거리) 목록. 출처 칩(top-k)용
+    evidence: list               # matches + 이웃 조각. generate 가 LLM 근거로 쓰는 건 이쪽
     answer: str
 
 

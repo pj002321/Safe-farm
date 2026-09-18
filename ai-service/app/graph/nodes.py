@@ -11,14 +11,16 @@ from collections.abc import Awaitable, Callable
 from dataclasses import asdict
 
 from langchain_core.language_models import BaseChatModel
+from langgraph.config import get_stream_writer
 from langgraph.graph import END
 
 from app.core.config import OPENAI_MODEL
 from app.domain.suitability import CropProfile, WeatherWindow, rank_crops
 from app.graph.state import GraphState, RecommendationState
 from app.knowledge.embedder import get_client
-from app.knowledge.generator import generate_answer
+from app.knowledge.generator import stream_answer
 from app.knowledge.retriever import find_matches
+from app.knowledge.vector_store import neighbors
 from app.service.ask_context import build_plot_context
 from app.tools.tools import TOOL_SPECS
 
@@ -270,43 +272,53 @@ def retrieve(state: GraphState) -> GraphState:
     """
     # summary
     질문과 관련된 참고 자료를 찾는다. route 와 무관하게 항상 돈다 — "tool" 로 가도
-    RAG 근거를 스킵하지 않기로 했다(plan 노드 docstring 참고).
+    RAG 근거를 스킵하지 않기로 했다(plan 노드 docstring 참고). 뽑힌 조각의 같은 문서
+    앞뒤 조각(neighbors)을 더해 generate 용 evidence 를 따로 만든다 — 출처 칩으로
+    보여줄 matches(top-k)와 LLM 에 줄 근거(evidence)의 크기가 다르기 때문이다
+    ("방울토마토 물"의 정답이 뽑힌 조각의 바로 옆 조각이었다 — 골든 hint 29→31).
 
     # params
     state: db, question 을 읽는다<br>
 
     # returns
-    {"matches": [...]}. find_matches 결과를 그대로 옮긴다
+    {"matches": [...], "evidence": [...]}. matches 는 find_matches 결과 그대로,
+    evidence 는 거기에 neighbors 를 더한 것
 
     # examples
         retrieve({"db": db, "question": "고추 물 언제 줘야 해?"})
-        -> {'matches': [(Chunk(id=7), 0.21), ...]}
+        -> {'matches': [(Chunk(id=7), 0.21), ...], 'evidence': [...]}
     """
-    return {"matches": find_matches(state["db"], state["question"])}
+    matches = find_matches(state["db"], state["question"])
+    return {"matches": matches, "evidence": matches + neighbors(state["db"], matches)}
 
 
 def generate(state: GraphState) -> GraphState:
     """
     # summary
-    근거를 붙여 답변 문장을 만든다. matches 가 비어 있으면 부르지 않는다 —
-    generate_answer 의 계약과 같다. 밭 조회 결과(tool_result)는 plot_context 로 그대로
-    넘긴다. app/api/ask.py 는 이 노드를 쓰지 않고 stream_answer 를 직접 불러
-    matches 가 비어도 일반 지식으로 답하게 한다.
+    근거를 붙여 답변 문장을 만든다. evidence 가 비어도 부른다 — 자료가 없으면
+    generator.py 의 SYSTEM_PROMPT 가 일반 지식으로 답하거나 모른다고 답하게 한다.
+    LangGraph 의 커스텀 스트림(get_stream_writer)으로 토큰마다 흘려보낸다 —
+    graph.stream(state, stream_mode=["updates", "custom"]) 로 부르는 쪽(app/api/ask.py)이
+    "custom" 채널에서 {"piece": ...}를 그대로 토큰으로 쓴다. graph.invoke() 로 부르면
+    (pipeline/ask_graph_preview.py) 쓸 곳이 없어 get_stream_writer() 가 아무 것도
+    안 하는 함수를 돌려준다 — 그대로 안전하다. 밭 조회 결과(tool_result)는
+    plot_context 로 그대로 넘긴다.
 
     # params
-    state: question, matches, tool_result, history_context 를 읽는다<br>
+    state: question, evidence, tool_result, history_context 를 읽는다<br>
 
     # returns
-    {"answer": "..."} 또는 matches 가 비었으면 {"answer": None}
+    {"answer": "..."} — 흘려보낸 토큰을 모두 이어붙인 전체 답변
 
     # examples
-        generate({"question": "고추 물 언제 줘?", "matches": [(chunk, 0.2)], ...})
+        generate({"question": "고추 물 언제 줘?", "evidence": [(chunk, 0.2)], ...})
         -> {'answer': '지금은...'}
-        generate({"question": "...", "matches": []})  -> {'answer': None}
     """
-    if not state["matches"]:
-        return {"answer": None}
-    answer = generate_answer(
-        state["question"], state["matches"], state.get("tool_result"), state.get("history_context")
-    )
-    return {"answer": answer}
+    write = get_stream_writer()
+    pieces: list[str] = []
+    for piece in stream_answer(
+        state["question"], state["evidence"], state.get("tool_result"), state.get("history_context")
+    ):
+        pieces.append(piece)
+        write({"piece": piece})
+    return {"answer": "".join(pieces)}
