@@ -42,8 +42,18 @@ export interface CropOption {
    * 하나뿐인 56작물에 "중생종" 한 칸짜리 선택지를 띄우면 고를 것도 없는 칸이 화면을 채운다.
    */
   maturities: MaturityOption[];
-  /** "3.1~3.31에 씨를 뿌립니다" · 없으면 null — 화면이 자리를 비운다. 지역 보정은 아직 없다(V1-22). */
-  sowingWindowKo: string | null;
+  /**
+   * 씨앗으로 심을 때 · 모종으로 심을 때의 안내 문장. "3.1~3.20에 씨를 뿌립니다" 꼴이다.
+   * 없으면 null — 화면이 "정보 없음" 대신 자리를 비운다. 지역 보정은 아직 없다(V1-22).
+   *
+   * ⚠️ 예전에는 창이 하나였다(`sowingWindowKo`). 벼가 그 한 칸에 안 들어가서 갈랐다 —
+   *   못자리 4.11~5.20 과 모내기 5.15~6.15 는 한 달 떨어져 있는데, 한 칸이던 시절엔
+   *   둘 중 하나만 남아 모종을 고른 사람에게 못자리 날짜를 안내했다.
+   * ⚠️ 둘 중 하나만 있는 것이 정상이다 —
+   * 직파 작물(감자·시금치)은 `plantWindowKo` 가, 씨로 안 심는 작물(딸기)은 `seedWindowKo` 가 null.
+   */
+  seedWindowKo: string | null;
+  plantWindowKo: string | null;
   /** 오늘이 파종 창 안인가. 카드에 "지금 심기 좋음" 배지를 띄운다. */
   sowingNow: boolean;
 }
@@ -59,6 +69,10 @@ export interface CropOptionRow {
     sow_method: string | null;
     sow_from: string | null;
     sow_to: string | null;
+    seed_from: string | null;
+    seed_to: string | null;
+    plant_from: string | null;
+    plant_to: string | null;
   }[];
 }
 
@@ -78,7 +92,22 @@ export function toCropOption(
     difficultyKo: row.difficulty ?? "보통",
     durationKo: toDurationKo(row.crop_variants),
     maturities: toMaturities(row.crop_variants),
-    sowingWindowKo: toSowingWindowKo(row.crop_variants),
+    // 같은 함수를 창만 바꿔 두 번 부른다. 서술어는 방법이 정한다 —
+    // 씨 쪽은 늘 "씨를 뿌립니다", 옮 쪽은 작물에 따라 "모내기 합니다"·"모종으로 심습니다"
+    seedWindowKo: toSowingWindowKo(
+      row.crop_variants.map((v) => ({
+        sow_method: "씨뿌림",
+        sow_from: v.seed_from,
+        sow_to: v.seed_to,
+      })),
+    ),
+    plantWindowKo: toSowingWindowKo(
+      row.crop_variants.map((v) => ({
+        sow_method: toPlantMethod(v.sow_method),
+        sow_from: v.plant_from,
+        sow_to: v.plant_to,
+      })),
+    ),
     sowingNow: isSowingSeason(todayMmDd, row.crop_variants),
   };
 }
@@ -162,6 +191,25 @@ interface SowingWindow {
  *
  * 모르는 값이 새로 들어오면 그 말을 그대로 쓴다 — 지어내는 것보다 낫다.
  */
+/**
+ * 옮 쪽 창을 설명할 때 쓸 작업명.
+ *
+ * `sow_method` 는 §A 가 고른 **대표 작업 하나**라, 작물에 따라 씨 쪽 낱말이 온다 —
+ * 벼가 '모기르기' 다. 그 말로 옮 창(5.15~6.15)을 설명하면 "모를 기르기 시작합니다"
+ * 가 되어 앞뒤가 뒤집힌다. 옮 창은 **정의상 옮겨 심는 때**이므로, 옮겨심기 낱말이
+ * 아니면 '아주심기' 로 갈아 끼운다.
+ *
+ * ⚠️ 그래서 벼도 "모종으로 심습니다" 로 나온다. 농사짓는 사람의 말은 '모내기' 지만,
+ *   그 낱말은 지금 `crop_stages` 의 단계 이름에만 있고 `crop_variants` 에는 없다.
+ *   작물 이름을 박아 가르지 않는다 — 고치려면 마스터에 옮 쪽 작업명을 따로 실어야 한다.
+ */
+const TRANSPLANT_METHODS = new Set(["아주심기", "정식", "모내기", "이앙"]);
+
+function toPlantMethod(method: string | null): string {
+  const m = (method ?? "").trim();
+  return TRANSPLANT_METHODS.has(m) ? m : "아주심기";
+}
+
 function toSowingPhrase(method: string | null): string {
   switch ((method ?? "").trim()) {
     case "아주심기":

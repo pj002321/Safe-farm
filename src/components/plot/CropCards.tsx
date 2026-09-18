@@ -235,8 +235,9 @@ export function CropCards({
                   cropId={crop.cropId}
                   maturities={crop.maturities}
                   maxDate={maxSowingDate}
+                  plantWindowKo={crop.plantWindowKo}
                   required={selected.has(crop.cropId)}
-                  sowingWindowKo={crop.sowingWindowKo}
+                  seedWindowKo={crop.seedWindowKo}
                 />
               </div>
             </div>
@@ -271,14 +272,19 @@ function CropSowingFields({
   cropId,
   required,
   maxDate,
-  sowingWindowKo,
+  seedWindowKo,
+  plantWindowKo,
   maturities,
 }: {
   cropId: number;
   required: boolean;
   maxDate?: string;
-  /** "3.1~3.31에 씨를 뿌립니다". 마스터에 파종 창이 없는 작물은 null 이고 문구를 생략한다. */
-  sowingWindowKo: string | null;
+  /**
+   * 씨앗/모종 라디오에 따라 갈아 끼우는 문구("3.1~3.20에 씨를 뿌립니다").
+   * 마스터에 그쪽 창이 없는 작물은 null 이고 문구를 생략한다 — 한쪽만 있는 것이 정상이다.
+   */
+  seedWindowKo: string | null;
+  plantWindowKo: string | null;
   /** 고를 수 있는 숙기. 조·중·만 차례다. 둘 이상일 때만 라디오를 띄운다. */
   maturities: readonly MaturityOption[];
 }) {
@@ -326,20 +332,31 @@ function CropSowingFields({
         {/* ⚠️ 이 칸이 **무엇을 묻는지** 말해 준다. 라벨이 "날짜 선택" 뿐이라 아래 씨앗/모종을
             무엇으로 골랐든 같은 말이었고, 벼처럼 못자리와 모내기가 한 달쯤 떨어진 작물에서
             어느 날짜를 넣을지 알 수 없었다 — 실제로 한 사용자가 두 번 다르게 넣었다.
-            작물마다 다른 말(벼 "모내기한 날")로 바꾸려면 마스터의 sow_method 를 화면까지
-            날라야 하는데, 배선이 여섯 파일로 번진다. 파종 시기를 씨앗·모종 두 벌로 늘릴 때
-            (교안_파종시기_두벌.md §1) 그 배선이 어차피 깔리므로 그때 문장을 나눈다. */}
+            한 문장에 둘을 같이 적어 라디오와 짝이 맞게 뒀다. 작물마다 다른 말(벼 "모내기한
+            날")로 바꾸려면 마스터에 옮 쪽 작업명이 따로 있어야 한다 — `crop_variants` 의
+            `sow_method` 는 대표 하나뿐이라 벼가 '모기르기' 로 온다(cropOption.toPlantMethod). */}
         <p className="text-fg-subtle text-xs">
           씨앗은 씨 뿌린 날, 모종은 옮겨 심은 날을 넣어 주세요.
         </p>
       </div>
 
-      {/* "아직 안 심었어요" 를 골랐을 때만. 날짜를 아는 사람에게는 권장 시기가 참견이다.
+      {/* "아직 안 심었어요" + 아래 씨앗/모종 라디오, **둘 다** 맞을 때만 보인다. 날짜를
+          아는 사람에게 권장 시기는 참견이고, 씨앗을 고른 사람에게 모종 날짜는 틀린 안내다.
+          ⚠️ group-has 를 두 번 겹쳤다. 조상이 둘 필요한 것처럼 보이지만 아니다 — Tailwind 가
+             `:is(…:has(A) *):is(…:has(B) *)` 로 **한 요소에 조건 둘**을 붙이므로, 같은
+             group/sowing 하나가 둘을 다 만족한다. 실제 생성 CSS 로 확인했다(2026-09-18).
+          ⚠️ 한쪽 창이 없는 작물이 있다(감자·시금치는 직파라 plant_*, 딸기는 seed_* 가 빈다).
+             그때 그 라디오를 고르면 문구가 아예 안 뜬다 — "정보 없음" 을 띄우지 않는다.
           ⚠️ 작물 기준 창이지 지역 기준이 아니다(마스터에 지역이 없다) — 그래서 안내만 하고
              창 밖이라고 막지 않는다. 틀릴 수 있는 정보로 막으면 안 된다. */}
-      {sowingWindowKo && (
-        <p className="hidden text-fg-subtle text-xs group-has-[input[value=unknown]:checked]/sowing:block">
-          이 작물은 보통 <span className="text-fg">{sowingWindowKo}</span>.
+      {seedWindowKo && (
+        <p className="hidden text-fg-subtle text-xs group-has-[input[value=unknown]:checked]/sowing:group-has-[input[value=seed]:checked]/sowing:block">
+          이 작물은 보통 <span className="text-fg">{seedWindowKo}</span>.
+        </p>
+      )}
+      {plantWindowKo && (
+        <p className="hidden text-fg-subtle text-xs group-has-[input[value=unknown]:checked]/sowing:group-has-[input[value=seedling]:checked]/sowing:block">
+          이 작물은 보통 <span className="text-fg">{plantWindowKo}</span>.
         </p>
       )}
 

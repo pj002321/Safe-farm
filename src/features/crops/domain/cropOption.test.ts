@@ -145,6 +145,10 @@ describe("toCropOption", () => {
         sow_method: "아주심기",
         sow_from: "04-01",
         sow_to: "05-20",
+        seed_from: "03-01",
+        seed_to: "03-20",
+        plant_from: "04-01",
+        plant_to: "05-20",
       },
       {
         maturity_type: "MID",
@@ -152,9 +156,54 @@ describe("toCropOption", () => {
         sow_method: "아주심기",
         sow_from: "04-01",
         sow_to: "05-20",
+        seed_from: "03-01",
+        seed_to: "03-20",
+        plant_from: "04-01",
+        plant_to: "05-20",
       },
     ],
   };
+
+  it("한쪽 창만 있으면 그쪽 문구만 — 없는 쪽은 null 이라 화면이 자리를 비운다", () => {
+    // 감자·시금치는 직파라 옮 창이 없고, 딸기는 씨로 안 심어 씨 창이 없다
+    const got = toCropOption(
+      {
+        ...row,
+        crop_variants: [
+          {
+            ...row.crop_variants[0],
+            plant_from: null,
+            plant_to: null,
+          },
+        ],
+      },
+      "04-10",
+    );
+    expect(got.seedWindowKo).toBe("3.1~3.20에 씨를 뿌립니다");
+    expect(got.plantWindowKo).toBeNull();
+  });
+
+  it("씨 쪽 작업명이 옮 창을 설명하지 않는다 — 벼의 '모기르기'", () => {
+    // 이걸 그대로 쓰면 "5.15~6.15에 모를 기르기 시작합니다" 가 되어 앞뒤가 뒤집힌다
+    const got = toCropOption(
+      {
+        ...row,
+        crop_variants: [
+          {
+            ...row.crop_variants[0],
+            sow_method: "모기르기",
+            seed_from: "04-11",
+            seed_to: "05-20",
+            plant_from: "05-15",
+            plant_to: "06-15",
+          },
+        ],
+      },
+      "04-10",
+    );
+    expect(got.seedWindowKo).toBe("4.11~5.20에 씨를 뿌립니다");
+    expect(got.plantWindowKo).toBe("5.15~6.15에 모종으로 심습니다");
+  });
 
   it("행을 카드 값으로 좁힌다", () => {
     expect(toCropOption(row, "04-10")).toEqual({
@@ -167,7 +216,8 @@ describe("toCropOption", () => {
         { type: "EARLY", labelKo: "조생종", daysToHarvest: 80 },
         { type: "MID", labelKo: "중생종", daysToHarvest: 95 },
       ],
-      sowingWindowKo: "4.1~5.20에 모종으로 심습니다",
+      seedWindowKo: "3.1~3.20에 씨를 뿌립니다",
+      plantWindowKo: "4.1~5.20에 모종으로 심습니다",
       sowingNow: true,
     });
   });
@@ -185,7 +235,8 @@ describe("toCropOption", () => {
   it("품종이 없으면 기간·창이 다 null 이고 배지도 안 뜬다", () => {
     const option = toCropOption({ ...row, crop_variants: [] }, "04-10");
     expect(option.durationKo).toBeNull();
-    expect(option.sowingWindowKo).toBeNull();
+    expect(option.seedWindowKo).toBeNull();
+    expect(option.plantWindowKo).toBeNull();
     expect(option.sowingNow).toBe(false);
   });
 });
