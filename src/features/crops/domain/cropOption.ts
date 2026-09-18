@@ -44,7 +44,10 @@ export interface CropOptionRow {
  * 날짜에 흔들리고, 서버에서 UTC 로 잘리면 한국 자정 근처에 하루가 어긋난다.
  * 호출자(`cropStore`)가 `kstDateString()` 으로 만들어 넘긴다.
  */
-export function toCropOption(row: CropOptionRow, todayMmDd: string): CropOption {
+export function toCropOption(
+  row: CropOptionRow,
+  todayMmDd: string,
+): CropOption {
   return {
     cropId: row.crop_id,
     nameKo: row.name,
@@ -141,13 +144,19 @@ function toSowingPhrase(method: string | null): string {
  * ⚠️ 그런 창이 다른 품종과 섞이면 `sort()` 로 고른 양 끝이 뒤집힌다. 지금 그런
  *   작물(셀러리·덴드로비움)은 품종이 하나뿐이라 안 걸린다. 둘 이상은 미지원이다.
  */
-export function toSowingWindowKo(variants: readonly SowingWindow[]): string | null {
+export function toSowingWindowKo(
+  variants: readonly SowingWindow[],
+): string | null {
   const rows = variants.filter((v) => v.sow_from && v.sow_to);
   if (rows.length === 0) return null;
 
-  const short = (mmdd: string) => `${Number(mmdd.slice(0, 2))}.${Number(mmdd.slice(3, 5))}`;
+  const short = (mmdd: string) =>
+    `${Number(mmdd.slice(0, 2))}.${Number(mmdd.slice(3, 5))}`;
   const from = rows.map((v) => v.sow_from as string).sort()[0] as string;
-  const to = rows.map((v) => v.sow_to as string).sort().at(-1) as string;
+  const to = rows
+    .map((v) => v.sow_to as string)
+    .sort()
+    .at(-1) as string;
   return `${short(from)}~${short(to)}에 ${toSowingPhrase(rows[0].sow_method)}`;
 }
 

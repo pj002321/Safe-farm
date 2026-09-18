@@ -68,11 +68,19 @@ describe("toSowingWindowKo", () => {
   });
 
   it("농업 용어를 사람 말로 바꾼다", () => {
-    const 창 = (m: string) => [{ sow_method: m, sow_from: "05-11", sow_to: "06-20" }];
-    expect(toSowingWindowKo(창("모내기"))).toBe("5.11~6.20에 모내기 합니다");
-    expect(toSowingWindowKo(창("육묘"))).toBe("5.11~6.20에 모를 기르기 시작합니다");
+    const windowOf = (m: string) => [
+      { sow_method: m, sow_from: "05-11", sow_to: "06-20" },
+    ];
+    expect(toSowingWindowKo(windowOf("모내기"))).toBe(
+      "5.11~6.20에 모내기 합니다",
+    );
+    expect(toSowingWindowKo(windowOf("육묘"))).toBe(
+      "5.11~6.20에 모를 기르기 시작합니다",
+    );
     // 참다래. 파종이 아니라 꽃가루받이라 "심습니다" 로 뭉뚱그리면 틀린 말이 된다
-    expect(toSowingWindowKo(창("인공수분"))).toBe("5.11~6.20에 인공수분을 합니다");
+    expect(toSowingWindowKo(windowOf("인공수분"))).toBe(
+      "5.11~6.20에 인공수분을 합니다",
+    );
   });
 
   it("모르는 방법은 지어내지 않고 그 말을 쓴다", () => {
@@ -89,24 +97,24 @@ describe("toSowingWindowKo", () => {
 });
 
 describe("isSowingSeason", () => {
-  const 감자 = [{ sow_from: "03-01", sow_to: "03-31" }];
-  const 셀러리 = [{ sow_from: "12-01", sow_to: "02-28" }];
+  const potato = [{ sow_from: "03-01", sow_to: "03-31" }];
+  const celery = [{ sow_from: "12-01", sow_to: "02-28" }];
 
   it("창 안이면 참, 밖이면 거짓", () => {
-    expect(isSowingSeason("03-15", 감자)).toBe(true);
-    expect(isSowingSeason("04-10", 감자)).toBe(false);
+    expect(isSowingSeason("03-15", potato)).toBe(true);
+    expect(isSowingSeason("04-10", potato)).toBe(false);
   });
 
   it("양 끝날은 포함이다", () => {
-    expect(isSowingSeason("03-01", 감자)).toBe(true);
-    expect(isSowingSeason("03-31", 감자)).toBe(true);
+    expect(isSowingSeason("03-01", potato)).toBe(true);
+    expect(isSowingSeason("03-31", potato)).toBe(true);
   });
 
   it("해를 넘는 창은 12·1·2월이 전부 안이다", () => {
-    expect(isSowingSeason("12-15", 셀러리)).toBe(true);
-    expect(isSowingSeason("01-15", 셀러리)).toBe(true);
-    expect(isSowingSeason("02-20", 셀러리)).toBe(true);
-    expect(isSowingSeason("06-15", 셀러리)).toBe(false);
+    expect(isSowingSeason("12-15", celery)).toBe(true);
+    expect(isSowingSeason("01-15", celery)).toBe(true);
+    expect(isSowingSeason("02-20", celery)).toBe(true);
+    expect(isSowingSeason("06-15", celery)).toBe(false);
   });
 
   it("품종이 여럿이면 하나라도 안이면 참", () => {
@@ -119,7 +127,9 @@ describe("isSowingSeason", () => {
 
   it("창이 없으면 거짓", () => {
     expect(isSowingSeason("03-15", [])).toBe(false);
-    expect(isSowingSeason("03-15", [{ sow_from: null, sow_to: null }])).toBe(false);
+    expect(isSowingSeason("03-15", [{ sow_from: null, sow_to: null }])).toBe(
+      false,
+    );
   });
 });
 
@@ -129,8 +139,18 @@ describe("toCropOption", () => {
     name: "배추",
     difficulty: "보통",
     crop_variants: [
-      { days_to_harvest: 80, sow_method: "아주심기", sow_from: "04-01", sow_to: "05-20" },
-      { days_to_harvest: 95, sow_method: "아주심기", sow_from: "04-01", sow_to: "05-20" },
+      {
+        days_to_harvest: 80,
+        sow_method: "아주심기",
+        sow_from: "04-01",
+        sow_to: "05-20",
+      },
+      {
+        days_to_harvest: 95,
+        sow_method: "아주심기",
+        sow_from: "04-01",
+        sow_to: "05-20",
+      },
     ],
   };
 
