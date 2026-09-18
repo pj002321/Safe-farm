@@ -20,7 +20,12 @@ from sqlalchemy.orm import Session
 
 from app.domain.task_rules import RAIN_WINDOW_DAYS, PlotTaskInputs, build_task_candidates
 from app.models.farm import Plot, PlotTask, WeatherObsDaily
-from app.service.plot_growth import compute_plot_growth, nearest_station
+from app.service.plot_growth import (
+    _crop_for_cultivation,
+    _lead_cultivation,
+    compute_plot_growth,
+    nearest_station,
+)
 
 #: 안 하고 넘어간 카드를 닫기까지의 일수.
 #:
@@ -68,6 +73,32 @@ def expire_stale_tasks(db: Session, plot_id, now: datetime | None = None) -> int
     return result.rowcount or 0
 
 
+def _skip(plot: Plot, reason: str) -> None:
+    """이 밭에서 카드가 안 나온 이유를 남긴다.
+
+    `created: 0` 만 보고는 "데이터가 없다"와 "오늘 할 일이 없다"를 구분할 수 없다.
+    실제로 그 둘을 못 가려 원인을 좁히는 데 한참 걸렸다. 밭마다 한 줄씩 남긴다.
+    """
+    print(f"[tasks] 밭 {plot.id} 건너뜀 — {reason}", flush=True)
+
+
+def _why_no_growth(db: Session, plot: Plot) -> str:
+    """compute_plot_growth 가 None 인 이유를 좁힌다. 사람이 고칠 수 있는 것부터."""
+    cultivation = _lead_cultivation(db, plot)
+    if cultivation is None:
+        return "기르는 중인 작물이 없습니다 — 밭에 작물을 등록하세요"
+    if cultivation.sowing_date is None:
+        return "파종일이 없습니다 — 밭 상세에서 파종일을 입력하세요"
+
+    crop = _crop_for_cultivation(db, cultivation)
+    if crop is None:
+        return (
+            "작물 마스터에 기준온도(base_temp)가 없거나 품종이 연결되지 않았습니다 "
+            "— crops.base_temp 를 채우세요"
+        )
+    return "생육단계를 낼 수 없습니다 — crop_stages 와 관측 자료를 확인하세요"
+
+
 def _recent_rain_mm(db: Session, station_code: str) -> float | None:
     """최근 RAIN_WINDOW_DAYS 일 누적 강수량. 관측이 하나도 없으면 None(판정 보류)."""
     since = date.today() - timedelta(days=RAIN_WINDOW_DAYS)
@@ -98,11 +129,15 @@ def generate_tasks_for_plot(db: Session, plot: Plot) -> list[PlotTask]:
     station = nearest_station(db, plot)
     if station is None:
         db.commit()
+        _skip(plot, "관측소가 배정되지 않았습니다 — stations 마스터를 확인하세요")
         return []
 
     growth = compute_plot_growth(db, plot, station)
     if growth is None:
         db.commit()
+        # 여기 묶이는 이유가 여럿이다(재배 없음·작물 없음·기준온도 없음·파종일 없음).
+        # 어느 쪽인지 좁혀 줘야 다음 사람이 DB 를 뒤지지 않는다.
+        _skip(plot, _why_no_growth(db, plot))
         return []
 
     inputs = PlotTaskInputs(
@@ -115,6 +150,13 @@ def generate_tasks_for_plot(db: Session, plot: Plot) -> list[PlotTask]:
     candidates = build_task_candidates(inputs)
     if not candidates:
         db.commit()
+        # 0건이 **정상인 유일한 경로**다 — 조건을 봤고 할 일이 없었다는 뜻이다.
+        # 위의 건너뜀들과 섞이면 "데이터가 없다"와 "할 일이 없다"를 구분할 수 없다.
+        _skip(
+            plot,
+            f"조건 미달 — 최근 {RAIN_WINDOW_DAYS}일 강수 {inputs.recent_rain_mm}mm / "
+            f"필요 {inputs.water_need_mm}mm · 시비 {inputs.fertilize_needed}",
+        )
         return []
 
     # "살아 있는" 카드만 재생성을 막는다 — 닫힌 카드(expired_at)는 세지 않는다.
