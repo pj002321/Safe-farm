@@ -94,6 +94,18 @@ interface CropCardsProps {
    * 여기서 `new Date()` 를 읽으면 서버가 그린 마크업과 달라 하이드레이션이 어긋난다.
    */
   maxSowingDate?: string;
+  /**
+   * 검색창 오른쪽에 붙일 제출 버튼. 주면 검색줄이 **화면 위에 붙어 따라온다.**
+   *
+   * ⚠️ 왜 여기로 올렸나 — 밭 상세의 '작물 추가' 는 버튼이 카드 79장 **아래**에 있어서
+   *   두 장만 고르고도 끝까지 스크롤해야 눌렀다. 카드 수가 자료에 따라 늘기 때문에
+   *   버튼을 아래 두면 화면이 길어질수록 나빠진다.
+   * ⚠️ 등록 마법사(`plots/new`)는 주지 않는다. 거기는 하단 독(`PlotWizardDock`)이
+   *   제출을 맡고 있어서, 주면 제출 버튼이 한 화면에 둘이 된다.
+   * ⚠️ `CropCards` 는 폼 **안**에 있으므로 여기 버튼에 `form` 속성이 필요 없다.
+   *   폼 밖에 두는 독과 다른 점이다.
+   */
+  action?: ReactNode;
 }
 
 export function CropCards({
@@ -101,6 +113,7 @@ export function CropCards({
   name = "cropIds",
   defaultSelected = [],
   maxSowingDate,
+  action,
 }: CropCardsProps) {
   const [query, setQuery] = useState("");
   // 검색으로 걸러져도 **이미 고른 작물은 계속 보인다.** 안 그러면 체크한 채로
@@ -114,21 +127,34 @@ export function CropCards({
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="relative">
-        <span
-          aria-hidden="true"
-          className="-translate-y-1/2 pointer-events-none absolute top-1/2 left-3 text-fg-subtle"
-        >
-          <SearchIcon className="size-4" />
-        </span>
-        <input
-          aria-label="작물 검색"
-          className="w-full rounded-md border border-border bg-surface py-2 pr-3 pl-10 text-fg text-sm transition-colors hover:border-accent focus:border-accent"
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="작물 이름으로 검색"
-          type="search"
-          value={query}
-        />
+      {/* action 이 있을 때만 붙어 따라온다. `top-[4.5rem]` 은 앱 헤더(sticky top-0) 아래다 —
+          `MeRail` 이 같은 값으로 헤더 밑에 붙는다. 데스크톱 헤더가 약 61px 라 `top-14`(56px)
+          로 두면 검색창 윗부분이 헤더 밑에 숨는다. 배경을 칠하는 이유는 카드가 이 줄
+          **뒤로** 흘러가기 때문이다. 음수 여백은 폼의 p-4 를 상쇄해 줄 전체를 덮는다. */}
+      <div
+        className={
+          action
+            ? "-mx-4 -mt-4 sticky top-[4.5rem] z-10 flex items-center gap-2 border-border border-b bg-surface-2 px-4 py-3"
+            : "relative"
+        }
+      >
+        <div className="relative flex-1">
+          <span
+            aria-hidden="true"
+            className="-translate-y-1/2 pointer-events-none absolute top-1/2 left-3 text-fg-subtle"
+          >
+            <SearchIcon className="size-4" />
+          </span>
+          <input
+            aria-label="작물 검색"
+            className="w-full rounded-md border border-border bg-surface py-2 pr-3 pl-10 text-fg text-sm transition-colors hover:border-accent focus:border-accent"
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="작물 이름으로 검색"
+            type="search"
+            value={query}
+          />
+        </div>
+        {action}
       </div>
 
       {!anyVisible && (
