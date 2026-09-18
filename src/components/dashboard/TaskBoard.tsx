@@ -1,11 +1,13 @@
 import Link from "next/link";
 import { ArrowUpRightIcon, CheckIcon } from "@/components/icons";
 import { Badge } from "@/components/shared/Badge";
+import type { EmptyTaskReason } from "@/features/dashboard/domain/emptyTaskReason";
 import type { PlotTaskGroup } from "@/features/dashboard/domain/taskGrouping";
 import type {
   Priority,
   TaskCardData,
 } from "@/features/dashboard/domain/taskSummary";
+import { EmptyTasks } from "./EmptyTasks";
 
 /**
  * ---------------------------------------------
@@ -48,15 +50,26 @@ const PRIORITY: Record<
 interface TaskBoardProps {
   /** 밭별로 묶인 오늘의 카드. `groupTasksByPlot` 이 만든다. */
   groups: readonly PlotTaskGroup[];
+  /**
+   * 카드가 하나도 없을 때 왜 없는지. `emptyTaskReason` 이 정한다.
+   *
+   * 화면이 직접 판단하지 않는 이유: "할 일이 없다"와 "판정을 못 했다"를 가르는
+   * 것은 로직이고, 틀리면 사용자가 고칠 수 있는 문제를 영영 모르게 된다.
+   */
+  emptyReason: EmptyTaskReason;
   /** 완료 체크 제출을 받는 Server Action. page.tsx 가 내려준다. */
   toggleTaskAction: (formData: FormData) => Promise<void>;
 }
 
-export function TaskBoard({ groups, toggleTaskAction }: TaskBoardProps) {
+export function TaskBoard({
+  groups,
+  emptyReason,
+  toggleTaskAction,
+}: TaskBoardProps) {
   // 밭은 있는데 오늘 할 일이 하나도 없는 경우. 밭별로 "없음"을 늘어놓으면
   // 화면만 길어지므로 한 장으로 합쳐서 알린다.
   if (groups.every((group) => group.open.length + group.done.length === 0)) {
-    return <EmptyTasks />;
+    return <EmptyTasks reason={emptyReason} />;
   }
 
   return (
@@ -131,31 +144,6 @@ function PlotSection({
         </div>
       )}
     </section>
-  );
-}
-
-/**
- * 카드가 하나도 없을 때.
- *
- * 빈 배열을 그대로 두면 "오늘 할 일" 밑이 그냥 빈 공간이라 서비스가 멈춘
- * 것처럼 보인다(빈 상태 없는 `PlotStrip` 이 같은 이유로 온보딩을 그리는 것과
- * 같은 문제). 판정은 매일·밭마다 실제로 도는 것이니, "확인했고 지금은 없다"를
- * 눈에 보이는 카드 한 장으로 알려준다.
- */
-function EmptyTasks() {
-  return (
-    <div className="rounded-lg border border-border border-dashed bg-surface-2/40 px-6 py-8 text-center">
-      <span className="mx-auto grid size-11 place-items-center rounded-full bg-telemetry text-accent-on">
-        <CheckIcon strokeWidth={3} />
-      </span>
-      <p className="mt-3 font-semibold text-fg text-sm">
-        오늘은 특별히 할 일이 없습니다
-      </p>
-      <p className="mx-auto mt-1.5 max-w-xs text-balance text-fg-muted text-xs leading-relaxed">
-        강수량과 생육 단계를 매일 다시 판정합니다. 조건이 바뀌면 그 즉시 카드로
-        알려 드릴게요.
-      </p>
-    </div>
   );
 }
 
