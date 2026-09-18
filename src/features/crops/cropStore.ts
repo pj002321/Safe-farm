@@ -29,6 +29,7 @@ export async function listCropOptions(): Promise<CropOption[]> {
   const { data, error } = await supabase
     .from("crops")
     .select("crop_id, name, difficulty, crop_variants(days_to_harvest)")
+    .not("base_temp", "is", null)
     .order("crop_id");
 
   if (error) throw new Error(error.message);
