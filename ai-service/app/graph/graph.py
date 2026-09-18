@@ -1,6 +1,7 @@
 """그래프 조립. 지금 두 벌이 들어 있다.
 
-- `build_graph_default()` — RAG(retrieve → generate). 모듈 끝의 `graph` 가 이것.
+- `build_graph_default()` — ask-flow(plan → run_tools?/retrieve → generate).
+  모듈 끝의 `graph` 가 이것.
 - `build_graph(deps)` / `create_graph(deps)` — 작물 추천. 미컴파일 쪽은 노드를 갈아끼울 때 쓴다.
 
 외부 의존은 `GraphDeps` 로 받는다. 이 파일은 환경변수를 모른다.
@@ -22,28 +23,54 @@ from app.domain.suitability import CropProfile, Risk, SuitabilityResult, Weather
 from app.graph.nodes import (
     CandidateLoader,
     WeatherFetcher,
+    generate,
     make_collect_weather_node,
     make_explain_node,
     make_load_candidates_node,
+    plan,
     rank_candidates,
+    retrieve,
+    route_after_plan,
     route_after_rank,
     route_after_weather,
-    # generate,
-    # retrieve,
+    run_tools,
 )
-from app.graph.state import RecommendationState  # GraphState
+from app.graph.state import GraphState, RecommendationState
 
-# def build_graph_default():
-#     builder = StateGraph(GraphState)
 
-#     builder.add_node("retrieve", retrieve)
-#     builder.add_node("generate", generate)
+def build_graph_default() -> CompiledStateGraph:
+    """
+    # summary
+    ask-flow 그래프. plan 이 밭 조회(get_plot_context)가 필요한지 정하고, 필요하면
+    run_tools 를 거쳐, 필요 없으면 곧장 retrieve 로 간다. retrieve 는 route 와
+    무관하게 항상 돈다 — tool 경로에서도 RAG 근거를 스킵하지 않는다(plan 노드
+    docstring 참고).
 
-#     builder.add_edge(START, "retrieve")
-#     builder.add_edge("retrieve","generate")
-#     builder.add_edge("generate", END)
+    # params
+    없다<br>
 
-#     return builder.compile()
+    # returns
+    실행 가능한 CompiledStateGraph
+
+    # examples
+        build_graph_default().invoke({"db": db, "question": "...", "user_id": ...})
+    """
+    builder = StateGraph(GraphState)
+
+    builder.add_node("plan", plan)
+    builder.add_node("run_tools", run_tools)
+    builder.add_node("retrieve", retrieve)
+    builder.add_node("generate", generate)
+
+    builder.add_edge(START, "plan")
+    builder.add_conditional_edges(
+        "plan", route_after_plan, {"run_tools": "run_tools", "retrieve": "retrieve"}
+    )
+    builder.add_edge("run_tools", "retrieve")
+    builder.add_edge("retrieve", "generate")
+    builder.add_edge("generate", END)
+
+    return builder.compile()
 
 
 '''
@@ -149,4 +176,4 @@ def create_checkpoint_serde() -> JsonPlusSerializer:
     )
 
 
-# graph = build_graph_default()
+graph = build_graph_default()

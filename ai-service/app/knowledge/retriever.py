@@ -7,10 +7,13 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.domain.crop_match import find_crops
+from app.domain.diversity import diversify
 from app.domain.symptoms import expand_symptoms
 from app.knowledge import vector_store
 from app.knowledge.embedder import embed_texts
+from app.knowledge.reranker import rerank
 from app.models.chunk import Chunk
+from app.schemas.ask import NO_MATCH_DISTANCE
 
 # 작물 이름은 마스터라 요청마다 조회할 이유가 없다. 첫 검색 때 한 번 읽고 들고 있는다.
 # 마스터를 다시 시딩했으면 프로세스를 다시 띄운다 — 연 1회라 그 편이 싸다
@@ -81,6 +84,41 @@ def retrieve_with_score(
     if crops is None:
         crops = find_crops(question, known_crops(db))
     return vector_store.search_with_score(db, query_vector, top_k, crops=crops, on_date=on_date)
+
+
+# 후보를 넓게 받아 소스 상한을 걸고 TOP_K 개를 고른다.
+# (2026-09-17 실측 33문항: 후보 10→5 hit 24·hint 27, 후보 50→소스≤2→5 hit 29·hint 29, 잃은 문항 0).
+# pipeline/doc/golden.py 의 세 값은 항상 이것과 같아야 한다 —
+# 어긋나면 골든에서 좋아져도 실제 답변은 그대로다
+CANDIDATES = 50   # 벡터에서 받는 후보. 정답이 22위·39위에 있었다. 20·30 은 +1 에 그친다
+PER_SOURCE = 2    # 앞에 둘 같은 소스 수. 1 은 근거 둘이 한 소스에 있는 질문을 잃는다(칩 2개 사태)
+TOP_K = 5
+
+
+def find_matches(db: Session, question: str) -> list[tuple[Chunk, float]]:
+    """
+    # summary
+    질문과 관련 있는 조각을 찾아 순위까지 정리한다. retrieve_with_score 로 넓게 받고,
+    diversify 로 한 소스 쏠림을 풀고, rerank 로 어휘 겹침을 반영해 정렬한 뒤,
+    NO_MATCH_DISTANCE 보다 먼 것은 버린다. api/ask.py, pipeline/ask_preview.py,
+    graph의 retrieve 노드가 같이 쓴다.
+
+    # params
+    db: 세션<br>
+    question: 사용자 질문<br>
+
+    # returns
+    (Chunk, 거리) 목록. 가까운 순, 관련 있는 것만. 하나도 없으면 빈 리스트
+
+    # examples
+        find_matches(db, "상추 발아기 물주기")  -> [(Chunk(id=7), 0.21), ...]
+    """
+    candidates = retrieve_with_score(db, question, CANDIDATES)
+    picked = diversify(
+        candidates, key=lambda m: m[0].document.source, per_key=PER_SOURCE, limit=TOP_K
+    )
+    matches = rerank(question, picked)
+    return [(chunk, dist) for chunk, dist in matches if dist < NO_MATCH_DISTANCE]
 
 
 

@@ -19,19 +19,14 @@ from sqlalchemy.orm import Session
 from app.core.config import DAILY_ASK_LIMIT
 from app.core.db import get_db
 from app.core.security import require_service_token
-from app.knowledge.retriever import retrieve_with_score
-from app.knowledge.vector_store import neighbors
 from app.domain.ask_suggest import suggest_questions
-from app.domain.diversity import diversify
-from app.schemas.ask import AskFeedbackRequest, AskMatch, AskRequest, AskResponse, NO_MATCH_DISTANCE
 from app.domain.guardrail import BLOCKED_MESSAGE, is_blocked_topic
 from app.domain.history_context import HISTORY_RULE
 from app.knowledge.generator import stream_answer
-from app.knowledge.reranker import rerank
-from app.knowledge.retriever import retrieve_with_score
+from app.knowledge.retriever import find_matches
+from app.knowledge.vector_store import neighbors
 from app.models.farm.ask_history import AskHistory
 from app.schemas.ask import (
-    NO_MATCH_DISTANCE,
     AskFeedbackRequest,
     AskMatch,
     AskQuota,
@@ -55,13 +50,6 @@ DAILY_LIMIT_MESSAGE = (
 )
 
 STREAM_FAILED_MESSAGE = "답변을 만드는 중 문제가 생겼습니다. 잠시 뒤 다시 시도해 주세요."
-
-# 후보를 넓게 받아 소스 상한을 걸고 TOP_K 개를 고른다. 값의 근거는 pipeline/doc/golden.py 주석 참고
-# (2026-09-17 실측 33문항: 후보 10→5 hit 24·hint 27, 후보 50→소스≤2→5 hit 29·hint 29, 잃은 문항 0).
-# 두 파일의 세 값은 항상 같아야 한다 — 어긋나면 골든에서 좋아져도 실제 답변은 그대로다
-CANDIDATES = 50   # 벡터에서 받는 후보. 정답이 22위·39위에 있었다. 20·30 은 +1 에 그친다
-PER_SOURCE = 2    # 앞에 둘 같은 소스 수. 1 은 근거 둘이 한 소스에 있는 질문을 잃는다(칩 2개 사태)
-TOP_K = 5
 
 
 def _quota(db: Session, user_id: uuid.UUID) -> AskQuota:
@@ -140,16 +128,9 @@ def ask(request: AskRequest, db: Session = Depends(get_db)) -> AskResponse | Str
     # 자기 자신의 맥락으로 딸려 들어간다.
     history_context = HISTORY_RULE(recent_turns(db, request.user_id))
 
-    # 후보 CANDIDATES 개를 받아 같은 소스는 PER_SOURCE 개까지 앞에 두고 TOP_K 개를 고른다.
-    # 넘친 것은 버리지 않고 뒤로 민다 — 버리면 후보가 한 소스뿐인 질문에서 근거가 2개로 준다.
-    # 후보 10 이면 "고추 물 언제 줘야 해?" 의 정답 crop_guide(22위)를 볼 기회조차 없다.
-    # rerank 는 이제 고르지 않고 TOP_K 개의 순서만 잡는다 — 풀 8에서 고르게 하면 hit 을 하나 깎았다
-    candidates = retrieve_with_score(db, request.question, CANDIDATES)
-    picked = diversify(
-        candidates, key=lambda m: m[0].document.source, per_key=PER_SOURCE, limit=TOP_K
-    )
-    matches = rerank(request.question, picked)
-    found = [(chunk, dist) for chunk, dist in matches if dist < NO_MATCH_DISTANCE]
+    # 후보를 넓게 받아 같은 소스 쏠림을 풀고 어휘 겹침으로 순서를 보정한다.
+    # 세부 로직·값의 근거는 app/knowledge/retriever.py의 find_matches 주석 참고.
+    found = find_matches(db, request.question)
 
     history = record_question(db, request.user_id, request.question)
     quota = _quota(db, request.user_id)

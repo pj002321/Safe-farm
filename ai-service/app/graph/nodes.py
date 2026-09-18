@@ -17,6 +17,8 @@ from app.core.config import OPENAI_MODEL
 from app.domain.suitability import CropProfile, WeatherWindow, rank_crops
 from app.graph.state import GraphState, RecommendationState
 from app.knowledge.embedder import get_client
+from app.knowledge.generator import generate_answer
+from app.knowledge.retriever import find_matches
 from app.service.ask_context import build_plot_context
 from app.tools.tools import TOOL_SPECS
 
@@ -146,6 +148,7 @@ def make_explain_node(llm: BaseChatModel) -> AsyncNode:
     return explain
 
 
+# 조건부 엣지. 순수 함수라 테스트 가성비가 가장 높다.
 def route_after_weather(state: RecommendationState) -> str:
     """
     # summary
@@ -189,6 +192,7 @@ def route_after_rank(state: RecommendationState) -> str:
     if not state.get("ranked"):
         return END
     return "explain"
+
 
 def plan(state: GraphState) -> GraphState:
     """
@@ -260,3 +264,48 @@ def route_after_plan(state: GraphState) -> str:
         route_after_plan({"route": "rag"})   -> 'retrieve'
     """
     return "run_tools" if state.get("route") == "tool" else "retrieve"
+
+
+def retrieve(state: GraphState) -> GraphState:
+    """
+    # summary
+    질문과 관련된 참고 자료를 찾는다. route 와 무관하게 항상 돈다 — "tool" 로 가도
+    RAG 근거를 스킵하지 않기로 했다(plan 노드 docstring 참고).
+
+    # params
+    state: db, question 을 읽는다<br>
+
+    # returns
+    {"matches": [...]}. find_matches 결과를 그대로 옮긴다
+
+    # examples
+        retrieve({"db": db, "question": "고추 물 언제 줘야 해?"})
+        -> {'matches': [(Chunk(id=7), 0.21), ...]}
+    """
+    return {"matches": find_matches(state["db"], state["question"])}
+
+
+def generate(state: GraphState) -> GraphState:
+    """
+    # summary
+    근거를 붙여 답변 문장을 만든다. matches 가 비어 있으면 부르지 않는다 —
+    generate_answer 의 계약이자 app/api/ask.py 의 기존 동작(근거 없으면 LLM 호출
+    없이 빈 응답)과 같다. 밭 조회 결과(tool_result)는 plot_context 로 그대로 넘긴다.
+
+    # params
+    state: question, matches, tool_result, history_context 를 읽는다<br>
+
+    # returns
+    {"answer": "..."} 또는 matches 가 비었으면 {"answer": None}
+
+    # examples
+        generate({"question": "고추 물 언제 줘?", "matches": [(chunk, 0.2)], ...})
+        -> {'answer': '지금은...'}
+        generate({"question": "...", "matches": []})  -> {'answer': None}
+    """
+    if not state["matches"]:
+        return {"answer": None}
+    answer = generate_answer(
+        state["question"], state["matches"], state.get("tool_result"), state.get("history_context")
+    )
+    return {"answer": answer}

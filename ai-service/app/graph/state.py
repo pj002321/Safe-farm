@@ -5,14 +5,12 @@
 - 노드 이름과 state 키는 일부러 다르게 짓는다. stream 출력에서 헷갈린다.
 """
 
+import uuid
 from typing import TypedDict
 
 from sqlalchemy.orm import Session
 
-import uuid
-
 from app.domain.suitability import CropProfile, SuitabilityResult, WeatherWindow
-from app.models.chunk import Chunk
 
 
 class GraphState(TypedDict):
