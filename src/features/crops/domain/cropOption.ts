@@ -20,6 +20,10 @@ export interface CropOption {
   difficultyKo: string;
   /** "약 80일" · "80~95일". 품종이 없으면 null — 화면이 자리를 비운다. */
   durationKo: string | null;
+  /** "3.1~3.31에 씨를 뿌립니다" · 없으면 null — 화면이 자리를 비운다. 지역 보정은 아직 없다(V1-22). */
+  sowingWindowKo: string | null;
+  /** 오늘이 파종 창 안인가. 카드에 "지금 심기 좋음" 배지를 띄운다. */
+  sowingNow: boolean;
 }
 
 export interface CropOptionRow {
@@ -27,16 +31,28 @@ export interface CropOptionRow {
   name: string;
   difficulty: string | null;
   /** Supabase 조인 결과. 품종이 없으면 빈 배열이다. */
-  crop_variants: { days_to_harvest: number | null }[];
+  crop_variants: {
+    days_to_harvest: number | null;
+    sow_method: string | null;
+    sow_from: string | null;
+    sow_to: string | null;
+  }[];
 }
 
-export function toCropOption(row: CropOptionRow): CropOption {
+/**
+ * `todayMmDd` 를 인자로 받는 까닭: 안에서 `new Date()` 를 부르면 테스트가 돌리는
+ * 날짜에 흔들리고, 서버에서 UTC 로 잘리면 한국 자정 근처에 하루가 어긋난다.
+ * 호출자(`cropStore`)가 `kstDateString()` 으로 만들어 넘긴다.
+ */
+export function toCropOption(row: CropOptionRow, todayMmDd: string): CropOption {
   return {
     cropId: row.crop_id,
     nameKo: row.name,
     difficultyLevel: toDifficultyLevel(row.difficulty),
     difficultyKo: row.difficulty ?? "보통",
     durationKo: toDurationKo(row.crop_variants),
+    sowingWindowKo: toSowingWindowKo(row.crop_variants),
+    sowingNow: isSowingSeason(todayMmDd, row.crop_variants),
   };
 }
 
@@ -69,4 +85,86 @@ export function toDurationKo(
   const min = Math.min(...days);
   const max = Math.max(...days);
   return min === max ? `약 ${min}일` : `${min}~${max}일`;
+}
+
+/** `crop_variants` 의 파종 창 세 칸. `MM-DD` 문자열이고 연도가 없다. */
+interface SowingWindow {
+  sow_method: string | null;
+  sow_from: string | null;
+  sow_to: string | null;
+}
+
+/**
+ * 파종 방법을 사람 말로. `<기간>에 ~` 뒤에 붙는 서술어다.
+ *
+ * 마스터의 `sow_method` 는 농업 용어라 그대로 보이면 초보자가 모른다 —
+ * "아주심기" 는 모종을 밭에 옮겨 심는 것이고, 화면에 그 말을 띄우면 뜻이 안 통한다.
+ *
+ * ⚠️ 2026-09-18 실측으로 값이 여덟이다(화면에 나오는 89작물 기준).
+ *     씨뿌림 62 · 파종 20 · 아주심기 19 · 빈값 16 · 모내기 3 · 육묘 1 · 인공수분 1 · 모 기르기 1
+ *   `인공수분`(참다래)은 **파종이 아니라 꽃가루받이다.** "심습니다" 로 뭉뚱그리면 틀린 말이 된다.
+ *   빈 값(과수 대부분)은 방법을 모르는 것이므로 중립적으로 "심습니다" 로 둔다.
+ *
+ * 모르는 값이 새로 들어오면 그 말을 그대로 쓴다 — 지어내는 것보다 낫다.
+ */
+function toSowingPhrase(method: string | null): string {
+  switch ((method ?? "").trim()) {
+    case "아주심기":
+    case "정식":
+      return "모종으로 심습니다";
+    case "씨뿌림":
+    case "파종":
+      return "씨를 뿌립니다";
+    case "모내기":
+      return "모내기 합니다";
+    case "육묘":
+    case "모 기르기":
+    case "모기르기":
+      return "모를 기르기 시작합니다";
+    case "인공수분":
+      return "인공수분을 합니다";
+    case "":
+      return "심습니다";
+    default:
+      return `${method}을(를) 합니다`;
+  }
+}
+
+/**
+ * 품종별 파종 창을 한 문장으로. "3.1~3.31에 씨를 뿌립니다" 꼴이다.
+ *
+ * `MM-DD` 를 "3.1" 로 줄이고, 여러 품종이면 가장 이른 시작 ~ 가장 늦은 끝.
+ * 값이 없으면 null — "권장 시기: 정보 없음" 을 띄우는 대신 자리를 비운다.
+ *
+ * ⚠️ 해를 넘는 창은 `sow_to < sow_from` 으로 표시된다(셀러리 12-01~02-28).
+ *   그대로 "12.1~2.28" 로 적는다 — 그게 사실이다.
+ * ⚠️ 그런 창이 다른 품종과 섞이면 `sort()` 로 고른 양 끝이 뒤집힌다. 지금 그런
+ *   작물(셀러리·덴드로비움)은 품종이 하나뿐이라 안 걸린다. 둘 이상은 미지원이다.
+ */
+export function toSowingWindowKo(variants: readonly SowingWindow[]): string | null {
+  const rows = variants.filter((v) => v.sow_from && v.sow_to);
+  if (rows.length === 0) return null;
+
+  const short = (mmdd: string) => `${Number(mmdd.slice(0, 2))}.${Number(mmdd.slice(3, 5))}`;
+  const from = rows.map((v) => v.sow_from as string).sort()[0] as string;
+  const to = rows.map((v) => v.sow_to as string).sort().at(-1) as string;
+  return `${short(from)}~${short(to)}에 ${toSowingPhrase(rows[0].sow_method)}`;
+}
+
+/**
+ * 오늘이 이 작물의 파종 창 안인가. 품종 여럿이면 하나라도 안이면 참.
+ *
+ * 해넘김은 `to < from` 으로 판정한다 — "12-01"~"02-28" 이면 12·1·2월이 안이다.
+ * 연도가 없는 `MM-DD` 문자열이라 사전순 비교가 곧 날짜 비교다.
+ */
+export function isSowingSeason(
+  todayMmDd: string,
+  variants: readonly Pick<SowingWindow, "sow_from" | "sow_to">[],
+): boolean {
+  return variants.some(({ sow_from: from, sow_to: to }) => {
+    if (!from || !to) return false;
+    return from <= to
+      ? from <= todayMmDd && todayMmDd <= to
+      : todayMmDd >= from || todayMmDd <= to;
+  });
 }

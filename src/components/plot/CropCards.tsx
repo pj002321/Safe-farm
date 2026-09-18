@@ -169,6 +169,14 @@ export function CropCards({
                   <CheckIcon className="size-3" strokeWidth={3} />
                 </span>
 
+                {/* 체크 표시와 같은 구석이다. 체크되면 왼쪽으로 비켜선다 — 겹치면 글자가 가린다.
+                    이것도 input 의 형제라야 peer-checked 가 닿는다. */}
+                {crop.sowingNow && (
+                  <span className="absolute top-3 right-3 rounded-full bg-accent-subtle px-2 py-0.5 text-[0.65rem] text-accent leading-4 peer-checked:right-10">
+                    지금 심기 좋음
+                  </span>
+                )}
+
                 <span className="grid size-10 place-items-center rounded-full bg-surface-2 text-xl text-fg-muted">
                   {ICONS[crop.nameKo] ?? <LeafIcon />}
                 </span>
@@ -197,6 +205,7 @@ export function CropCards({
                   cropId={crop.cropId}
                   maxDate={maxSowingDate}
                   required={selected.has(crop.cropId)}
+                  sowingWindowKo={crop.sowingWindowKo}
                 />
               </div>
             </div>
@@ -231,10 +240,13 @@ function CropSowingFields({
   cropId,
   required,
   maxDate,
+  sowingWindowKo,
 }: {
   cropId: number;
   required: boolean;
   maxDate?: string;
+  /** "3.1~3.31에 씨를 뿌립니다". 마스터에 파종 창이 없는 작물은 null 이고 문구를 생략한다. */
+  sowingWindowKo: string | null;
 }) {
   return (
     <div className="group/sowing flex flex-col gap-3">
@@ -278,6 +290,15 @@ function CropSowingFields({
           />
         </div>
       </div>
+
+      {/* "아직 안 심었어요" 를 골랐을 때만. 날짜를 아는 사람에게는 권장 시기가 참견이다.
+          ⚠️ 작물 기준 창이지 지역 기준이 아니다(마스터에 지역이 없다) — 그래서 안내만 하고
+             창 밖이라고 막지 않는다. 틀릴 수 있는 정보로 막으면 안 된다. */}
+      {sowingWindowKo && (
+        <p className="hidden text-fg-subtle text-xs group-has-[input[value=unknown]:checked]/sowing:block">
+          이 작물은 보통 <span className="text-fg">{sowingWindowKo}</span>.
+        </p>
+      )}
 
       <fieldset className="flex gap-2">
         <legend className="sr-only">재배 방식</legend>
