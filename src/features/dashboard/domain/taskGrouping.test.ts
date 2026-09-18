@@ -26,10 +26,15 @@ function card(
   };
 }
 
+/** 판정을 막는 요소가 없는 밭. blocker 검사는 emptyTaskReason.test.ts 가 맡는다. */
+const GROWING = [
+  { status: "GROWING", sowingDate: "2026-08-01", cropNameKo: "배추" },
+];
+
 const PLOTS: GroupablePlot[] = [
-  { id: "p1", nameKo: "상주 배추밭" },
-  { id: "p2", nameKo: "뒷밭 상추" },
-  { id: "p3", nameKo: null },
+  { id: "p1", nameKo: "상주 배추밭", cultivations: GROWING },
+  { id: "p2", nameKo: "뒷밭 상추", cultivations: GROWING },
+  { id: "p3", nameKo: null, cultivations: GROWING },
 ];
 
 describe("groupTasksByPlot", () => {
@@ -94,6 +99,23 @@ describe("groupTasksByPlot", () => {
 
   it("밭이 하나도 없으면 빈 배열이다", () => {
     expect(groupTasksByPlot([card("a", "p1", "high")], [])).toEqual([]);
+  });
+
+  it("판정이 막힌 밭은 그 이유를 함께 싣는다 — 화면이 그 자리에서 말할 근거", () => {
+    const groups = groupTasksByPlot(
+      [],
+      [{ id: "p9", nameKo: "새 밭", cultivations: [] }],
+    );
+    expect(groups[0].blocker).toEqual({
+      kind: "no-cultivation",
+      plotId: "p9",
+      plotKo: "새 밭",
+    });
+  });
+
+  it("막힌 것이 없으면 blocker 는 null 이다", () => {
+    const groups = groupTasksByPlot([], [PLOTS[0]]);
+    expect(groups[0].blocker).toBeNull();
   });
 });
 

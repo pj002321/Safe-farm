@@ -197,6 +197,12 @@ def load(db, data: dict[str, list[dict]]) -> dict[str, int]:
             "sow_method": r["sow_method"],
             "sow_from": r["sow_from"],
             "sow_to": r["sow_to"],
+            # 씨앗/모종 창을 따로. 한쪽이 비는 것이 정상이다 — 직파는 plant_* 가,
+            # 씨로 안 심는 작물은 seed_* 가 빈다(crop_variant.py 주석)
+            "seed_from": r["seed_from"],
+            "seed_to": r["seed_to"],
+            "plant_from": r["plant_from"],
+            "plant_to": r["plant_to"],
         }
         for r in data["crop_variants"]
     ]

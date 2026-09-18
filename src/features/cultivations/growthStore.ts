@@ -2,7 +2,9 @@ import "server-only";
 
 import { nearestStation } from "@/shared/geo/nearestStation";
 import { listStations } from "@/shared/geo/stationStore";
+import type { MonthlyNormal } from "@/shared/growth/forecast";
 import type { DailyTemp } from "@/shared/growth/gdd";
+import { type NormalRow, toMonthlyNormals } from "@/shared/growth/normals";
 import { getSupabaseServer } from "@/shared/supabase/server";
 import type { CultivationCard } from "./domain/cultivationCard";
 import {
@@ -85,6 +87,38 @@ export async function listObservations(
     if (max === null || min === null) return [];
     return [{ date: row.obs_date, tempMaxC: max, tempMinC: min }];
   });
+}
+
+/**
+ * 관측소 하나의 월별 평년 기온. `forecastArrival_2` 가 예보 밖을 메우는 재료다.
+ *
+ * `normals` 는 관측소 × (월, 일) 일별 표라 366행이 온다 — 달로 접는 것은 순수 함수
+ * (`toMonthlyNormals`)가 한다. 이 함수는 읽기만.
+ *
+ * ⚠️ 평년값이 없는 관측소가 있다(공항·신설). 2026-09-18 기준 밭 관측소 109곳 중 24곳.
+ *   그때는 빈 배열이고, 호출자(`detailStore`)가 `_1`(최근 평균)로 내려간다.
+ *   지도 쪽은 닮은 관측소에서 빌리는데(`normal_fallback.csv` → sigungu_station.normal_station)
+ *   밭 쪽 `stations` 표에는 아직 그 짝 칸이 없다 — 교안_파종시기_두벌.md '딴 줄기'.
+ */
+export async function listMonthlyNormals(
+  stationCode: string,
+): Promise<MonthlyNormal[]> {
+  const supabase = await getSupabaseServer();
+
+  const { data, error } = await supabase
+    .from("normals")
+    .select("source, month, tmax_normal, tmin_normal")
+    .eq("station", stationCode);
+
+  if (error) throw new Error(error.message);
+
+  const rows: NormalRow[] = (data ?? []).map((row) => ({
+    source: row.source,
+    month: Number(row.month),
+    tempMaxC: num(row.tmax_normal),
+    tempMinC: num(row.tmin_normal),
+  }));
+  return toMonthlyNormals(rows);
 }
 
 /** 품종별 단계표. 여러 품종을 한 번에 읽고 호출자가 나눠 쓴다. */

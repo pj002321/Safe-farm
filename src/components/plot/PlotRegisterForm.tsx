@@ -1,6 +1,8 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { type ReactNode, useRef } from "react";
+import { RegisterDraftBanner } from "@/components/plot/RegisterDraftBanner";
+import { useRegisterDraft } from "@/features/plots/useRegisterDraft";
 
 /**
  * ---------------------------------------------
@@ -40,12 +42,17 @@ export function PlotRegisterForm({
   action,
   children,
 }: PlotRegisterFormProps) {
+  const formRef = useRef<HTMLFormElement>(null);
+  // 임시 저장(V1-23). 저장·복원은 전부 훅 안에 있다 — features/plots/useRegisterDraft.ts
+  const { restored, discard, startOver } = useRegisterDraft(formRef);
+
   return (
     <form
       action={action}
       className="flex flex-col"
       id={id}
       noValidate
+      ref={formRef}
       onSubmit={(event) => {
         const form = event.currentTarget;
         const area = form.elements.namedItem("areaM2");
@@ -61,9 +68,23 @@ export function PlotRegisterForm({
 
         // 나머지 required(선택한 작물의 파종 여부)는 항상 3단계 패널 안에서만
         // 걸리므로 이 시점엔 이미 보인다 — 네이티브 검사에 그대로 맡긴다.
-        if (!form.reportValidity()) event.preventDefault();
+        if (!form.reportValidity()) {
+          event.preventDefault();
+          return;
+        }
+
+        // 검사를 통과했으니 이제 진짜 제출이다. 저장본을 여기서 지운다 —
+        // 서버 액션이 redirect 하므로 클라이언트는 성공을 못 본다.
+        // ⚠️ 저장본만 지우고 폼은 건드리지 않는다. action 은 이 핸들러가 끝난 뒤
+        //    FormData 를 읽으므로 여기서 폼을 비우면 서버가 빈 값을 받는다.
+        // ⚠️ 서버가 실패하면 저장본은 이미 없다. 그때 사용자가 다시 채우는 것이
+        //    지금 UX 다(등록 실패 화면 자체가 아직 없다).
+        discard();
       }}
     >
+      {restored && (
+        <RegisterDraftBanner draft={restored} onStartOver={startOver} />
+      )}
       {children}
     </form>
   );
