@@ -18,10 +18,18 @@ fetch_all_normals 가 겪은 것과 같은 함정이다 — **받는 쪽은 배�
 빈손으로 오는 관측소가 있다(레이더·도서·신설 등). 0일치는 정상이고, 그 관측소는
 map·stations 후보에서 자연히 빠진다.
 
-실행: py -m pipeline.region.fetch_region_weather      ⚠ API 를 관측소 수만큼 부른다
-      두 창에서 동시에 돌리지 말 것 — 같은 키의 동시 접속이 막혀 ConnectTimeout 이 난다
+--year 로 지난 해도 받는다. 기본은 올해(1/1~오늘)고, 지난 해를 주면 그 해 1/1~12/31 이다.
+지도·밭 계산은 `date(today.year, 1, 1)` 부터만 보므로 과거 연도를 넣어도 지금 화면은 안 바뀐다
+(app/service/gdd_region.py). 과거를 받는 이유는 **올해 편차가 얼마나 특별한지** 재기 위해서다 —
+2026년 편차가 +11.5% 인데 작년도 그랬다면 평범한 해고, 작년이 +3% 였다면 정말 이상한 해다.
+지도 색 경계(app/domain/gdd.py 의 _TIERS)를 정하려면 그 비교가 있어야 한다.
+
+실행: py -m pipeline.region.fetch_region_weather [--year 2025]
+      ⚠ API 를 관측소 수만큼 부른다. 두 창에서 동시에 돌리지 말 것 —
+        같은 키의 동시 접속이 막혀 ConnectTimeout 이 난다
 """
 
+import argparse
 import csv
 from datetime import date
 
@@ -37,6 +45,13 @@ STATIONS_PATH = DATA_DIR / "stations.csv"
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser(description="ASOS 전체 일통계 적재")
+    parser.add_argument(
+        "--year", type=int, default=None,
+        help="받을 연도. 생략하면 올해(1/1~오늘). 지난 해를 주면 그 해 1/1~12/31",
+    )
+    args = parser.parse_args()
+
     if not KMA_API_KEY:
         raise SystemExit("KMA_API_KEY 가 없습니다 — ai-service/.env.local 확인")
 
@@ -45,7 +60,13 @@ def main() -> None:
     asos.sort(key=lambda s: int(s["stn"]))
 
     today = date.today()
-    tm1, tm2 = f"{today.year}0101", today.strftime("%Y%m%d")
+    if args.year is None or args.year == today.year:
+        tm1, tm2 = f"{today.year}0101", today.strftime("%Y%m%d")
+    else:
+        if args.year > today.year:
+            raise SystemExit(f"{args.year}년은 아직 오지 않았습니다")
+        tm1, tm2 = f"{args.year}0101", f"{args.year}1231"
+    print(f"{tm1} ~ {tm2} · 관측소 {len(asos)}개\n")
 
     빈곳 = []
     db = new_session()
@@ -62,10 +83,13 @@ def main() -> None:
 
         # 기온은 오는데 강수가 통째로 없는 관측소를 찾아 남긴다. 공항 관측이 그렇다 —
         # 배정되면 그 시군구의 강수 칸이 빈다(asos.py 의 usable docstring 참고)
+        # 이번에 받은 기간만 본다. 전 기간을 보면 옛 해에 강수를 관측하다 그만둔 곳까지
+        # 섞여서, "지금 강수가 오는가" 라는 물음에 옛 사실로 답하게 된다
         비없음 = [r[0] for r in db.execute(text(
-            "select substring(plot_id from 5) from weather_daily where plot_id like 'stn:%' "
+            "select substring(plot_id from 5) from weather_daily "
+            "where plot_id like 'stn:%' and date between :a and :b "
             "group by 1 having count(rain) = 0 and count(tmax) > 0"
-        ))]
+        ), {"a": f"{tm1[:4]}-{tm1[4:6]}-{tm1[6:]}", "b": f"{tm2[:4]}-{tm2[4:6]}-{tm2[6:]}"})]
         번호 = {s["stn"]: s for s in asos}
         save_no_rain_stations([번호[s] for s in 비없음 if s in 번호])
     finally:
