@@ -289,8 +289,9 @@ def generate(state: GraphState) -> GraphState:
     """
     # summary
     근거를 붙여 답변 문장을 만든다. matches 가 비어 있으면 부르지 않는다 —
-    generate_answer 의 계약이자 app/api/ask.py 의 기존 동작(근거 없으면 LLM 호출
-    없이 빈 응답)과 같다. 밭 조회 결과(tool_result)는 plot_context 로 그대로 넘긴다.
+    generate_answer 의 계약과 같다. 밭 조회 결과(tool_result)는 plot_context 로 그대로
+    넘긴다. app/api/ask.py 는 이 노드를 쓰지 않고 stream_answer 를 직접 불러
+    matches 가 비어도 일반 지식으로 답하게 한다.
 
     # params
     state: question, matches, tool_result, history_context 를 읽는다<br>

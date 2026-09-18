@@ -149,9 +149,6 @@ def ask(request: AskRequest, db: Session = Depends(get_db)) -> AskResponse | Str
     history = record_question(db, request.user_id, request.question)
     quota = _quota(db, request.user_id)
 
-    if not found:
-        return AskResponse(matches=[], history_id=str(history.id), quota=quota)
-
     ask_matches = [
         AskMatch(body=chunk.body, distance=dist, source_title=chunk.document.title)
         for chunk, dist in found
@@ -163,7 +160,7 @@ def ask(request: AskRequest, db: Session = Depends(get_db)) -> AskResponse | Str
     evidence = found + neighbors(db, found)
     return StreamingResponse(
         _sse(history, ask_matches, stream_answer(request.question, evidence, plot_context),
-db),
+db, quota),
         media_type="text/event-stream",
     )
 
