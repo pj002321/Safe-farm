@@ -61,10 +61,19 @@ export function parseCultivationSelections(
  * `ck_cultivations_gdd_origin` 제약(둘 다 비면 적산을 시작할 지점이 없다,
  * `20260916000001_cultivations.sql`)에 막혀 insert 가 통째로 실패한다.
  * 그래서 상태는 체크박스가 아니라 **날짜 존재 여부**로 정한다.
+ *
+ * ⚠️ **오늘보다 뒤의 날짜도 `PLANNED` 다.** 아직 심지 않았는데 `GROWING` 으로
+ * 넣으면 카드가 "자라는 중"으로 뜨고, GDD 게이지가 아직 오지 않은 날을 기준점으로
+ * 잡는다. 폼은 `max` 로 달력을 오늘에서 끊지만(`CropCards`), 그건 달력 얘기일
+ * 뿐이다 — 이 함수를 타는 두 액션이 공개 POST 라 값은 여기서 다시 본다.
+ * 다만 날짜 자체는 지우지 않는다 — "미정"과 달리 언제 심을지는 아는 값이고,
+ * 스키마도 `PLANNED` 에 심을 예정일을 허용한다(`ck_cultivations_gdd_origin`).
  */
 export function toCultivationInputs(
   selections: readonly CultivationSelection[],
   variantIdByCropId: ReadonlyMap<number, number>,
+  /** 한국 기준 오늘(`kstDateString()`). 날짜 문자열끼리 비교한다. */
+  today: string,
 ) {
   const inputs: {
     variantId: number;
@@ -77,11 +86,13 @@ export function toCultivationInputs(
     const variantId = variantIdByCropId.get(selection.cropId);
     if (variantId === undefined) continue;
 
-    const planned = selection.sowingUnknown || !selection.sowingDate;
+    const future =
+      selection.sowingDate !== null && selection.sowingDate > today;
+    const planned = selection.sowingUnknown || !selection.sowingDate || future;
     inputs.push({
       variantId,
       status: planned ? "PLANNED" : "GROWING",
-      sowingDate: planned ? null : selection.sowingDate,
+      sowingDate: selection.sowingUnknown ? null : selection.sowingDate,
       sowingType: selection.sowingMethod === "seedling" ? "SEEDLING" : "SEED",
     });
   }

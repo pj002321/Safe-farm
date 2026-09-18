@@ -19,14 +19,16 @@ from sqlalchemy.orm import Session
 from app.core.config import DAILY_ASK_LIMIT
 from app.core.db import get_db
 from app.core.security import require_service_token
+from app.knowledge.retriever import retrieve_with_score
+from app.knowledge.vector_store import neighbors
 from app.domain.ask_suggest import suggest_questions
 from app.domain.diversity import diversify
+from app.schemas.ask import AskFeedbackRequest, AskMatch, AskRequest, AskResponse, NO_MATCH_DISTANCE
 from app.domain.guardrail import BLOCKED_MESSAGE, is_blocked_topic
 from app.domain.history_context import HISTORY_RULE
 from app.knowledge.generator import stream_answer
 from app.knowledge.reranker import rerank
 from app.knowledge.retriever import retrieve_with_score
-from app.knowledge.vector_store import neighbors
 from app.models.farm.ask_history import AskHistory
 from app.schemas.ask import (
     NO_MATCH_DISTANCE,
@@ -159,25 +161,13 @@ def ask(request: AskRequest, db: Session = Depends(get_db)) -> AskResponse | Str
         AskMatch(body=chunk.body, distance=dist, source_title=chunk.document.title)
         for chunk, dist in found
     ]
-    # user_id 를 함께 넘긴다 — plot_id 는 브라우저가 보낸 값이라 소유 확인 없이
-    # 읽으면 남의 밭 상태가 답변에 실려 나간다(ask_context._owned_plot).
-    plot_context = (
-        build_plot_context(db, request.plot_id, request.user_id)
-        if request.plot_id
-        else None
-    )
+    plot_context = build_plot_context(db, request.plot_id) if request.plot_id else None
     # 뽑힌 조각의 같은 문서 앞뒤 조각을 LLM 에만 더 준다. 출처 칩(ask_matches)은 5개 그대로 —
     # "방울토마토 물" 의 정답은 뽑힌 조각의 바로 옆 조각이었다 — 골든 hint 29→31.
     # hit 은 같은 소스라 안 움직인다
     evidence = found + neighbors(db, found)
     return StreamingResponse(
-        _sse(
-            history,
-            ask_matches,
-            stream_answer(request.question, evidence, plot_context, history_context),
-            db,
-            quota,
-        ),
+        _sse(history, ask_matches, stream_answer(request.question, evidence, plot_context), db),
         media_type="text/event-stream",
     )
 

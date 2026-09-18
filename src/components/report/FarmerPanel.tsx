@@ -3,13 +3,13 @@
 import type { ReactNode } from "react";
 import { Badge } from "@/components/shared/Badge";
 import { Card } from "@/components/shared/Card";
+import { GrowthGauge } from "@/components/shared/GrowthGauge";
 import {
   buildAdvice,
   CABBAGE,
   REPORT,
 } from "@/features/report/domain/reportData";
 import type { RevealId } from "@/features/report/domain/timeline";
-import { GrowthGauge } from "@/components/shared/GrowthGauge";
 import { SprayWindows } from "./SprayWindows";
 import { TypeOut } from "./TypeOut";
 

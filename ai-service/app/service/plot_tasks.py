@@ -12,6 +12,7 @@ DB에서 값을 모아 넘기고, 나온 후보를 plot_tasks 테이블에 적�
 
 from __future__ import annotations
 
+import traceback
 from datetime import date, datetime, timedelta, timezone
 
 from sqlalchemy import func, select, update
@@ -149,6 +150,30 @@ def generate_tasks_for_plot(db: Session, plot: Plot) -> list[PlotTask]:
 
 
 def generate_daily_tasks(db: Session) -> int:
-    """모든 밭을 판정한다. 배치 스크립트(pipeline)가 부르는 진입점."""
+    """모든 밭을 판정한다. 매일 00시(KST) 배치의 진입점.
+
+    ⚠️ **밭 하나의 실패가 나머지를 막지 않는다.** 예전에는
+       `sum(... for plot in plots)` 한 줄이라, 밭 하나에서 예외가 나면 그 자리에서
+       배치가 끝났다. 실제로 마스터 데이터에 base_temp 가 빈 작물 하나 때문에
+       **모든 사용자의 할 일이 하루 통째로 안 생겼다.**
+
+       이건 증상 감추기가 아니다. 밭들은 서로 독립이고, 한 밭의 데이터 결손은
+       다른 밭의 판정과 아무 상관이 없다. 그래서 격리하되 **삼키지는 않는다** —
+       어느 밭에서 무엇이 터졌는지 스택까지 남긴다. 조용히 넘어가면 결손이
+       영원히 안 보인다.
+
+       rollback 이 필요한 이유: 예외가 난 세션은 다음 질의부터 전부 거부한다.
+       걷어내지 않으면 격리해도 나머지 밭이 줄줄이 실패한다.
+    """
     plots = db.query(Plot).all()
-    return sum(len(generate_tasks_for_plot(db, plot)) for plot in plots)
+
+    created = 0
+    for plot in plots:
+        try:
+            created += len(generate_tasks_for_plot(db, plot))
+        except Exception:
+            db.rollback()
+            traceback.print_exc()
+            print(f"[tasks] 밭 {plot.id} 판정 실패 — 건너뛰고 계속합니다", flush=True)
+
+    return created

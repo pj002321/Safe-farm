@@ -47,6 +47,8 @@ describe("toPlotMapPoint", () => {
     name: "뒷밭",
     latitude: 35.6,
     longitude: 127.3,
+    grid_x: 63,
+    grid_y: 89,
     cultivations: [
       cultivation("무", "2026-09-10", 11),
       cultivation("배추", "2026-08-25", 22),

@@ -9,6 +9,7 @@ import { PlotWizardDock } from "@/components/plot/PlotWizardDock";
 import { WizardNav } from "@/components/plot/WizardNav";
 import { SectionHeading } from "@/components/shared/SectionHeading";
 import { listCropOptions } from "@/features/crops/cropStore";
+import { kstDateString } from "@/shared/utils/kstDate";
 import { registerPlot } from "./actions";
 
 /**
@@ -105,6 +106,8 @@ export default async function PlotRegisterPage() {
   // 작물 목록은 DB(작물 마스터)에서 온다. 예전에는 CropCards 에 세 개가 박혀
   // 있었는데, 그 id 가 마스터와 달라 저장할 작물을 못 찾았다.
   const crops = await listCropOptions();
+  // 파종일 달력의 상한선. 한국 기준 오늘을 서버가 한 번 정해 내려보낸다.
+  const today = kstDateString();
 
   return (
     <main className="mx-auto max-w-5xl px-6 py-8 sm:py-10">
@@ -211,7 +214,7 @@ export default async function PlotRegisterPage() {
                 {step.no === 3 && (
                   <fieldset>
                     <legend className="sr-only">재배할 작물</legend>
-                    <CropCards crops={crops} />
+                    <CropCards crops={crops} maxSowingDate={today} />
                   </fieldset>
                 )}
               </StepPanel>
