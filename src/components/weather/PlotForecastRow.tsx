@@ -55,6 +55,8 @@ interface PlotForecastRowProps {
    * 그리면 스크롤을 줄이려고 만든 구조가 도로 무너진다.
    */
   chart?: React.ReactNode;
+  /** NDVI·NDMI 관측(F5). **펼쳤을 때만** 그린다 — 이유는 `chart` 와 같다. */
+  satelliteChart?: React.ReactNode;
   /** 값이 있으면 실시간이 아니라 보관해 둔 예보다. 줄을 펴면 그 사실이 보인다. */
   cachedAt?: Date;
 }
@@ -67,6 +69,7 @@ export function PlotForecastRow({
   todayIso,
   defaultOpen = false,
   chart,
+  satelliteChart,
   cachedAt,
 }: PlotForecastRowProps) {
   const alerts = buildForecastAlerts(forecast);
@@ -165,6 +168,8 @@ export function PlotForecastRow({
         {/* 관측 차트. 주간 밴드가 "이번 주 기온 폭"이라면 이건 "지난 며칠 실측이
             어떻게 흘러 여기까지 왔나"다 — 실측과 예보를 한 선에서 잇는다. */}
         {chart}
+
+        {satelliteChart}
 
         <details className="border-border/60 border-t pt-3">
           <summary className="cursor-pointer text-fg-muted text-xs hover:text-fg">

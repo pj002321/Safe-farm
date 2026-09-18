@@ -62,6 +62,10 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 OPENAI_MODEL = os.getenv("OPENAI_MODEL")
 KMA_API_KEY = os.getenv("KMA_API_KEY")
 
+# Copernicus Data Space(Sentinel Hub) OAuth 클라이언트 자격증명. 무료 API.
+SH_CLIENT_ID = os.getenv("SH_CLIENT_ID")
+SH_CLIENT_SECRET = os.getenv("SH_CLIENT_SECRET")
+
 # 사용자당 하루 질문 수 상한. 지금은 등급 없이 고정값 — 결제 체계가 들어오면
 # 등급별 값으로 바뀔 자리다.
 #

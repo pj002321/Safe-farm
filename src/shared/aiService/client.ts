@@ -207,6 +207,11 @@ export interface PlotForecast {
   } | null;
 }
 
+/** 좌표 하나의 NDVI·NDMI 일별 평균. Sentinel-2 재방문 주기(5일)+구름 때문에 구간의 모든 날이 오지 않는다. */
+export interface SatelliteObservations {
+  points: Array<{ date: string; ndvi: number; ndmi: number }>;
+}
+
 export type AiResult<T> =
   | { ok: true; data: T }
   | { ok: false; reason: AiFailure; detail?: string };
@@ -276,6 +281,8 @@ const FORECAST_TIMEOUT_MS = 15_000;
  * 개발 서버(`next dev`)는 항상 매 요청 새로 받아온다 — 이 캐시는 배포에서만 보인다.
  */
 const WEATHER_REVALIDATE_SEC = 60 * 60;
+// 위성은 재방문 주기가 5일이라 자주 다시 부를 이유가 없다 — 무료 API 호출 한도도 아낀다.
+const SATELLITE_REVALIDATE_SEC = 60 * 60 * 6;
 
 function config(): { baseUrl: string; token: string } | null {
   const baseUrl = process.env.AI_SERVICE_URL?.trim();
@@ -514,6 +521,17 @@ export const aiService = {
       ? { ok: true, data: normalizePlotForecast(result.data) }
       : result;
   },
+  /** 좌표 하나의 `dateFrom`~`dateTo`(YYYY-MM-DD) NDVI·NDMI 일별 평균(F5). */
+  satelliteObservations: (
+    lat: number,
+    lon: number,
+    dateFrom: string,
+    dateTo: string,
+  ) =>
+    call<SatelliteObservations>(
+      `/v1/satellite/observations?lat=${lat}&lon=${lon}&date_from=${dateFrom}&date_to=${dateTo}`,
+      { revalidateSec: SATELLITE_REVALIDATE_SEC, timeoutMs: 15_000 },
+    ),
   /**
    * 밭 하나만 즉시 판정해 오늘 할 일 카드를 만든다. 자정 배치를 기다리지 않고
    * 밭 등록·재배 추가 직후 호출한다(registerPlot/addCultivations).

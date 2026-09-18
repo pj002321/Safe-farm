@@ -20,21 +20,34 @@ from datetime import date
 
 from app.core.config import DATA_DIR
 from app.core.db import new_session
+from app.domain.diversity import diversify
 from app.domain.guardrail import is_blocked_topic
 from app.knowledge.reranker import rerank
 from app.knowledge.retriever import retrieve_with_score
+from app.knowledge.vector_store import neighbors
 
 GOLDEN = DATA_DIR / "golden" / "ask.csv"
 
-# api/ask.py 와 같은 경로를 잰다 — retrieve 로 후보를 받아 rerank 로 줄인다.
+# api/ask.py 와 같은 경로를 잰다 — 후보를 받아 소스 상한(밀어내기)으로 TOP_K 개를 고른다.
 # 둘이 다르면 여기서 좋아져도 실제 답변은 그대로다.
 #
 # 값의 근거(2026-09-17 실측, 16문항):
 #   retrieve  5 · 리랭커 없음 → hit 15 · hint 13
-#   retrieve 10 · rerank      → hit 15 · hint 14   ← 채택
-#   retrieve 20 · rerank      → hit 15 · hint 14   20 으로 늘려도 같아서 10 으로 둔다
-#   retrieve 20 · 리랭커 없음  → hit 15 · hint 13   리랭커가 hint 를 하나 올린다
-CANDIDATES = 10
+#   retrieve 10 · rerank      → hit 15 · hint 14   ← 당시 채택
+#   retrieve 20 · rerank      → hit 15 · hint 14
+#
+# 후보 확장 + 소스 상한(2026-09-17 실측, 33문항 — 교안_후보확장.md):
+#   후보 10 · rerank                          → hit 24 · hint 27 · 근거 165   ← 이전 값
+#   후보 12 · 소스≤2 버리기 · 8 · rerank      → hit 27 · hint 27 · 15문항이 근거 5개 미만 ✗ 되돌림
+#   후보 50 · rerank (상한 없음)               → hit 26 · hint 29 · 근거 165
+#   후보 50 · 소스≤2 밀어내기 · 8 · rerank    → hit 27 · hint 29   리랭커가 8에서 고르면 하나 깎음
+#   후보 50 · 소스≤2 밀어내기 · 5              → hit 29 · hint 29 · 근거 165   ← 채택. 잃은 문항 0
+#   위 + 이웃 ±1 을 본문에                      → hit 29 · hint 31   hit 은 같은 소스라 불변
+#
+# ⚠ 판정은 hit@5 하나로 하지 않는다. hint@5 와 "top-5 근거 개수 합"(33×5=165)을 같이 본다 —
+#   버리기 판은 hit 이 올랐는데 근거가 줄어 답변이 짧아졌다. 이웃 확장은 hint 만 움직인다
+CANDIDATES = 50
+PER_SOURCE = 2
 TOP_K = 5
 
 NOT_SEARCH = ("(tool)", "(blocked)")
@@ -60,18 +73,21 @@ def run_one(db, row: dict) -> dict:
     # (벼 5월 vs 10월) 필터가 없으면 둘 중 하나는 반드시 틀린다
     when = (row.get("ask_date") or "").strip()
     on_date = date.fromisoformat(when) if when else None
-    matches = rerank(
-        row["question"],
-        retrieve_with_score(db, row["question"], CANDIDATES, on_date=on_date),
-    )[:TOP_K]
+    candidates = retrieve_with_score(db, row["question"], CANDIDATES, on_date=on_date)
+    picked = diversify(
+        candidates, key=lambda m: m[0].document.source, per_key=PER_SOURCE, limit=TOP_K
+    )
+    matches = rerank(row["question"], picked)
     sources = [chunk.document.source for chunk, _ in matches]
-    bodies = " ".join(chunk.body for chunk, _ in matches)
+    # hint 는 LLM 이 실제로 받는 본문에서 찾는다 — 이웃 조각까지. api/ask.py 와 같은 범위
+    bodies = " ".join(chunk.body for chunk, _ in matches + neighbors(db, matches))
     hint = (row.get("expect_hint") or "").strip()
     return {
         "hit": row["expect_source"] in sources,
         "hint": bool(hint) and hint in bodies,
         "dist": matches[0][1] if matches else None,
         "sources": sources,
+        "evidence": len(matches),
     }
 
 
@@ -118,6 +134,10 @@ def main() -> None:
     print("-" * 132)
     print(f"  hit@{TOP_K}   {hit}/{n} ({hit * 100 // n}%)")
     print(f"  hint@{TOP_K}  {hint}/{n} ({hint * 100 // n}%)")
+    근거 = sum(r["evidence"] for _, r in 검색)
+    # 근거 합이 n×TOP_K 보다 작으면 어딘가에서 후보를 버리고 있다 — hit 이 올라도 채택하지 않는다
+    경고 = "" if 근거 == n * TOP_K else "   ⚠ 5개 미만 문항 있음"
+    print(f"  근거 합   {근거}/{n * TOP_K}{경고}")
 
     # 임계값 판단 재료. hit 한 문항의 top1 거리와 miss 한 문항의 top1 거리가 갈리는지 본다 —
     # 갈리면 그 사이가 NO_MATCH_DISTANCE 다. 겹치면 임계로는 못 가르고 1.0 을 둔다
