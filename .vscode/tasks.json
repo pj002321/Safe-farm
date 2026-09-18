@@ -145,7 +145,7 @@
       "problemMatcher": []
     },
     {
-      "label": "ai-service: 질문 답변 스트리밍",
+      "label": "🖨 ai-service: 질문 답변 스트리밍",
       "detail": "터미널에 질문을 입력하면 LLM 답변만 토큰 단위로 출력한다",
       "type": "shell",
       "command": {
@@ -188,7 +188,7 @@
       // 3단계 각각 자기 이름의 터미널 탭에서 돈다 — 막히면 그 탭이 빨간 X 로
       // 남고 탭 이름이 곧 "어디서" 막혔는지다. 탭 안 내용(pip 에러, run_all.py 의
       // "# 단계이름 #" 배너, 트레이스백)이 "왜" 막혔는지를 보여준다.
-      "label": "ai-service: 전체 임베딩 파이프라인 구축",
+      "label": "🚍 ai-service: 전체 임베딩 파이프라인 구축",
       "detail": "가상환경 준비 → 의존성 설치 → 임베딩 파이프라인을 순서대로 한 번에 돈다",
       "dependsOn": [
         "ai-service: 가상환경 준비",
