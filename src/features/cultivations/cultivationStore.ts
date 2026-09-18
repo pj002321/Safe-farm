@@ -8,6 +8,7 @@ import {
   toCultivationCard,
 } from "./domain/cultivationCard";
 import type { FailureReasonCode } from "./domain/failureReason";
+import { seedlingStartStage } from "./domain/seedlingStart";
 
 /**
  * ---------------------------------------------
@@ -23,6 +24,9 @@ import type { FailureReasonCode } from "./domain/failureReason";
  * - 아직 심지 않은 밭은 `PLANNED` 로 넣는다. 기본값 `GROWING` 으로 두면
  *   `ck_cultivations_gdd_origin` 이 파종일이나 시작 단계를 요구해 insert 가
  *   막힌다 — 심기 전에는 적산을 시작할 지점이 없는 게 정상이다.
+ * - 모종(`SEEDLING`)은 `start_stage_order` 를 같이 넣는다. 육묘장에서 이미 먹고 온
+ *   GDD 만큼을 건너뛰지 않으면 심은 날 화면이 "발아기" 라고 한다(V1-20).
+ *   어느 단계인지 고르는 규칙은 `domain/seedlingStart.ts` 다.
  * ---------------------------------------------
  */
 
@@ -49,6 +53,20 @@ export async function insertCultivations(
 
   const supabase = await getSupabaseServer();
 
+  // 모종이면 어느 단계부터 쌓나. variant 마다 crop_stages 를 한 번씩만 본다 —
+  // 한 밭에 고르는 작물 수만큼이라 왕복이 적고, 같은 품종을 둘 고르면 한 번으로 끝난다
+  const startByVariant = new Map<number, number | null>();
+  for (const input of inputs) {
+    if (input.sowingType !== "SEEDLING" || startByVariant.has(input.variantId))
+      continue;
+    const { data: stages, error: stageError } = await supabase
+      .from("crop_stages")
+      .select("stage_order, stage_name, gdd_from, gdd_to") // 비율 판정에 끝값이 필요하다
+      .eq("variant_id", input.variantId);
+    if (stageError) throw new Error(stageError.message);
+    startByVariant.set(input.variantId, seedlingStartStage(stages ?? []));
+  }
+
   const { error } = await supabase.from("cultivations").insert(
     inputs.map((input) => ({
       plot_id: plotId,
@@ -56,6 +74,11 @@ export async function insertCultivations(
       status: input.status,
       sowing_date: input.sowingDate,
       sowing_type: input.sowingType,
+      // 씨앗은 null(0 부터). 모종은 이식 단계. 표가 의심스러우면 null — domain/seedlingStart.ts
+      start_stage_order:
+        input.sowingType === "SEEDLING"
+          ? (startByVariant.get(input.variantId) ?? null)
+          : null,
     })),
   );
 

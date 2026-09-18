@@ -3,11 +3,9 @@
 여기서 한 번에 import 해야 FarmBase.metadata 가 테이블 전부를 안다.
 
 relationship 은 두지 않는다. 조회는 명시적 join 으로 쓴다.
-
-아직 없는 테이블 — 스펙에서 잘려 컬럼을 확정할 수 없다. 추측해서 만들지 않는다.
-  advices       정의 자체가 없음 (인덱스 목록과 jsonb 언급만 존재)
 """
 
+from app.models.farm.advice import Advice, FarmAdvice
 from app.models.farm.ask_history import AskHistory
 from app.models.farm.auth_user import auth_users
 from app.models.farm.base import FarmBase
@@ -31,6 +29,8 @@ from app.models.farm.weather_obs_daily import WeatherObsDaily
 from app.models.farm.weekly_note import WeeklyNote
 
 __all__ = [
+    "Advice",
+    "FarmAdvice",
     "AskHistory",
     "Crop",
     "DisasterBulletin",

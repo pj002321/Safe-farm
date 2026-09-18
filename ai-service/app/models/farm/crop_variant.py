@@ -58,6 +58,25 @@ class CropVariant(FarmBase):
     sow_from = Column(Text)
     sow_to = Column(Text)
 
+    # 씨앗으로 심는 창 · 모종으로 옮겨 심는 창. 위 `sow_*` 를 **씨/옮으로 가른 것**이다.
+    #
+    # ★ 왜 갈랐나 — 등록 폼에 씨앗/모종 라디오가 있는데 안내 문구는 하나뿐이었다.
+    #   벼가 그 차이를 드러낸다: 못자리 4.중~5.중, 모내기 5.중~6.중으로 **한 달 떨어져 있다.**
+    #   씨앗을 고른 사람에게 모내기 시기를 말하고 있었다(2026-09-18).
+    #
+    # ⚠ **한쪽이 비는 것이 정상이다.** 직파 작물(감자·당근·시금치·마늘)은 `plant_*` 가 비고,
+    #   씨로 안 심는 작물(딸기·생강·토란)은 `seed_*` 가 빈다. 억지로 채우지 않는다.
+    #   2026-09-18 기준 122품종 중 둘 다 34 · 씨만 72 · 옮만 10 · 둘 다 없음 6.
+    #
+    # ⚠ `sow_*` 셋을 **지우지 않았다.** 지금 화면·시더가 그것을 쓴다. 화면이 이 넷으로
+    #   옮겨 탄 뒤에 정리한다 — 둘을 한 번에 하면 되돌릴 자리가 없어진다.
+    #
+    # 정본은 safefarm-crop-data 의 작물_확정표.md §A + 농작업일정 첨부 작형표.
+    seed_from = Column(Text)
+    seed_to = Column(Text)
+    plant_from = Column(Text)
+    plant_to = Column(Text)
+
     __table_args__ = (
         # 한 작물에 같은 숙기가 둘일 수 없다. CSV 적재 때 중복 삽입도 여기서 걸린다
         UniqueConstraint("crop_id", "maturity_type", name="uq_crop_variants_crop_maturity"),

@@ -212,6 +212,58 @@ export interface SatelliteObservations {
   points: Array<{ date: string; ndvi: number; ndmi: number }>;
 }
 
+/**
+ * 밭 하나의 AI 생육 리포트. `available` 이 false 면 `reason` 만 있고 나머지는 없다 —
+ * 남의 밭·존재하지 않는 밭(PLOT_NOT_FOUND), 기르는 작물이 없거나 관측소가 없음
+ * (NO_GROWTH_DATA), LLM 응답이 계약과 다름(GENERATION_FAILED) 세 경우를 화면이
+ * 구분해 문구를 고를 수 있게 한다.
+ */
+export interface PlotReport {
+  available: boolean;
+  reason?: "PLOT_NOT_FOUND" | "NO_GROWTH_DATA" | "GENERATION_FAILED";
+  cropNameKo?: string;
+  stageName?: string | null;
+  daysSincePlanting?: number;
+  accumulatedGdd?: number;
+  /** 역산이 안 끝난 숙기는 null — 진행 게이지는 이때 숨긴다. */
+  gddTarget?: number | null;
+  stageGddTo?: number | null;
+  waterNeedMm?: number | null;
+  rainfall7dMm?: number | null;
+  tomorrowTempMin?: number | null;
+  tomorrowTempMax?: number | null;
+  tomorrowRainChance?: number | null;
+  warnings?: string[];
+  /** 최근 14일 하루치 GDD. 기르는 중인 작물이 없으면 null. */
+  gddTrend?: Array<{ date: string; gdd: number }> | null;
+  /** 최근 실측 속도로 목표 GDD 까지 남은 날짜. 속도가 0 이하이거나 목표를 모르면 null. */
+  daysToTarget?: number | null;
+  /** 내일부터 최대 6일치 예보. */
+  forecastWeek?: Array<{
+    date: string;
+    temp_max: number | null;
+    temp_min: number | null;
+    rainfall_mm: number | null;
+    rain_chance: number | null;
+    wind_max: number | null;
+    humidity: number | null;
+  }> | null;
+  summary?: string;
+  todos?: string[];
+  cautions?: string[];
+}
+
+/**
+ * 사용자의 밭 전체를 아우르는 AI 종합 요약. `available` 이 false 면 밭이
+ * 하나도 없거나(NO_PLOTS) 어느 밭에서도 생육 데이터를 못 만든 것이다(NO_GROWTH_DATA).
+ */
+export interface FarmSummary {
+  available: boolean;
+  reason?: "NO_PLOTS" | "NO_GROWTH_DATA" | "GENERATION_FAILED";
+  summary?: string;
+  plotCount?: number;
+}
+
 export type AiResult<T> =
   | { ok: true; data: T }
   | { ok: false; reason: AiFailure; detail?: string };
@@ -247,6 +299,25 @@ const DEFAULT_TIMEOUT_MS = 5_000;
  * 결과를 못 받는데 서버는 계속 일하는 상태가 되어, 성공·실패를 알 수 없다.
  */
 const BATCH_TIMEOUT_MS = 50_000;
+
+/**
+ * 밭 예보 호출 타임아웃(ms).
+ *
+ * ⚠️ **기본 5초를 쓰면 안 된다.** 이 엔드포인트는 안에서 Open-Meteo 를 부르고,
+ *    그쪽 타임아웃이 **10초**다(ai-service `pipeline/open_meteo_client.py`).
+ *    5초로 두면 안쪽이 바깥쪽의 두 배가 되어, 업스트림이 5~10초로 응답할 때
+ *    ai-service 는 정상 처리 중인데 Next 만 포기한다. 실패하면 캐시에 아무것도
+ *    안 남으므로 **그 좌표는 다음 요청도, 그다음도 똑같이 실패한다** — 특정 밭만
+ *    영구히 "예보를 못 불러왔다"가 되는 고리가 여기서 생겼다.
+ *
+ *    그래서 **안쪽 한계보다 넉넉히 길어야 한다.** 10초(업스트림) + DB 조회 몇 번
+ *    + 첫 호출의 경계 GeoJSON 파싱(3.2MB)을 덮는 값이다.
+ *    ai-service 쪽 10초를 줄이면 이 값도 같이 내릴 것.
+ *
+ * 사용자가 그동안 빈 화면을 보지는 않는다 — 대시보드가 `<Suspense>` 로 감싸
+ * 위성 스캔 애니메이션을 띄운다.
+ */
+const FORECAST_TIMEOUT_MS = 15_000;
 
 /**
  * 밭 예보 갱신 주기(초, V1-61).
@@ -404,6 +475,9 @@ async function stream(
 /** 질문 한 건의 한계. 검색 + LLM 생성 + 토큰 스트리밍을 모두 덮어야 한다. */
 const ASK_TIMEOUT_MS = 60_000;
 
+/** 리포트 한 건의 한계. 안에서 GDD 계산 + Open-Meteo 조회 + 비스트리밍 LLM 호출이 순차로 돈다. */
+const REPORT_TIMEOUT_MS = 30_000;
+
 export const aiService = {
   /** 서비스가 살아 있는지, 무엇을 할 수 있는지. */
   status: () => call<AiServiceStatus>("/v1/status"),
@@ -490,7 +564,10 @@ export const aiService = {
   ): Promise<AiResult<PlotForecast>> => {
     const result = await call<PlotForecast>(
       `/v1/weather/plot?lat=${lat}&lon=${lon}${plotId ? `&plot_id=${plotId}` : ""}`,
-      { revalidateSec: WEATHER_REVALIDATE_SEC },
+      {
+        revalidateSec: WEATHER_REVALIDATE_SEC,
+        timeoutMs: FORECAST_TIMEOUT_MS,
+      },
     );
     // ⚠️ 여기서 모양을 맞추는 이유는 `normalizePlotForecast` 에 적어 두었다.
     //    요약하면: 두 서비스가 따로 배포되므로 **옛 응답이 올 수 있고**, 그때
@@ -542,4 +619,19 @@ export const aiService = {
       method: "POST",
       timeoutMs: BATCH_TIMEOUT_MS,
     }),
+  /**
+   * 밭 하나의 AI 생육 리포트. 숫자(GDD·강수·예보)는 부를 때마다 새로 계산하지만
+   * LLM 요약은 하루 한 번만 만들고 캐시한다(ai-service `advices` 테이블).
+   */
+  plotReport: (userId: string, plotId: string) =>
+    call<PlotReport>(
+      `/v1/reports/${encodeURIComponent(plotId)}?user_id=${encodeURIComponent(userId)}`,
+      { timeoutMs: REPORT_TIMEOUT_MS },
+    ),
+  /** 사용자의 밭 전체를 아우르는 하루 한 번짜리 AI 종합 요약. */
+  farmSummary: (userId: string) =>
+    call<FarmSummary>(
+      `/v1/reports/farm-summary?user_id=${encodeURIComponent(userId)}`,
+      { timeoutMs: REPORT_TIMEOUT_MS },
+    ),
 };

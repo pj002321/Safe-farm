@@ -16,6 +16,11 @@ import {
   type PlotLocationIssue,
   validatePlotLocation,
 } from "@/features/monitoring/domain/plotLocation";
+import {
+  parseDraft,
+  REGISTER_DRAFT_KEY,
+  restoredLocation,
+} from "@/features/plots/domain/registerDraft";
 import { reverseGeocode } from "@/shared/kakao/geocode";
 
 import {
@@ -97,8 +102,27 @@ export function PlotLocationStep() {
     const sdk = window.kakao;
     if (!container || !sdk) return;
 
+    // 임시 저장본이 있으면 그 자리에서 시작한다(V1-23).
+    //
+    // ⚠️ **hidden input 을 되돌리는 것만으로는 안 된다.** 주소·행정구역 칸은
+    //   `selected` 가 있어야 `LocationSummary` 가 그려내는 것이라, 고르기 전에는
+    //   DOM 에 아예 없다. 그래서 폼 복원(useRegisterDraft)과 별개로 여기서
+    //   같은 저장본을 읽어 지도 중심을 옮긴다 — 그 뒤는 idle → readCenter 가
+    //   평소대로 돌아 `setSelected` 까지 스스로 채운다.
+    //
+    // ⚠️ 격자는 저장본에서 읽지 않는다. 좌표에서 toKmaGrid 로 다시 계산된다 —
+    //   계산식이 바뀌었을 때 옛 격자가 되살아나지 않게.
+    let start = DEFAULT_CENTER;
+    try {
+      const draft = parseDraft(localStorage.getItem(REGISTER_DRAFT_KEY));
+      const saved = draft && restoredLocation(draft.values);
+      if (saved) start = { lat: saved.latitude, lon: saved.longitude };
+    } catch {
+      // 사이트 데이터를 막은 브라우저. 기본 중심으로 시작한다
+    }
+
     const map = new sdk.maps.Map(container, {
-      center: new sdk.maps.LatLng(DEFAULT_CENTER.lat, DEFAULT_CENTER.lon),
+      center: new sdk.maps.LatLng(start.lat, start.lon),
       level: DEFAULT_LEVEL,
     });
     mapRef.current = map;

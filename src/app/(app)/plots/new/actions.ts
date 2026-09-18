@@ -69,8 +69,15 @@ export async function registerPlot(formData: FormData): Promise<void> {
   // 폼은 작물까지만 고른다. 재배 행은 품종을 가리키므로 여기서 한 번 바꿔 준다.
   // 작물마다 파종일·방식이 다를 수 있어(배추 8월, 무 9월) 폼도 작물별로 받는다.
   const selections = parseCultivationSelections(formData);
+  // 숙기를 고른 작물만 담는다. 안 고른 작물은 resolveVariantIds 가 중생 우선으로 정한다
+  const maturityByCropId = new Map(
+    selections.flatMap((s) =>
+      s.maturity ? [[s.cropId, s.maturity] as const] : [],
+    ),
+  );
   const variantIdByCropId = await resolveVariantIds(
     selections.map((selection) => selection.cropId),
+    maturityByCropId,
   );
 
   await insertCultivations(

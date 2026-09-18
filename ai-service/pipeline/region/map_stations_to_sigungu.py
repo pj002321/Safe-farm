@@ -15,11 +15,8 @@ import csv
 import json
 import math
 
-from sqlalchemy import distinct, select
-
 from app.core.config import DATA_DIR
-from app.core.db import new_session
-from app.models.normal import Normal
+from pipeline.region.asos import normal_fallback, usable
 
 SIGUNGU_PATH = DATA_DIR / "ref" / "sigungu.geojson"
 STATIONS_PATH = DATA_DIR / "stations.csv"
@@ -74,14 +71,14 @@ def main() -> None:
     with STATIONS_PATH.open(encoding="utf-8-sig") as f:
         stations = list(csv.DictReader(f))
 
-    # 평년값(arcltr_sfc_norm)을 지원하는 관측소만 걸러 쓴다 — 안 걸러 뽑으면 근처 AWS가
-    # 뽑혀 시군구 절반 가까이가 "데이터 없음" 회색으로 남는다(V1-37 최초 배포 때 확인).
-    db = new_session()
-    try:
-        with_normal = {row[0] for row in db.execute(select(distinct(Normal.station))).all()}
-    finally:
-        db.close()
-    stations_with_normal = [s for s in stations if s["stn"] in with_normal] or stations
+    # 평년값을 실제로 받아 둔 관측소만 후보로 쓴다. AWS 를 넣으면 평년값이 없어 지도가
+    # 회색이 되고, normals 테이블로 이 판단을 하면 순환이 되며, ASOS 번호만 보면
+    # 공항·레이더·신설 관측소가 섞여 250개 중 76개가 회색이 된다 — 셋 다 겪은 뒤의 자리다.
+    # 이유 전체는 pipeline/region/asos.py 의 docstring.
+    candidates = usable(stations)
+    # 평년값이 없는 관측소는 실측만 자기 것을 쓰고 평년값은 짝(normal_fallback.csv)의 것을 쓴다.
+    # station 은 비·바람·오늘 기온이 보는 곳, normal_station 은 평년 GDD 가 보는 곳 — 대개 같다
+    빌릴곳 = normal_fallback()
 
     rows = []
     unmatched = []
@@ -90,7 +87,7 @@ def main() -> None:
         clon, clat = centroid(feature["geometry"])
         inside = [
             s
-            for s in stations_with_normal
+            for s in candidates
             if point_in_feature(float(s["lon"]), float(s["lat"]), feature["geometry"])
         ]
 
@@ -101,7 +98,7 @@ def main() -> None:
             method = "contains"
         else:
             station = min(
-                stations_with_normal,
+                candidates,
                 key=lambda s: haversine_km(clon, clat, float(s["lon"]), float(s["lat"])),
             )
             method = "nearest"
@@ -114,6 +111,7 @@ def main() -> None:
                 "station": station["stn"],
                 "station_name": station["name"],
                 "method": method,
+                "normal_station": 빌릴곳.get(station["stn"], station["stn"]),
             }
         )
 

@@ -1,7 +1,7 @@
 {
   // ai-service(Python) 작업. 실행: Ctrl+Shift+P → "Tasks: Run Task"
   //
-  // 지우면 안 되는 것 세 가지
+  // 지우면 안 되는 것 네 가지
   //
   // 1. "type": "shell" — "process" 로 바꾸지 말 것.
   //    process 는 command 를 터미널의 shell executable 로 넘기는데, Windows 에서
@@ -19,18 +19,46 @@
   //    strong = 셸별 강한 따옴표(작은따옴표). VS Code 가 PowerShell 이면 & 를 알아서 붙이고,
   //    bash/zsh 면 붙이지 않는다 — 셸 판별은 VS Code 가 한다.
   //
-  // 3. `${command:python.interpreterPath}` — VS Code 에서 **선택한 인터프리터**를 쓴다.
-  //    PATH 의 `python` 에 의존하면 이 PC 처럼 3.9 가 잡히는 환경에서 시스템 Python 에
-  //    설치되는 사고가 난다. 단, 인터프리터를 먼저 골라야 한다:
-  //    `Ctrl+Shift+P` → `Python: Select Interpreter` → 3.10 이상.
+  // 3. "venv 준비" 를 제외한 모든 작업은 `${command:python.interpreterPath}` 를 쓰지 않는다.
+  //    그건 VS Code 에서 **선택한 인터프리터**를 그대로 쓰는데, 그 인터프리터가 다른
+  //    프로젝트와 같이 쓰는 전역 site-packages 라면 거기 깔린 무관한 무거운 패키지
+  //    (예: sentence-transformers → pyarrow) 가 이 프로젝트 import 경로에 끼어들어
+  //    세그폴트(Windows access violation)로 죽는다 — 트레이스백도 안 남기고 조용히 죽어서
+  //    원인 추적이 어렵다(2026-09-18 실측, `python -m pipeline.doc.run_all` 무출력 종료).
+  //    그래서 `ai-service/.venv` 를 이 프로젝트 전용으로 만들어 쓴다 — 이러면 어떤 PC에서
+  //    어떤 전역 인터프리터를 골라뒀든 동일하게 동작한다("venv 준비" 만 그 인터프리터로
+  //    venv 를 만드는 부트스트랩 용도로 한 번 쓴다).
+  //
+  // 4. `${command:python.interpreterPath}` (venv 준비 전용) — PATH 의 `python` 에 의존하면
+  //    이 PC 처럼 3.9 가 잡히는 환경에서 시스템 Python 에 설치되는 사고가 난다. 단,
+  //    인터프리터를 먼저 골라야 한다: `Ctrl+Shift+P` → `Python: Select Interpreter` → 3.10 이상.
   //    고르지 않으면 변수가 빈 값이 되어 작업이 **아무 메시지 없이** 취소된다.
   "version": "2.0.0",
   "tasks": [
     {
-      "label": "ai-service: 의존성 설치",
-      "detail": "pyproject.toml 의 dependencies + dev 를 설치한다",
+      "label": "ai-service: 가상환경 준비",
+      "detail": "ai-service 전용 .venv 를 만든다. 이미 있으면 그대로 둔다(멱등)",
       "type": "shell",
       "command": { "value": "${command:python.interpreterPath}", "quoting": "strong" },
+      "args": ["-m", "venv", ".venv"],
+      "options": { "cwd": "${workspaceFolder}/ai-service" },
+      "presentation": { "clear": true },
+      "problemMatcher": []
+    },
+    {
+      "label": "ai-service: 의존성 설치",
+      "detail": "pyproject.toml 의 dependencies + dev 를 .venv 에 설치한다",
+      "type": "shell",
+      "command": {
+        "value": "${workspaceFolder}/ai-service/.venv/bin/python",
+        "quoting": "strong"
+      },
+      "windows": {
+        "command": {
+          "value": "${workspaceFolder}/ai-service/.venv/Scripts/python.exe",
+          "quoting": "strong"
+        }
+      },
       "args": [
         "-m",
         "pip",
@@ -39,6 +67,8 @@
         { "value": ".[dev]", "quoting": "strong" }
       ],
       "options": { "cwd": "${workspaceFolder}/ai-service" },
+      "dependsOn": ["ai-service: 가상환경 준비"],
+      "dependsOrder": "sequence",
       // 기본 빌드 작업 — Ctrl+Shift+B 로 바로 실행된다
       "group": { "kind": "build", "isDefault": true },
       "problemMatcher": []
@@ -46,7 +76,16 @@
     {
       "label": "ai-service: 테스트",
       "type": "shell",
-      "command": { "value": "${command:python.interpreterPath}", "quoting": "strong" },
+      "command": {
+        "value": "${workspaceFolder}/ai-service/.venv/bin/python",
+        "quoting": "strong"
+      },
+      "windows": {
+        "command": {
+          "value": "${workspaceFolder}/ai-service/.venv/Scripts/python.exe",
+          "quoting": "strong"
+        }
+      },
       "args": ["-m", "pytest"],
       "options": { "cwd": "${workspaceFolder}/ai-service" },
       "group": { "kind": "test", "isDefault": true },
@@ -57,7 +96,16 @@
       "label": "ai-service: 린트",
       "detail": "ruff check + format 검사 (고치지는 않는다)",
       "type": "shell",
-      "command": { "value": "${command:python.interpreterPath}", "quoting": "strong" },
+      "command": {
+        "value": "${workspaceFolder}/ai-service/.venv/bin/python",
+        "quoting": "strong"
+      },
+      "windows": {
+        "command": {
+          "value": "${workspaceFolder}/ai-service/.venv/Scripts/python.exe",
+          "quoting": "strong"
+        }
+      },
       "args": ["-m", "ruff", "check", "."],
       "options": { "cwd": "${workspaceFolder}/ai-service" },
       "presentation": { "clear": true },
@@ -67,7 +115,16 @@
       "label": "ai-service: 서버 실행",
       "detail": "uvicorn --reload 로 개발 서버 기동 (localhost:8000)",
       "type": "shell",
-      "command": { "value": "${command:python.interpreterPath}", "quoting": "strong" },
+      "command": {
+        "value": "${workspaceFolder}/ai-service/.venv/bin/python",
+        "quoting": "strong"
+      },
+      "windows": {
+        "command": {
+          "value": "${workspaceFolder}/ai-service/.venv/Scripts/python.exe",
+          "quoting": "strong"
+        }
+      },
       "args": ["-m", "uvicorn", "app.main:app", "--reload"],
       "options": { "cwd": "${workspaceFolder}/ai-service" },
       "isBackground": true,
@@ -77,7 +134,10 @@
     {
       "label": "🛰️ ai-service: preview kma data",
       "type": "shell",
-      "command": "${command:python.interpreterPath}",
+      "command": "${workspaceFolder}/ai-service/.venv/bin/python",
+      "windows": {
+        "command": "${workspaceFolder}/ai-service/.venv/Scripts/python.exe"
+      },
       "args": ["-m", "pipeline.preview"],
       "options": {
         "cwd": "${workspaceFolder}/ai-service"
@@ -85,10 +145,19 @@
       "problemMatcher": []
     },
     {
-      "label": "ai-service: 질문 답변 스트리밍",
+      "label": "🖨 ai-service: 질문 답변 스트리밍",
       "detail": "터미널에 질문을 입력하면 LLM 답변만 토큰 단위로 출력한다",
       "type": "shell",
-      "command": { "value": "${command:python.interpreterPath}", "quoting": "strong" },
+      "command": {
+        "value": "${workspaceFolder}/ai-service/.venv/bin/python",
+        "quoting": "strong"
+      },
+      "windows": {
+        "command": {
+          "value": "${workspaceFolder}/ai-service/.venv/Scripts/python.exe",
+          "quoting": "strong"
+        }
+      },
       "args": ["-m", "pipeline.ask_preview"],
       "options": { "cwd": "${workspaceFolder}/ai-service" },
       "presentation": { "clear": true },
@@ -98,17 +167,51 @@
       "label": "ai-service: 임베딩 파이프라인",
       "detail": "init → load → chunk → embed → verify. 각 단계가 멱등이라 통째로 다시 돌려도 바뀐 것만 다시 만든다",
       "type": "shell",
-      "command": { "value": "${command:python.interpreterPath}", "quoting": "strong" },
+      "command": {
+        "value": "${workspaceFolder}/ai-service/.venv/bin/python",
+        "quoting": "strong"
+      },
+      "windows": {
+        "command": {
+          "value": "${workspaceFolder}/ai-service/.venv/Scripts/python.exe",
+          "quoting": "strong"
+        }
+      },
       "args": ["-m", "pipeline.doc.run_all"],
       "options": { "cwd": "${workspaceFolder}/ai-service" },
       "presentation": { "clear": true },
       "problemMatcher": []
     },
     {
+      // 새로 클론했을 때만 쓴다. 평소 재실행은 위 "임베딩 파이프라인"만 써서
+      // 매번 pip install 로 기다리지 않는다.
+      // 3단계 각각 자기 이름의 터미널 탭에서 돈다 — 막히면 그 탭이 빨간 X 로
+      // 남고 탭 이름이 곧 "어디서" 막혔는지다. 탭 안 내용(pip 에러, run_all.py 의
+      // "# 단계이름 #" 배너, 트레이스백)이 "왜" 막혔는지를 보여준다.
+      "label": "🚍 ai-service: 전체 임베딩 파이프라인 구축",
+      "detail": "가상환경 준비 → 의존성 설치 → 임베딩 파이프라인을 순서대로 한 번에 돈다",
+      "dependsOn": [
+        "ai-service: 가상환경 준비",
+        "ai-service: 의존성 설치",
+        "ai-service: 임베딩 파이프라인"
+      ],
+      "dependsOrder": "sequence",
+      "problemMatcher": []
+    },
+    {
       "label": "ai-service: farm 파이프라인 (upsert)",
       "detail": "init → master → seed. 있는 행은 갱신, 없는 행만 추가한다",
       "type": "shell",
-      "command": { "value": "${command:python.interpreterPath}", "quoting": "strong" },
+      "command": {
+        "value": "${workspaceFolder}/ai-service/.venv/bin/python",
+        "quoting": "strong"
+      },
+      "windows": {
+        "command": {
+          "value": "${workspaceFolder}/ai-service/.venv/Scripts/python.exe",
+          "quoting": "strong"
+        }
+      },
       "args": ["-m", "pipeline.farm.run_all"],
       "options": { "cwd": "${workspaceFolder}/ai-service" },
       "presentation": { "clear": true },
@@ -120,7 +223,16 @@
       "label": "ai-service: farm 파이프라인 (drop 후 재적재)",
       "detail": "⚠️ farm 테이블을 지우고 다시 만든 뒤 전량 적재한다. profiles·plots·terms·user_agreements 는 대상이 아니다",
       "type": "shell",
-      "command": { "value": "${command:python.interpreterPath}", "quoting": "strong" },
+      "command": {
+        "value": "${workspaceFolder}/ai-service/.venv/bin/python",
+        "quoting": "strong"
+      },
+      "windows": {
+        "command": {
+          "value": "${workspaceFolder}/ai-service/.venv/Scripts/python.exe",
+          "quoting": "strong"
+        }
+      },
       "args": ["-m", "pipeline.farm.run_all"],
       "options": { "cwd": "${workspaceFolder}/ai-service" },
       "dependsOn": ["ai-service: farm 테이블 드랍"],
@@ -133,7 +245,16 @@
       "label": "ai-service: farm 테이블 드랍",
       "detail": "⚠️ init_farm_db --drop. 들어 있던 데이터가 같이 없어진다",
       "type": "shell",
-      "command": { "value": "${command:python.interpreterPath}", "quoting": "strong" },
+      "command": {
+        "value": "${workspaceFolder}/ai-service/.venv/bin/python",
+        "quoting": "strong"
+      },
+      "windows": {
+        "command": {
+          "value": "${workspaceFolder}/ai-service/.venv/Scripts/python.exe",
+          "quoting": "strong"
+        }
+      },
       "args": ["-m", "pipeline.farm.init_farm_db", "--drop"],
       "options": { "cwd": "${workspaceFolder}/ai-service" },
       "presentation": { "clear": true },

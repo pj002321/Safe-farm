@@ -11,10 +11,18 @@ from collections.abc import Awaitable, Callable
 from dataclasses import asdict
 
 from langchain_core.language_models import BaseChatModel
+from langgraph.config import get_stream_writer
 from langgraph.graph import END
 
+from app.core.config import OPENAI_MODEL
 from app.domain.suitability import CropProfile, WeatherWindow, rank_crops
-from app.graph.state import RecommendationState
+from app.graph.state import GraphState, RecommendationState
+from app.knowledge.embedder import get_client
+from app.knowledge.generator import stream_answer
+from app.knowledge.retriever import find_matches
+from app.knowledge.vector_store import neighbors
+from app.service.ask_context import build_plot_context, plot_crop_names
+from app.tools.tools import TOOL_SPECS
 
 WeatherFetcher = Callable[[str], Awaitable[WeatherWindow]]
 """농지 id로 기상 요약을 가져오는 함수. 구현은 호스트가 주입한다."""
@@ -28,7 +36,14 @@ EXPLAIN_SYSTEM_PROMPT = (
     "너는 농업 컨설턴트다. 주어진 적합도 점수와 위험 요인을 근거로, "
     "농민이 바로 행동할 수 있게 3문장 이내로 설명하라. 점수를 지어내지 마라."
 )
-
+PLAN_SYSTEM = (
+    "너는 텃밭 관리 앱의 질의응답 라우터다. 질문을 보고 이 밭의 현재 상태를 "
+    "조회해야 하는지 판단해 도구 호출 여부로 답하라.\n\n"
+    "조회가 필요한 질문: 지금 물을 줘야 하는지, 지금 생육단계가 뭔지, "
+    "요즘 날씨 기준으로 뭘 해야 하는지처럼 '지금 이 밭'을 전제로 하는 질문.\n"
+    "필요 없는 질문: 병해충 증상, 재배법 일반론처럼 이 밭이 아니어도 답할 수 있는 질문.\n\n"
+    "지난 대화가 있으면 같이 보고 판단하라."
+)
 
 def make_collect_weather_node(fetch_weather: WeatherFetcher) -> AsyncNode:
     """
@@ -136,8 +151,6 @@ def make_explain_node(llm: BaseChatModel) -> AsyncNode:
 
 
 # 조건부 엣지. 순수 함수라 테스트 가성비가 가장 높다.
-
-
 def route_after_weather(state: RecommendationState) -> str:
     """
     # summary
@@ -181,3 +194,140 @@ def route_after_rank(state: RecommendationState) -> str:
     if not state.get("ranked"):
         return END
     return "explain"
+
+
+def plan(state: GraphState) -> GraphState:
+    """
+    # summary
+    질문을 보고 밭 상태 조회(get_plot_context)가 필요한지 LLM function-calling으로
+    정한다. RAG 검색 여부는 여기서 정하지 않는다 — retrieve는 항상 돈다
+    (app/graph/graph.py의 조건부 엣지 참고).
+
+    # params
+    state: question, history_context, plot_id 를 읽는다<br>
+
+    # returns
+    {"route": "tool"|"rag", "tool_calls": [...]}. plot_id 가 없으면 LLM이
+    조회를 원해도 "rag"로 내린다 — 조회할 밭이 없기 때문이다
+
+    # examples
+        plan({"question": "요즘 물 줘야해?", "plot_id": uuid(...), ...})
+        -> {'route': 'tool', 'tool_calls': [...]}
+    """
+    messages = [{"role": "system", "content": PLAN_SYSTEM}]
+    if state.get("history_context"):
+        messages.append({"role": "user", "content": f"지난 대화:\n{state['history_context']}"})
+    messages.append({"role": "user", "content": state["question"]})
+
+    response = get_client().chat.completions.create(
+        model=OPENAI_MODEL,
+        messages=messages,
+        tools=TOOL_SPECS,
+        tool_choice="auto",
+    )
+    tool_calls = response.choices[0].message.tool_calls or []
+    route = "tool" if tool_calls and state.get("plot_id") else "rag"
+    return {"route": route, "tool_calls": tool_calls}
+
+
+def run_tools(state: GraphState) -> GraphState:
+    """
+    # summary
+    plan이 고른 도구를 실제로 실행한다. 지금은 도구가 get_plot_context 하나뿐이라
+    이름 분기 없이 바로 부른다 — 도구가 늘면 tool_calls의 name으로 분기한다.
+
+    # params
+    state: db, plot_id, user_id 를 읽는다<br>
+
+    # returns
+    {"tool_result": ...}. build_plot_context 결과를 그대로 옮긴다(문자열 또는 None)
+
+    # examples
+        run_tools({"db": db, "plot_id": uuid(...), "user_id": uuid(...)})
+        -> {'tool_result': '이 밭은 서울에 있고...'}
+    """
+    result = build_plot_context(state["db"], state["plot_id"], state["user_id"])
+    return {"tool_result": result}
+
+
+def route_after_plan(state: GraphState) -> str:
+    """
+    # summary
+    plan 뒤 어디로 갈지 정한다. route_after_weather와 같은 자리(순수 함수, 조건부 엣지).
+
+    # params
+    state: route 를 본다<br>
+
+    # returns
+    "run_tools" 또는 "retrieve"
+
+    # examples
+        route_after_plan({"route": "tool"})  -> 'run_tools'
+        route_after_plan({"route": "rag"})   -> 'retrieve'
+    """
+    return "run_tools" if state.get("route") == "tool" else "retrieve"
+
+
+def retrieve(state: GraphState) -> GraphState:
+    """
+    # summary
+    질문과 관련된 참고 자료를 찾는다. route 와 무관하게 항상 돈다 — "tool" 로 가도
+    RAG 근거를 스킵하지 않기로 했다(plan 노드 docstring 참고). 뽑힌 조각의 같은 문서
+    앞뒤 조각(neighbors)을 더해 generate 용 evidence 를 따로 만든다 — 출처 칩으로
+    보여줄 matches(top-k)와 LLM 에 줄 근거(evidence)의 크기가 다르기 때문이다
+    ("방울토마토 물"의 정답이 뽑힌 조각의 바로 옆 조각이었다 — 골든 hint 29→31).
+
+    plot_id 가 있으면 이 밭의 작물을 find_matches 의 fallback_crops 로 넘긴다 —
+    질문에 작물 이름이 없을 때("밀린 일 알려줘") 필터 없이 전체를 보면 우연히
+    벡터가 가까운 무관한 작물 문서가 섞여 들어온다(2026-09-18, '밀린 일' -> '밀'
+    문서로 답한 사례).
+
+    # params
+    state: db, question, plot_id, user_id 를 읽는다<br>
+
+    # returns
+    {"matches": [...], "evidence": [...]}. matches 는 find_matches 결과 그대로,
+    evidence 는 거기에 neighbors 를 더한 것
+
+    # examples
+        retrieve({"db": db, "question": "고추 물 언제 줘야 해?"})
+        -> {'matches': [(Chunk(id=7), 0.21), ...], 'evidence': [...]}
+    """
+    plot_id = state.get("plot_id")
+    fallback_crops = (
+        plot_crop_names(state["db"], plot_id, state["user_id"]) if plot_id else None
+    )
+    matches = find_matches(state["db"], state["question"], fallback_crops=fallback_crops)
+    return {"matches": matches, "evidence": matches + neighbors(state["db"], matches)}
+
+
+def generate(state: GraphState) -> GraphState:
+    """
+    # summary
+    근거를 붙여 답변 문장을 만든다. evidence 가 비어도 부른다 — 자료가 없으면
+    generator.py 의 SYSTEM_PROMPT 가 일반 지식으로 답하거나 모른다고 답하게 한다.
+    LangGraph 의 커스텀 스트림(get_stream_writer)으로 토큰마다 흘려보낸다 —
+    graph.stream(state, stream_mode=["updates", "custom"]) 로 부르는 쪽(app/api/ask.py)이
+    "custom" 채널에서 {"piece": ...}를 그대로 토큰으로 쓴다. graph.invoke() 로 부르면
+    (pipeline/ask_graph_preview.py) 쓸 곳이 없어 get_stream_writer() 가 아무 것도
+    안 하는 함수를 돌려준다 — 그대로 안전하다. 밭 조회 결과(tool_result)는
+    plot_context 로 그대로 넘긴다.
+
+    # params
+    state: question, evidence, tool_result, history_context 를 읽는다<br>
+
+    # returns
+    {"answer": "..."} — 흘려보낸 토큰을 모두 이어붙인 전체 답변
+
+    # examples
+        generate({"question": "고추 물 언제 줘?", "evidence": [(chunk, 0.2)], ...})
+        -> {'answer': '지금은...'}
+    """
+    write = get_stream_writer()
+    pieces: list[str] = []
+    for piece in stream_answer(
+        state["question"], state["evidence"], state.get("tool_result"), state.get("history_context")
+    ):
+        pieces.append(piece)
+        write({"piece": piece})
+    return {"answer": "".join(pieces)}

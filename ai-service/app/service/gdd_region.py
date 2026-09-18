@@ -14,7 +14,6 @@ from app.domain.gdd import classify_deviation, daily_gdd, station_plot_id
 from app.models.normal import Normal
 from app.models.weather import WeatherDaily
 
-
 def _actual_gdd_by_station(
     db: Session, stations: list[str], start: date, end: date
 ) -> dict[str, float]:
@@ -52,6 +51,8 @@ def _actual_gdd_by_station(
 #: 에만 있다. 기준 연대가 달라 누적 GDD 가 평균 2% 낮게(=편차가 2%p 높게) 잡히지만,
 #: 등급 경계가 ±10% 라 대개 같은 칸에 머문다 — 지도에서 회색으로 비는 것보다 낫다.
 #: 제대로 된 해법은 두 곳의 `kma` 평년값을 적재하는 것이다(pipeline/load_data.py).
+#:
+#: `open-meteo-era5` 는 여기 없다 — 기상청 평년값과 산출 방식이 달라 섞지 않는다.
 NORMAL_SOURCES = ("kma", "kma-1981")
 
 
@@ -111,15 +112,21 @@ def sigungu_gdd_deviation(
     today = today or date.today()
     start = date(today.year, 1, 1)
     stations = sorted({row["station"] for row in sigungu_stations})
+    # 평년값은 normal_station 에서 본다. 평년값이 없는 관측소(공항·신설)는 실측만 자기 것을 쓰고
+    # 평년값을 닮은 짝에서 빌린다(pipeline/region/normal_fallback.py). 칸이 없으면 자기 자신 —
+    # 옛 CSV 와도 그대로 맞는다
+    normal_stations = sorted(
+        {row.get("normal_station") or row["station"] for row in sigungu_stations}
+    )
 
     actual_by_stn = _actual_gdd_by_station(db, stations, start, today)
-    normal_by_stn = _normal_gdd_by_station(db, stations, start, today)
+    normal_by_stn = _normal_gdd_by_station(db, normal_stations, start, today)
 
     out: dict[str, dict] = {}
     for row in sigungu_stations:
         stn = row["station"]
         actual = actual_by_stn.get(stn)
-        normal = normal_by_stn.get(stn)
+        normal = normal_by_stn.get(row.get("normal_station") or stn)
 
         deviation_pct = None
         if actual is not None and normal is not None and normal > 0:

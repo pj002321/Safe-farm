@@ -125,8 +125,17 @@ export async function addCultivations(formData: FormData): Promise<void> {
   if (!plot) fail(plotId, "밭을 찾지 못했습니다.");
 
   const selections = parseCultivationSelections(formData);
+  // ⚠ 등록 액션(plots/new/actions.ts)과 **같아야 한다.** 여기만 빠뜨렸던 적이 있다 —
+  //   화면(CropCards)은 같아서 숙기 라디오가 뜨는데 서버가 무시해 늘 중생이 들어갔다.
+  //   오류가 안 나는 종류라 화면만 보면 모른다.
+  const maturityByCropId = new Map(
+    selections.flatMap((s) =>
+      s.maturity ? [[s.cropId, s.maturity] as const] : [],
+    ),
+  );
   const variantIdByCropId = await resolveVariantIds(
     selections.map((selection) => selection.cropId),
+    maturityByCropId,
   );
 
   try {

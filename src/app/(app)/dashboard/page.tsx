@@ -20,6 +20,7 @@ import { TaskBoard } from "@/components/dashboard/TaskBoard";
 import { MapPinIcon } from "@/components/icons";
 import { ButtonLink } from "@/components/shared/Button";
 import { SectionHeading } from "@/components/shared/SectionHeading";
+import { emptyTaskReason } from "@/features/dashboard/domain/emptyTaskReason";
 import {
   groupTasksByPlot,
   totalOpenCount,
@@ -142,6 +143,8 @@ export default async function DashboardPage({
   // 밭별로 묶는다. 카드가 없는 밭도 자리를 남기려고 밭 목록을 함께 넘긴다.
   const taskGroups = groupTasksByPlot(tasks, plots);
   const openCount = totalOpenCount(taskGroups);
+  // 카드가 없을 때 화면이 뭐라고 말할지. 추가 조회 없이 이미 읽은 밭 정보로 낸다.
+  const emptyReason = emptyTaskReason(plots);
 
   const now = new Date();
   const stripItems = plots.map((plot) =>
@@ -185,6 +188,11 @@ export default async function DashboardPage({
           {plots.length > 0 && (
             <ButtonLink href="/plots" variant="secondary">
               텃밭 관리
+            </ButtonLink>
+          )}
+          {plots.length > 0 && (
+            <ButtonLink href="/dashboard/report" variant="secondary">
+              AI 리포트
             </ButtonLink>
           )}
           <ButtonLink
@@ -233,7 +241,11 @@ export default async function DashboardPage({
               </Link>
             </div>
           </div>
-          <TaskBoard groups={taskGroups} toggleTaskAction={toggleTask} />
+          <TaskBoard
+            emptyReason={emptyReason}
+            groups={taskGroups}
+            toggleTaskAction={toggleTask}
+          />
         </section>
 
         <section aria-labelledby="forecast-heading">

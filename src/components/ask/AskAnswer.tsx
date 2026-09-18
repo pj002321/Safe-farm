@@ -1,6 +1,7 @@
 "use client";
 
 import { Badge } from "@/components/shared/Badge";
+import { hideCitations } from "@/features/ask/domain/askAnswerText";
 import type { AskMatch } from "@/features/ask/domain/askStream";
 import { AskFeedback } from "./AskFeedback";
 
@@ -51,7 +52,7 @@ export function AskAnswer({
     <div className="flex flex-col gap-3">
       <div className="rounded-xl border border-border bg-surface px-4 py-4">
         <p className="whitespace-pre-wrap text-fg text-sm leading-relaxed">
-          {answer}
+          {hideCitations(answer)}
           {streaming && (
             <span
               aria-hidden="true"

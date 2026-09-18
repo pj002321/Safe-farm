@@ -11,6 +11,11 @@ import sys
 
 from pipeline.doc import chunk, embed, init_doc_db, load_data, verify
 
+# Windows 콘솔은 기본 cp949 라서 문서 본문에 섞인 특수문자(예: verify 의 눈으로 보기
+# 샘플)를 못 만나면 UnicodeEncodeError 로 죽는다. UTF-8 로 강제한다
+if sys.stdout.encoding != "utf-8":
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
 STEPS = {
     "init": init_doc_db.main, # vector DB extension
     "load": load_data.main,

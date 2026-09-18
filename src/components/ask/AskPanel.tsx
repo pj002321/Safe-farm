@@ -31,6 +31,10 @@ import { AskSuggestionChips } from "./AskSuggestionChips";
  *   차이를 화면에 적어 둔다. 적지 않으면 사용자는 왜 답이 두루뭉술한지 모른다.
  * - 입력 중에는 상한을 넘겨도 막지 않고 숫자만 붉게 둔다. 타이핑을 가로채면
  *   붙여넣기한 긴 글을 다듬을 수 없다. 실제 거절은 제출할 때 한 번 한다.
+ * - **이 화면 안에서는 물어본 것을 전부 쌓아 보여준다.** 새로 물으면 이전 답이
+ *   지워지던 것을 고쳤다 — `turns` 배열에 계속 추가하고, 스트리밍은 그중 마지막
+ *   한 건만 진행 중 표시를 켠다. 페이지를 벗어나면 이 배열은 사라지는데, 그건
+ *   `/me`의 질문 기록(서버에 이미 쌓인 `ask_history`)에서 다시 볼 수 있다.
  *
  * [Usage]
  * ```tsx
@@ -53,7 +57,16 @@ interface AskPanelProps {
   suggestionBasisKo: string | null;
 }
 
-type Phase = "idle" | "asking" | "answered" | "failed";
+/** 질문 하나와 그 답변의 진행 상태. 화면에는 이게 쌓인 목록으로 보인다. */
+interface AskTurn {
+  id: string;
+  question: string;
+  answer: string;
+  matches: AskMatch[];
+  historyId: string | null;
+  notice: string | null;
+  streaming: boolean;
+}
 
 export function AskPanel({
   plots,
@@ -63,35 +76,57 @@ export function AskPanel({
 }: AskPanelProps) {
   const [question, setQuestion] = useState("");
   const [plotId, setPlotId] = useState<string>(plots[0]?.id ?? "");
-  const [phase, setPhase] = useState<Phase>("idle");
-  const [answer, setAnswer] = useState("");
-  const [matches, setMatches] = useState<AskMatch[]>([]);
-  const [historyId, setHistoryId] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [turns, setTurns] = useState<AskTurn[]>([]);
+  const [formError, setFormError] = useState<string | null>(null);
   const [quota, setQuota] = useState<AskQuotaWire | null>(initialQuota);
-  /** 물어본 질문. 입력칸은 비우고 답변 위에는 남겨 둔다. */
-  const [asked, setAsked] = useState<string | null>(null);
 
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  /** busy state는 비동기로 반영돼 Enter 연타·키 반복 사이에 두 번째 send()가
+   * 끼어들 수 있다. ref는 즉시 반영되므로 그 틈을 막는다. */
+  const sendingRef = useRef(false);
 
   const overLimit = question.trim().length > QUESTION_MAX_LENGTH;
   const exhausted = quota !== null && quota.remaining <= 0;
-  const busy = phase === "asking";
 
   async function send(raw: string) {
+    if (sendingRef.current) return;
+
     const parsed = parseQuestion(raw);
     if (!parsed.ok) {
-      setNotice(parsed.error);
+      setFormError(parsed.error);
       return;
     }
 
-    setPhase("asking");
-    setAnswer("");
-    setMatches([]);
-    setHistoryId(null);
-    setNotice(null);
-    setAsked(parsed.value);
+    sendingRef.current = true;
+    setBusy(true);
+    setFormError(null);
     setQuestion("");
+
+    const turnId = crypto.randomUUID();
+    setTurns((prev) => [
+      ...prev,
+      {
+        id: turnId,
+        question: parsed.value,
+        answer: "",
+        matches: [],
+        historyId: null,
+        notice: null,
+        streaming: true,
+      },
+    ]);
+
+    const patchTurn = (patch: Partial<AskTurn>) =>
+      setTurns((prev) =>
+        prev.map((turn) => (turn.id === turnId ? { ...turn, ...patch } : turn)),
+      );
+    const appendToken = (text: string) =>
+      setTurns((prev) =>
+        prev.map((turn) =>
+          turn.id === turnId ? { ...turn, answer: turn.answer + text } : turn,
+        ),
+      );
 
     try {
       const response = await fetch("/api/ai/ask", {
@@ -106,19 +141,27 @@ export function AskPanel({
       // 근거를 못 찾았거나 막힌 질문이면 JSON 한 덩어리로 온다.
       const contentType = response.headers.get("content-type") ?? "";
       if (!contentType.includes("text/event-stream")) {
-        await applyJson(response);
+        await applyJson(response, patchTurn);
         return;
       }
 
-      await readStream(response);
+      await readStream(response, patchTurn, appendToken);
     } catch {
       // 네트워크가 끊겼거나 탭이 닫히는 중이다. 어느 쪽이든 할 일은 같다.
-      setNotice("답변을 받지 못했습니다. 연결을 확인하고 다시 시도해 주세요.");
-      setPhase("failed");
+      patchTurn({
+        notice: "답변을 받지 못했습니다. 연결을 확인하고 다시 시도해 주세요.",
+      });
+    } finally {
+      patchTurn({ streaming: false });
+      sendingRef.current = false;
+      setBusy(false);
     }
   }
 
-  async function applyJson(response: Response) {
+  async function applyJson(
+    response: Response,
+    patchTurn: (patch: Partial<AskTurn>) => void,
+  ) {
     const data = (await response.json().catch(() => null)) as {
       message?: string;
       error?: string;
@@ -127,29 +170,31 @@ export function AskPanel({
     } | null;
 
     if (data?.quota) setQuota(data.quota);
-    if (data?.history_id) setHistoryId(data.history_id);
 
-    setNotice(
-      data?.message ??
+    patchTurn({
+      historyId: data?.history_id ?? null,
+      notice:
+        data?.message ??
         data?.error ??
         // matches 가 비어 있을 때 ai-service 는 message 없이 온다. 지어내지 말고
         // "자료에 없다"고 말한다 — 이 답이 근거 없이 나오지 않았다는 뜻이다.
         "가지고 있는 자료에서 근거를 찾지 못했습니다. 조금 더 구체적으로 물어봐 주세요.",
-    );
-    setPhase(response.ok ? "answered" : "failed");
+    });
   }
 
-  async function readStream(response: Response) {
+  async function readStream(
+    response: Response,
+    patchTurn: (patch: Partial<AskTurn>) => void,
+    appendToken: (text: string) => void,
+  ) {
     const body = response.body;
     if (!body) {
-      setNotice("답변을 받지 못했습니다. 잠시 뒤 다시 시도해 주세요.");
-      setPhase("failed");
+      patchTurn({ notice: "답변을 받지 못했습니다. 잠시 뒤 다시 시도해 주세요." });
       return;
     }
 
     const reader = body.pipeThrough(new TextDecoderStream()).getReader();
     let buffer = "";
-    let failed = false;
 
     while (true) {
       const { done, value } = await reader.read();
@@ -164,20 +209,17 @@ export function AskPanel({
         if (!event) continue;
 
         if (event.kind === "meta") {
-          setHistoryId(event.historyId);
+          patchTurn({ historyId: event.historyId });
           if (event.quota) setQuota(event.quota);
         } else if (event.kind === "matches") {
-          setMatches(event.matches);
+          patchTurn({ matches: event.matches });
         } else if (event.kind === "token") {
-          setAnswer((prev) => prev + event.text);
+          appendToken(event.text);
         } else if (event.kind === "error") {
-          setNotice(event.messageKo);
-          failed = true;
+          patchTurn({ notice: event.messageKo });
         }
       }
     }
-
-    setPhase(failed ? "failed" : "answered");
   }
 
   function onSubmit(event: FormEvent<HTMLFormElement>) {
@@ -214,6 +256,13 @@ export function AskPanel({
             className="min-h-28 w-full resize-y bg-transparent px-4 py-3 text-fg outline-none placeholder:text-fg-subtle"
             disabled={busy || exhausted}
             onChange={(event) => setQuestion(event.target.value)}
+            onKeyDown={(event) => {
+              // Shift+Enter 는 줄바꿈으로 남긴다 — 여러 줄로 질문을 다듬는 경우가 있다.
+              if (event.key !== "Enter" || event.shiftKey) return;
+              event.preventDefault();
+              if (busy || exhausted || question.trim().length === 0) return;
+              void send(question);
+            }}
             placeholder={
               exhausted
                 ? "오늘 질문 가능 횟수를 모두 사용했습니다."
@@ -231,12 +280,10 @@ export function AskPanel({
               {question.trim().length} / {QUESTION_MAX_LENGTH}
             </span>
             {quota !== null && (
+              // ponytail: 무료 체험 기간 동안 잔여 횟수 대신 안내 문구만 보여준다.
+              // 한도를 다시 걸 때는 위 숫자 표시로 되돌리면 됨(quota.remaining/limit).
               <span className="text-fg-muted text-xs">
-                오늘 남은 질문{" "}
-                <strong className="font-mono font-semibold tabular-nums">
-                  {quota.remaining}
-                </strong>
-                <span className="text-fg-subtle"> / {quota.limit}회</span>
+                한동안 무료 체험이 가능합니다
               </span>
             )}
             {/* Button 은 className 을 받지 않는다(스타일 단일 출처). 배치는 감싼 쪽이 한다. */}
@@ -253,6 +300,10 @@ export function AskPanel({
           </div>
         </div>
 
+        {formError !== null && (
+          <p className="text-unsuitable text-xs">{formError}</p>
+        )}
+
         {plotId === "" && plots.length > 0 && (
           // 밭을 안 고르면 일반론이 된다. 그 사실을 적지 않으면 사용자는 왜
           // 답이 두루뭉술한지 모른 채 서비스를 탓한다.
@@ -262,7 +313,7 @@ export function AskPanel({
         )}
       </form>
 
-      {phase === "idle" && (
+      {turns.length === 0 && (
         <AskSuggestionChips
           basisKo={suggestionBasisKo}
           onPick={(picked) => {
@@ -280,24 +331,30 @@ export function AskPanel({
         </p>
       )}
 
-      {asked !== null && (
-        <section className="flex flex-col gap-4">
-          <div className="flex flex-wrap items-start gap-2">
-            <Badge size="sm" tone="neutral">
-              내 질문
-            </Badge>
-            <p className="min-w-0 flex-1 whitespace-pre-wrap text-fg text-sm leading-relaxed">
-              {asked}
-            </p>
-          </div>
+      {turns.length > 0 && (
+        <section className="flex flex-col gap-8">
+          {/* 최신 질문이 위로 오게 뒤집어 보여준다. push는 그대로 뒤에 붙인다 —
+              turnId로 patch하는 로직이 순서에 기대지 않게 하기 위해서다. */}
+          {[...turns].reverse().map((turn) => (
+            <div className="flex flex-col gap-4" key={turn.id}>
+              <div className="flex flex-wrap items-start gap-2">
+                <Badge size="sm" tone="neutral">
+                  내 질문
+                </Badge>
+                <p className="min-w-0 flex-1 whitespace-pre-wrap text-fg text-sm leading-relaxed">
+                  {turn.question}
+                </p>
+              </div>
 
-          <AskAnswer
-            answer={answer}
-            historyId={historyId}
-            matches={matches}
-            noticeKo={notice}
-            streaming={busy}
-          />
+              <AskAnswer
+                answer={turn.answer}
+                historyId={turn.historyId}
+                matches={turn.matches}
+                noticeKo={turn.notice}
+                streaming={turn.streaming}
+              />
+            </div>
+          ))}
         </section>
       )}
     </div>

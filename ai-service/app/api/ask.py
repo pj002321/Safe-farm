@@ -20,16 +20,12 @@ from app.core.config import DAILY_ASK_LIMIT
 from app.core.db import get_db
 from app.core.security import require_service_token
 from app.domain.ask_suggest import suggest_questions
-from app.domain.diversity import diversify
 from app.domain.guardrail import BLOCKED_MESSAGE, is_blocked_topic
 from app.domain.history_context import HISTORY_RULE
-from app.knowledge.generator import stream_answer
-from app.knowledge.reranker import rerank
-from app.knowledge.retriever import retrieve_with_score
-from app.knowledge.vector_store import neighbors
+from app.graph.graph import graph as ask_graph
+from app.graph.state import GraphState
 from app.models.farm.ask_history import AskHistory
 from app.schemas.ask import (
-    NO_MATCH_DISTANCE,
     AskFeedbackRequest,
     AskMatch,
     AskQuota,
@@ -37,7 +33,7 @@ from app.schemas.ask import (
     AskResponse,
     AskSuggestions,
 )
-from app.service.ask_context import build_plot_context, plot_focus
+from app.service.ask_context import plot_focus
 from app.service.ask_history import (
     complete_answer,
     recent_turns,
@@ -53,13 +49,6 @@ DAILY_LIMIT_MESSAGE = (
 )
 
 STREAM_FAILED_MESSAGE = "답변을 만드는 중 문제가 생겼습니다. 잠시 뒤 다시 시도해 주세요."
-
-# 후보를 넓게 받아 소스 상한을 걸고 TOP_K 개를 고른다. 값의 근거는 pipeline/doc/golden.py 주석 참고
-# (2026-09-17 실측 33문항: 후보 10→5 hit 24·hint 27, 후보 50→소스≤2→5 hit 29·hint 29, 잃은 문항 0).
-# 두 파일의 세 값은 항상 같아야 한다 — 어긋나면 골든에서 좋아져도 실제 답변은 그대로다
-CANDIDATES = 50   # 벡터에서 받는 후보. 정답이 22위·39위에 있었다. 20·30 은 +1 에 그친다
-PER_SOURCE = 2    # 앞에 둘 같은 소스 수. 1 은 근거 둘이 한 소스에 있는 질문을 잃는다(칩 2개 사태)
-TOP_K = 5
 
 
 def _quota(db: Session, user_id: uuid.UUID) -> AskQuota:
@@ -77,31 +66,42 @@ def _event(name: str, payload: object) -> str:
 
 def _sse(
     history: AskHistory,
-    matches: list[AskMatch],
-    tokens: Iterator[str],
+    graph_state: GraphState,
     db: Session,
     quota: AskQuota,
 ) -> Iterator[str]:
-    """meta → matches → 토큰 → done 순으로 흘려보낸다.
-    Server-Sent-Event: SSE
+    """meta → matches → 토큰 → done 순으로 흘려보낸다. ask-flow 그래프(app/graph/graph.py)를
+    직접 스트리밍으로 돌린다 — stream_mode=["updates", "custom"] 로 "retrieve" 노드가
+    끝난 시점의 matches 와 "generate" 노드가 get_stream_writer 로 흘리는 토큰
+    (app/graph/nodes.py 의 generate 참고)을 같이 받는다. retrieve 가 generate 보다
+    먼저 끝나므로 matches 이벤트가 토큰보다 먼저 나가는 순서는 그대로 유지된다.
+
     meta 가 맨 앞인 이유는 프런트가 history_id 를 먼저 받아야 피드백을 보낼 대상을
     알고, 잔여 횟수를 곧바로 줄여 보여줄 수 있어서다.
 
     스트림이 끝나면 전체 답변을 ask_history 에 채운다 — 토큰마다 커밋하면 DB 왕복이
     토큰 수만큼 늘어난다.
 
-    LLM 호출이 중간에 끊기면 error 이벤트를 보낸다. 조용히 끝내면 프런트는 짧은
-    답변을 정상 완료로 읽는다. 여기까지 온 질문은 이미 한 번 차감됐으므로 받은
-    데까지는 이력에 남긴다.
+    그래프 실행 중 예외(plan/retrieve 의 DB 오류 포함)가 나면 error 이벤트를 보낸다.
+    조용히 끝내면 프런트는 짧은 답변을 정상 완료로 읽는다. 여기까지 온 질문은 이미
+    한 번 차감됐으므로 받은 데까지는 이력에 남긴다.
     """
     yield _event("meta", {"historyId": str(history.id), "quota": quota.model_dump()})
-    yield _event("matches", [m.model_dump() for m in matches])
 
     parts: list[str] = []
     try:
-        for token in tokens:
-            parts.append(token)
-            yield _event("token", token)
+        for mode, chunk in ask_graph.stream(graph_state, stream_mode=["updates", "custom"]):
+            if mode == "custom":
+                parts.append(chunk["piece"])
+                yield _event("token", chunk["piece"])
+                continue
+            output = chunk.get("retrieve")
+            if output is not None:
+                matches = [
+                    AskMatch(body=c.body, distance=dist, source_title=c.document.title)
+                    for c, dist in output["matches"]
+                ]
+                yield _event("matches", [m.model_dump() for m in matches])
     except Exception:  # noqa: BLE001 — 원인별 분기가 없다. 어느 쪽이든 화면이 할 일은 같다
         complete_answer(db, history, "".join(parts))
         yield _event("error", STREAM_FAILED_MESSAGE)
@@ -134,43 +134,27 @@ def ask(request: AskRequest, db: Session = Depends(get_db)) -> AskResponse | Str
             quota=_quota(db, request.user_id),
         )
 
-    # 이력을 **이번 질문을 남기기 전에** 읽는다. 뒤로 미루면 방금 한 질문이
+     # 이력을 **이번 질문을 남기기 전에** 읽는다. 뒤로 미루면 방금 한 질문이
     # 자기 자신의 맥락으로 딸려 들어간다.
     history_context = HISTORY_RULE(recent_turns(db, request.user_id))
 
-    # 후보 CANDIDATES 개를 받아 같은 소스는 PER_SOURCE 개까지 앞에 두고 TOP_K 개를 고른다.
-    # 넘친 것은 버리지 않고 뒤로 민다 — 버리면 후보가 한 소스뿐인 질문에서 근거가 2개로 준다.
-    # 후보 10 이면 "고추 물 언제 줘야 해?" 의 정답 crop_guide(22위)를 볼 기회조차 없다.
-    # rerank 는 이제 고르지 않고 TOP_K 개의 순서만 잡는다 — 풀 8에서 고르게 하면 hit 을 하나 깎았다
-    candidates = retrieve_with_score(db, request.question, CANDIDATES)
-    picked = diversify(
-        candidates, key=lambda m: m[0].document.source, per_key=PER_SOURCE, limit=TOP_K
-    )
-    matches = rerank(request.question, picked)
-    found = [(chunk, dist) for chunk, dist in matches if dist < NO_MATCH_DISTANCE]
+    # plan(밭 조회 필요 여부)부터 retrieve·generate 까지 그래프가 전부 맡는다 —
+    # ask_graph.stream(..., stream_mode=["updates", "custom"]) 이 노드 완료 이벤트와
+    # generate 의 토큰을 같이 내보내므로 _sse 안에서 그대로 그래프를 돌린다
+    # (app/graph/nodes.py 의 generate 주석 참고).
+    graph_state: GraphState = {
+        "db": db,
+        "question": request.question,
+        "user_id": request.user_id,
+        "plot_id": request.plot_id,
+        "history_context": history_context,
+    }
 
     history = record_question(db, request.user_id, request.question)
     quota = _quota(db, request.user_id)
 
-    if not found:
-        return AskResponse(matches=[], history_id=str(history.id), quota=quota)
-
-    ask_matches = [
-        AskMatch(body=chunk.body, distance=dist, source_title=chunk.document.title)
-        for chunk, dist in found
-    ]
-    plot_context = build_plot_context(db, request.plot_id) if request.plot_id else None
-    # 뽑힌 조각의 같은 문서 앞뒤 조각을 LLM 에만 더 준다. 출처 칩(ask_matches)은 5개 그대로 —
-    # "방울토마토 물" 의 정답은 뽑힌 조각의 바로 옆 조각이었다 — 골든 hint 29→31.
-    # hit 은 같은 소스라 안 움직인다
-    evidence = found + neighbors(db, found)
     return StreamingResponse(
-        _sse(
-            history,
-            ask_matches,
-            stream_answer(request.question, evidence, plot_context, history_context),
-            db,
-        ),
+        _sse(history, graph_state, db, quota),
         media_type="text/event-stream",
     )
 

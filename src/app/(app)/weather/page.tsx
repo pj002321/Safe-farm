@@ -1,14 +1,12 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import { CloudRainIcon } from "@/components/icons";
-import { WeatherChart } from "@/components/monitoring/WeatherChart";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { SectionHeading } from "@/components/shared/SectionHeading";
 import { PlotForecastRow } from "@/components/weather/PlotForecastRow";
 import { PlotRowSkeleton } from "@/components/weather/PlotRowSkeleton";
-import { summarizeWeather } from "@/features/monitoring/domain/weatherSeries";
-import { loadWeatherSeries } from "@/features/monitoring/weatherStore";
-import { listPlotDetails, listPlots } from "@/features/plots/plotStore";
+import { SatellitePanel } from "@/components/weather/SatellitePanel";
+import { listPlots } from "@/features/plots/plotStore";
 import { aiService } from "@/shared/aiService/client";
 import {
   recallForecast,
@@ -35,32 +33,13 @@ import { kstDateString } from "@/shared/utils/kstDate";
 
 export const metadata: Metadata = { title: "날씨" };
 
-/** 차트 위에 붙는 한 줄. 스크린리더가 읽는 문장이기도 하다. */
-function summaryKo(
-  nameKo: string,
-  summary: ReturnType<typeof summarizeWeather>,
-): string {
-  if (summary === null) return `${nameKo}: 최근 관측이 없습니다.`;
-  const rain =
-    summary.rainfallMm === null
-      ? "강수량은 모릅니다"
-      : `강수량 합계 ${summary.rainfallMm}mm`;
-  return `${nameKo}: 최근 ${summary.days}일 평균 최고 ${summary.avgTempMaxC}℃, 최저 ${summary.avgTempMinC}℃, ${rain}.`;
-}
+/** NDVI·NDMI 조회 구간(일). Sentinel-2 재방문 주기(5일)+구름을 감안해 넉넉히 잡는다. */
+const SATELLITE_WINDOW_DAYS = 90;
 
 export default async function Page() {
   const profile = await getCurrentProfile();
-  /**
-   * 목록을 둘 받는다. 합칠 수 없어서다 — `listPlots` 는 작물(cultivations 조인)을,
-   * `listPlotDetails` 는 **기상청 격자**(`grid_x`/`grid_y`)를 준다. 격자는 관측 차트가
-   * 예보를 찾는 키라 좌표로 다시 계산하지 않는다(그 컬럼 주석의 방침).
-   */
-  const [plots, details] = profile
-    ? await Promise.all([listPlots(profile.id), listPlotDetails(profile.id)])
-    : [[], []];
-  const gridByPlotId = new Map(
-    details.map((d) => [d.id, { gridX: d.gridX, gridY: d.gridY }]),
-  );
+  const plots = profile ? await listPlots(profile.id) : [];
+
   // 카드가 "오늘"을 가리려면 기준일이 필요하다. 서버에서 한 번만 정해 내려보낸다 —
   // 카드마다 new Date() 를 부르면 자정 언저리에 카드끼리 날짜가 갈릴 수 있다.
   //
@@ -111,7 +90,6 @@ export default async function Page() {
                   latitude={plot.latitude}
                   longitude={plot.longitude}
                   nameKo={plot.nameKo ?? "이름 없는 밭"}
-                  grid={gridByPlotId.get(plot.id)}
                   plotId={plot.id}
                   todayIso={todayIso}
                 />
@@ -139,7 +117,6 @@ async function PlotForecast({
   plotId,
   todayIso,
   defaultOpen,
-  grid,
 }: {
   latitude: number;
   longitude: number;
@@ -148,44 +125,42 @@ async function PlotForecast({
   plotId: string;
   todayIso: string;
   defaultOpen: boolean;
-  /** 기상청 격자. 없으면 관측 차트를 그리지 않는다(예보 줄은 그대로 뜬다). */
-  grid?: { gridX: number; gridY: number };
 }) {
   // plotId 를 줘야 서버가 이 밭의 작물·행정구역을 찾아 하루치 GDD·작물 해석·
   // 기상특보까지 함께 돌려준다. 좌표만 주면 일반 기상값만 온다.
   //
   // 관측 계열은 **예보와 나란히** 받는다. 둘은 서로를 기다릴 이유가 없고, 이 밭의
   // 경계 안이라 느려도 다른 밭을 붙잡지 않는다.
-  const [result, weather] = await Promise.all([
+  const satelliteFrom = kstDateString(
+    new Date(Date.now() - SATELLITE_WINDOW_DAYS * 86_400_000),
+  );
+
+  const [result, satellite] = await Promise.all([
     aiService.plotForecast(latitude, longitude, plotId),
-    grid
-      ? loadWeatherSeries({ latitude, longitude, ...grid }, todayIso).catch(
-          (error) => {
-            // 관측이 없어도 예보는 보여 준다 — 차트 하나 때문에 줄을 죽이지 않는다.
-            console.error("[weather] 관측 계열 조회 실패", error);
-            return null;
-          },
-        )
-      : null,
+    aiService.satelliteObservations(
+      latitude,
+      longitude,
+      satelliteFrom,
+      todayIso,
+    ),
   ]);
 
-  const chart = weather ? (
-    <WeatherChart
-      series={weather.series}
-      summary={summaryKo(nameKo, summarizeWeather(weather.series))}
-    />
+  // 위성도 실패해도 줄 전체를 죽이지 않는다 — 예보·기상 관측과 같은 원칙.
+  // 구름이 많은 구간에는 점이 아예 없을 수 있고, 그때 SatellitePanel 은 null 이다.
+  const satelliteChart = satellite.ok ? (
+    <SatellitePanel points={satellite.data.points} />
   ) : null;
 
   if (result.ok) {
     rememberForecast(plotId, result.data);
     return (
       <PlotForecastRow
-        chart={chart}
         cropNameKo={cropNameKo}
         defaultOpen={defaultOpen}
         forecast={result.data}
         nameKo={nameKo}
         plotId={plotId}
+        satelliteChart={satelliteChart}
         todayIso={todayIso}
       />
     );
@@ -196,12 +171,12 @@ async function PlotForecast({
     return (
       <PlotForecastRow
         cachedAt={stale.cachedAt}
-        chart={chart}
         cropNameKo={cropNameKo}
         defaultOpen={defaultOpen}
         forecast={stale.data}
         nameKo={nameKo}
         plotId={plotId}
+        satelliteChart={satelliteChart}
         todayIso={todayIso}
       />
     );

@@ -12,6 +12,7 @@ ask_context.py 의 `_lead` 와 같은 기준이다.
 
 from __future__ import annotations
 
+import uuid
 from dataclasses import dataclass
 from datetime import date, timedelta
 
@@ -27,6 +28,8 @@ class PlotGrowth:
     """필지 하나의 생육 상태 스냅샷. stage_name 이 None 이면 계산은 됐지만 해당하는
     단계 구간을 못 찾은 것이다(마지막 단계를 넘어섰거나 마스터 데이터 공백)."""
 
+    # 대표 재배 건 id. advices 캐시 키(cultivation_id + 날짜)로 report.py 가 쓴다.
+    cultivation_id: uuid.UUID
     crop_name_ko: str
     days_since_planting: int
     accumulated_gdd: float
@@ -35,6 +38,11 @@ class PlotGrowth:
     # 아래 둘은 stage_name 이 None 이면 같이 None/False 다 — 작업카드 판정(task_rules.py)이 씀
     water_need_mm: float | None
     fertilize_needed: bool
+    # 씨뿌림→수확 총 목표 GDD. 역산이 안 끝난 숙기는 None(리포트 화면의 진행 게이지는
+    # 이때 숨긴다 — 분모 없는 진행률은 거짓 숫자다).
+    gdd_target: int | None
+    # 현재 단계가 끝나는(=다음 단계가 시작하는) 누적 GDD. stage_name 이 None 이면 같이 None.
+    stage_gdd_to: int | None
 
 
 def nearest_station(db: Session, plot: Plot) -> Station | None:
@@ -106,11 +114,30 @@ def _start_gdd(db: Session, cultivation: Cultivation) -> float:
 
 
 def _crop_for_cultivation(db: Session, cultivation: Cultivation) -> Crop | None:
-    """재배 건의 작물 마스터. variant 가 없거나 끝의 crop 이 없으면 None."""
+    """재배 건의 작물 마스터. variant 가 없거나, 끝의 crop 이 없거나,
+    **기준온도(base_temp)가 비어 있으면** None.
+
+    ⚠️ base_temp 를 여기서 함께 거른다. 이 값은 GDD 계산의 전제라 없으면 생육을
+       낼 수 없는데, 쓰는 곳이 셋이다(daily_gdd_series · crop_interpretation ·
+       compute_plot_growth). 셋 다 이미 `crop is None` 을 검사하므로, 호출부마다
+       가드를 흩뿌리는 대신 조회 한 곳에서 "쓸 수 없는 작물"로 처리한다.
+
+       운영에서 실제로 마스터에 base_temp 가 빈 작물이 있었고, float(None) 이
+       터지면서 **자정 배치 전체가 죽었다** — 밭 하나의 데이터 결손이 모든
+       사용자의 할 일을 막았다.
+
+       0 이나 추정값으로 메우지 않는다. 지역 지도용 기본값(`BASE_TEMP_C`)을 끌어
+       쓰면 작물별 값인 척하는 틀린 숫자가 되고, 그 위에서 나온 생육단계와 물·비료
+       카드는 근거가 거짓이 된다. "근거를 못 만들면 카드를 만들지 않는다"는 스펙
+       규칙대로 판정을 보류한다.
+    """
     variant = db.query(CropVariant).filter(CropVariant.variant_id == cultivation.variant_id).first()
     if variant is None:
         return None
-    return db.query(Crop).filter(Crop.crop_id == variant.crop_id).first()
+    crop = db.query(Crop).filter(Crop.crop_id == variant.crop_id).first()
+    if crop is None or crop.base_temp is None:
+        return None
+    return crop
 
 
 def daily_gdd_series(
@@ -124,10 +151,6 @@ def daily_gdd_series(
         return None
     crop = _crop_for_cultivation(db, cultivation)
     if crop is None:
-        return None
-    # `base_temp` 가 없으면 적산을 시작할 기준이 없다. 지역 지도용 기본값(`BASE_TEMP_C`)을
-    # 끌어 쓰면 작물별 값인 척하는 틀린 숫자가 된다 — 근거가 없으면 판정하지 않는다.
-    if crop.base_temp is None:
         return None
 
     since = max(cultivation.sowing_date, date.today() - timedelta(days=days))
@@ -165,10 +188,6 @@ def crop_interpretation(db: Session, plot: Plot, station: Station) -> dict | Non
     crop = _crop_for_cultivation(db, cultivation)
     if crop is None:
         return None
-    # `base_temp` 가 없으면 적산을 시작할 기준이 없다. 지역 지도용 기본값(`BASE_TEMP_C`)을
-    # 끌어 쓰면 작물별 값인 척하는 틀린 숫자가 된다 — 근거가 없으면 판정하지 않는다.
-    if crop.base_temp is None:
-        return None
     growth = compute_plot_growth(db, plot, station)
     return {
         "crop_name_ko": crop.name,
@@ -188,10 +207,6 @@ def compute_plot_growth(db: Session, plot: Plot, station: Station) -> PlotGrowth
 
     crop = _crop_for_cultivation(db, cultivation)
     if crop is None:
-        return None
-    # `base_temp` 가 없으면 적산을 시작할 기준이 없다. 지역 지도용 기본값(`BASE_TEMP_C`)을
-    # 끌어 쓰면 작물별 값인 척하는 틀린 숫자가 된다 — 근거가 없으면 판정하지 않는다.
-    if crop.base_temp is None:
         return None
 
     obs = (
@@ -219,7 +234,10 @@ def compute_plot_growth(db: Session, plot: Plot, station: Station) -> PlotGrowth
         .first()
     )
 
+    variant = db.query(CropVariant).filter(CropVariant.variant_id == cultivation.variant_id).first()
+
     return PlotGrowth(
+        cultivation_id=cultivation.id,
         crop_name_ko=crop.name,
         days_since_planting=(date.today() - cultivation.sowing_date).days,
         accumulated_gdd=round(accumulated, 1),
@@ -227,4 +245,6 @@ def compute_plot_growth(db: Session, plot: Plot, station: Station) -> PlotGrowth
         guide_text=stage.guide_text if stage else None,
         water_need_mm=float(stage.water_need_mm) if stage and stage.water_need_mm is not None else None,
         fertilize_needed=bool(stage.fertilize_needed) if stage else False,
+        gdd_target=variant.gdd_target if variant else None,
+        stage_gdd_to=stage.gdd_to if stage else None,
     )

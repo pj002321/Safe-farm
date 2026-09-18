@@ -88,6 +88,9 @@ def _current_stage(
     그 품종의 단계표(crop_stages)가 비어 있거나 작물의 base_temp 가 비어 있을 때도
     마찬가지다.
 
+    작물의 기준온도(base_temp)가 비어 있을 때도 None 이다 — GDD 는 기준온도 없이
+    정의되지 않는다.
+
     누적값은 저장하지 않고 매번 관측에서 다시 쌓는다(웹의 gdd.ts 와 같은 방침).
     """
     if cultivation.sowing_date is None:
@@ -227,6 +230,21 @@ def plot_focus(db: Session, plot_id: uuid.UUID, user_id: uuid.UUID) -> PlotFocus
         stage_name=stage.stage_name if stage else None,
         guide_text=stage.guide_text if stage else None,
     )
+
+
+def plot_crop_names(db: Session, plot_id: uuid.UUID, user_id: uuid.UUID) -> set[str]:
+    """이 밭에서 지금 기르는 작물 이름들. 남의 밭이거나 기르는 게 없으면 빈 집합.
+
+    RAG 검색(app/knowledge/retriever.py)이 질문에서 작물을 못 찾았을 때(find_crops
+    가 빈 집합) 이 밭의 작물로 좁히는 데 쓴다. 안 쓰면 필터 없이 전체 문서를 뒤져
+    무관한 작물 문서가 섞여 들어온다 — "밀린 일"이 질문에 없는 '밀' 문서를 근거로
+    끌어온 사례(2026-09-18). 감자·상추만 기르는 밭이면 밀 문서는 애초에 후보에서
+    빠진다.
+    """
+    plot = _owned_plot(db, plot_id, user_id)
+    if plot is None:
+        return set()
+    return {crop.name for _, crop in _growing(db, plot.id)}
 
 
 def build_plot_context(
