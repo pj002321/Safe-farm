@@ -161,7 +161,15 @@ def ask(request: AskRequest, db: Session = Depends(get_db)) -> AskResponse | Str
         AskMatch(body=chunk.body, distance=dist, source_title=chunk.document.title)
         for chunk, dist in found
     ]
-    plot_context = build_plot_context(db, request.plot_id) if request.plot_id else None
+    # ⚠️ user_id 를 반드시 넘긴다. build_plot_context 는 이걸로 **소유를 확인**하고,
+    #    남의 밭이면 None 을 돌려준다. 빠뜨리면 TypeError 로 /ask 가 통째로 500 이
+    #    되는데, 파이썬이라 import 시점에 안 잡히고 실제 질문이 들어와야 드러난다
+    #    (운영에서 그렇게 터졌다).
+    plot_context = (
+        build_plot_context(db, request.plot_id, request.user_id)
+        if request.plot_id
+        else None
+    )
     # 뽑힌 조각의 같은 문서 앞뒤 조각을 LLM 에만 더 준다. 출처 칩(ask_matches)은 5개 그대로 —
     # "방울토마토 물" 의 정답은 뽑힌 조각의 바로 옆 조각이었다 — 골든 hint 29→31.
     # hit 은 같은 소스라 안 움직인다
