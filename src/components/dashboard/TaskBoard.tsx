@@ -1,11 +1,20 @@
 import Link from "next/link";
-import { ArrowUpRightIcon, CheckIcon } from "@/components/icons";
+import {
+  AlertTriangleIcon,
+  ArrowUpRightIcon,
+  CheckIcon,
+} from "@/components/icons";
 import { Badge } from "@/components/shared/Badge";
+import type {
+  EmptyTaskReason,
+  PlotTaskBlocker,
+} from "@/features/dashboard/domain/emptyTaskReason";
 import type { PlotTaskGroup } from "@/features/dashboard/domain/taskGrouping";
 import type {
   Priority,
   TaskCardData,
 } from "@/features/dashboard/domain/taskSummary";
+import { EmptyTasks } from "./EmptyTasks";
 
 /**
  * ---------------------------------------------
@@ -48,15 +57,26 @@ const PRIORITY: Record<
 interface TaskBoardProps {
   /** 밭별로 묶인 오늘의 카드. `groupTasksByPlot` 이 만든다. */
   groups: readonly PlotTaskGroup[];
+  /**
+   * 카드가 하나도 없을 때 왜 없는지. `emptyTaskReason` 이 정한다.
+   *
+   * 화면이 직접 판단하지 않는 이유: "할 일이 없다"와 "판정을 못 했다"를 가르는
+   * 것은 로직이고, 틀리면 사용자가 고칠 수 있는 문제를 영영 모르게 된다.
+   */
+  emptyReason: EmptyTaskReason;
   /** 완료 체크 제출을 받는 Server Action. page.tsx 가 내려준다. */
   toggleTaskAction: (formData: FormData) => Promise<void>;
 }
 
-export function TaskBoard({ groups, toggleTaskAction }: TaskBoardProps) {
+export function TaskBoard({
+  groups,
+  emptyReason,
+  toggleTaskAction,
+}: TaskBoardProps) {
   // 밭은 있는데 오늘 할 일이 하나도 없는 경우. 밭별로 "없음"을 늘어놓으면
   // 화면만 길어지므로 한 장으로 합쳐서 알린다.
   if (groups.every((group) => group.open.length + group.done.length === 0)) {
-    return <EmptyTasks />;
+    return <EmptyTasks reason={emptyReason} />;
   }
 
   return (
@@ -102,7 +122,9 @@ function PlotSection({
         </Link>
         <span className="font-mono text-[0.68rem] text-fg-subtle">
           {quiet
-            ? "할 일 없음"
+            ? group.blocker
+              ? "판정 못 함"
+              : "할 일 없음"
             : [
                 group.open.length > 0 ? `할 일 ${group.open.length}` : null,
                 group.done.length > 0 ? `완료 ${group.done.length}` : null,
@@ -111,6 +133,12 @@ function PlotSection({
                 .join(" · ")}
         </span>
       </div>
+
+      {/* 카드가 없는 밭. 왜 없는지에 따라 말이 달라진다 — 판정이 막힌 밭에
+          "할 일 없음"만 띄우면 사용자는 확인이 끝난 줄 알고 기다린다. */}
+      {quiet && group.blocker ? (
+        <PlotBlockerNotice blocker={group.blocker} />
+      ) : null}
 
       {quiet ? null : (
         <div className="flex flex-col gap-2.5">
@@ -135,27 +163,31 @@ function PlotSection({
 }
 
 /**
- * 카드가 하나도 없을 때.
+ * 밭 하나가 판정에 걸렸을 때의 안내.
  *
- * 빈 배열을 그대로 두면 "오늘 할 일" 밑이 그냥 빈 공간이라 서비스가 멈춘
- * 것처럼 보인다(빈 상태 없는 `PlotStrip` 이 같은 이유로 온보딩을 그리는 것과
- * 같은 문제). 판정은 매일·밭마다 실제로 도는 것이니, "확인했고 지금은 없다"를
- * 눈에 보이는 카드 한 장으로 알려준다.
+ * 홈 전체 빈 상태(`EmptyTasks`)와 문구 축이 같다. 다른 점은 **자리**다 —
+ * 밭이 여럿이면 어느 밭이 막혔는지 그 줄에서 바로 보여야 한다.
+ * 한 줄로 눕히는 이유: 밭마다 카드만 한 안내가 붙으면 정작 할 일이 있는 밭이
+ * 아래로 밀린다.
  */
-function EmptyTasks() {
+function PlotBlockerNotice({ blocker }: { blocker: PlotTaskBlocker }) {
+  const isNoCultivation = blocker.kind === "no-cultivation";
+
   return (
-    <div className="rounded-lg border border-border border-dashed bg-surface-2/40 px-6 py-8 text-center">
-      <span className="mx-auto grid size-11 place-items-center rounded-full bg-telemetry text-accent-on">
-        <CheckIcon strokeWidth={3} />
+    <p className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md border border-caution/25 bg-caution/8 px-3 py-2 text-[0.8rem] text-fg-muted">
+      <AlertTriangleIcon className="size-3.5 shrink-0 text-caution" />
+      <span className="min-w-0 flex-1">
+        {isNoCultivation
+          ? "기르는 작물이 없어 판정하지 못했습니다."
+          : "파종일이 없어 생육 단계를 세지 못했습니다."}
       </span>
-      <p className="mt-3 font-semibold text-fg text-sm">
-        오늘은 특별히 할 일이 없습니다
-      </p>
-      <p className="mx-auto mt-1.5 max-w-xs text-balance text-fg-muted text-xs leading-relaxed">
-        강수량과 생육 단계를 매일 다시 판정합니다. 조건이 바뀌면 그 즉시 카드로
-        알려 드릴게요.
-      </p>
-    </div>
+      <Link
+        className="font-medium text-accent hover:underline underline-offset-2"
+        href={`/plots/${blocker.plotId}`}
+      >
+        {isNoCultivation ? "작물 등록" : "파종일 입력"} →
+      </Link>
+    </p>
   );
 }
 
