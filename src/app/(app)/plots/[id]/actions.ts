@@ -179,7 +179,7 @@ export async function editCultivationSowing(formData: FormData): Promise<void> {
   const future = sowingDate !== null && sowingDate > kstDateString();
 
   try {
-    await updateCultivationSowing(cultivationId, {
+    await updateCultivationSowing(plotId, cultivationId, {
       status: known && sowingDate && !future ? "GROWING" : "PLANNED",
       sowingDate: known ? sowingDate : null,
     });

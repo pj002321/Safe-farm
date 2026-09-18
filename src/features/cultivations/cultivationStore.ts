@@ -244,8 +244,13 @@ export async function softDeleteCultivation(
  * — 이 값이 GDD 적산의 기준점이라 틀리면 생육 단계·오늘 할 일 판정 전체가
  * 어긋난다. 수확·실패 처리된 건은 화면(`plots/[id]/page.tsx`)에서 애초에
  * 수정 칸을 보여주지 않는다 — 여기서는 막지 않는다.
+ *
+ * where 조건은 이 파일의 다른 update 들과 같다 — `plot_id` 로 한 번 더 좁히고
+ * (`markHarvested` 주석 참고), `deleted_at is null` 로 지운 재배를 뺀다. 지운
+ * 재배의 파종일이 고쳐지면 되살렸을 때 실제와 다른 날짜가 들어 있게 된다.
  */
 export async function updateCultivationSowing(
+  plotId: string,
   cultivationId: string,
   input: { status: "PLANNED" | "GROWING"; sowingDate: string | null },
 ): Promise<void> {
@@ -253,9 +258,10 @@ export async function updateCultivationSowing(
 
   const { data, error } = await supabase
     .from("cultivations")
-
     .update({ status: input.status, sowing_date: input.sowingDate })
     .eq("id", cultivationId)
+    .eq("plot_id", plotId)
+    .is("deleted_at", null)
     .select("id");
 
   if (error) throw new Error(error.message);
