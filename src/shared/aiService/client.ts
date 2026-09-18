@@ -249,6 +249,25 @@ const DEFAULT_TIMEOUT_MS = 5_000;
 const BATCH_TIMEOUT_MS = 50_000;
 
 /**
+ * 밭 예보 호출 타임아웃(ms).
+ *
+ * ⚠️ **기본 5초를 쓰면 안 된다.** 이 엔드포인트는 안에서 Open-Meteo 를 부르고,
+ *    그쪽 타임아웃이 **10초**다(ai-service `pipeline/open_meteo_client.py`).
+ *    5초로 두면 안쪽이 바깥쪽의 두 배가 되어, 업스트림이 5~10초로 응답할 때
+ *    ai-service 는 정상 처리 중인데 Next 만 포기한다. 실패하면 캐시에 아무것도
+ *    안 남으므로 **그 좌표는 다음 요청도, 그다음도 똑같이 실패한다** — 특정 밭만
+ *    영구히 "예보를 못 불러왔다"가 되는 고리가 여기서 생겼다.
+ *
+ *    그래서 **안쪽 한계보다 넉넉히 길어야 한다.** 10초(업스트림) + DB 조회 몇 번
+ *    + 첫 호출의 경계 GeoJSON 파싱(3.2MB)을 덮는 값이다.
+ *    ai-service 쪽 10초를 줄이면 이 값도 같이 내릴 것.
+ *
+ * 사용자가 그동안 빈 화면을 보지는 않는다 — 대시보드가 `<Suspense>` 로 감싸
+ * 위성 스캔 애니메이션을 띄운다.
+ */
+const FORECAST_TIMEOUT_MS = 15_000;
+
+/**
  * 밭 예보 갱신 주기(초, V1-61).
  *
  * 예보 원본(Open-Meteo)은 하루 몇 차례 모델을 갱신할 뿐이라 요청마다 부르는 건
@@ -490,7 +509,10 @@ export const aiService = {
   ): Promise<AiResult<PlotForecast>> => {
     const result = await call<PlotForecast>(
       `/v1/weather/plot?lat=${lat}&lon=${lon}${plotId ? `&plot_id=${plotId}` : ""}`,
-      { revalidateSec: WEATHER_REVALIDATE_SEC },
+      {
+        revalidateSec: WEATHER_REVALIDATE_SEC,
+        timeoutMs: FORECAST_TIMEOUT_MS,
+      },
     );
     // ⚠️ 여기서 모양을 맞추는 이유는 `normalizePlotForecast` 에 적어 두었다.
     //    요약하면: 두 서비스가 따로 배포되므로 **옛 응답이 올 수 있고**, 그때

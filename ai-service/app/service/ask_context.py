@@ -85,11 +85,19 @@ def _current_stage(
     """파종일부터 오늘까지 GDD 를 누적해 지금 걸린 생육단계를 찾는다.
 
     파종일을 모르면 None 이다 — 언제부터 쌓을지가 없으면 누적이 성립하지 않는다.
-    그 품종의 단계표(crop_stages)가 비어 있을 때도 마찬가지다.
+    그 품종의 단계표(crop_stages)가 비어 있거나 작물의 base_temp 가 비어 있을 때도
+    마찬가지다.
+
+    작물의 기준온도(base_temp)가 비어 있을 때도 None 이다 — GDD 는 기준온도 없이
+    정의되지 않는다.
 
     누적값은 저장하지 않고 매번 관측에서 다시 쌓는다(웹의 gdd.ts 와 같은 방침).
     """
     if cultivation.sowing_date is None:
+        return None
+    # `base_temp` 가 없으면 적산을 시작할 기준이 없다. 지역 지도용 기본값(`BASE_TEMP_C`)을
+    # 끌어 쓰면 작물별 값인 척하는 틀린 숫자가 된다 — 근거가 없으면 판정하지 않는다.
+    if crop.base_temp is None:
         return None
 
     obs = (

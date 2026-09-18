@@ -68,6 +68,24 @@ export default async function Page({
   const { error, saved } = await searchParams;
   const crops = await listCropOptions();
 
+  // 접힌 채로도, 그대로도 쓰는 폼이라 한 번만 적는다. 두 벌로 두면 한쪽만
+  // 고쳐져 빈 밭과 그렇지 않은 밭의 입력이 갈린다.
+  const addCropForm = (
+    <form
+      action={addCultivations}
+      className="mt-3 flex flex-col gap-4 rounded-lg bg-surface-2 p-4"
+    >
+      <input name="plotId" type="hidden" value={plot.id} />
+      <CropCards crops={crops} maxSowingDate={today} />
+      <div>
+        {/* 연타하면 같은 작물이 그만큼 더 생긴다 — `SubmitButton` 참고. */}
+        <SubmitButton pendingKo="추가하는 중" size="sm">
+          추가
+        </SubmitButton>
+      </div>
+    </form>
+  );
+
   return (
     <main className="mx-auto flex max-w-2xl flex-col gap-6 px-6 py-6 sm:py-8">
       <SectionHeading
@@ -108,24 +126,20 @@ export default async function Page({
 
       {/* 등록 화면과 같은 `CropCards`·`addCultivations` 조합이다 — 이미 심어 둔
           작물이 있어도 밭을 새로 만들지 않고 나중에 더할 수 있어야 한다. */}
-      <details className="[&_summary]:list-none">
-        <summary className="inline-flex w-fit cursor-pointer items-center rounded-md px-3 py-1.5 font-medium text-fg-muted text-sm transition-colors duration-200 ease-out-expo hover:bg-surface-2 hover:text-fg">
-          작물 추가
-        </summary>
-        <form
-          action={addCultivations}
-          className="mt-3 flex flex-col gap-4 rounded-lg bg-surface-2 p-4"
-        >
-          <input name="plotId" type="hidden" value={plot.id} />
-          <CropCards crops={crops} maxSowingDate={today} />
-          <div>
-            {/* 연타하면 같은 작물이 그만큼 더 생긴다 — `SubmitButton` 참고. */}
-            <SubmitButton pendingKo="추가하는 중" size="sm">
-              추가
-            </SubmitButton>
-          </div>
-        </form>
-      </details>
+      {/* 심은 작물이 없으면 접는 버튼 없이 폼만 내놓는다. 빈 밭에서 할 일은
+          하나뿐이라 화면에 보이는 것도 하나여야 한다 — 위의 안내(`CultivationList`)가
+          버튼을 달지 않는 것도 같은 이유다. 반대로 작물이 있을 때 펴 두면 카드가
+          아래로 밀리므로 그때는 접는다. */}
+      {cards.length === 0 ? (
+        addCropForm
+      ) : (
+        <details className="[&_summary]:list-none">
+          <summary className="inline-flex w-fit cursor-pointer items-center rounded-md px-3 py-1.5 font-medium text-fg-muted text-sm transition-colors duration-200 ease-out-expo hover:bg-surface-2 hover:text-fg">
+            작물 추가
+          </summary>
+          {addCropForm}
+        </details>
+      )}
     </main>
   );
 }

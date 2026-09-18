@@ -35,7 +35,10 @@ function toChartPoints(
   key: "ndvi" | "ndmi",
 ) {
   // 서버는 "YYYY-MM-DD"를 준다. 차트는 "MM-DD"만 안다(연도를 넘는 구간을 다루지 않는다).
-  return points.map((point) => ({ date: point.date.slice(5), value: point[key] }));
+  return points.map((point) => ({
+    date: point.date.slice(5),
+    value: point[key],
+  }));
 }
 
 export function SatellitePanel({
@@ -54,7 +57,11 @@ export function SatellitePanel({
             domain={domainOf(points, "ndvi")}
             height={140}
             series={[
-              { nameKo: "NDVI", tone: "accent", points: toChartPoints(points, "ndvi") },
+              {
+                nameKo: "NDVI",
+                tone: "accent",
+                points: toChartPoints(points, "ndvi"),
+              },
             ]}
             summary={SUMMARY}
             tickStep={0.1}
@@ -68,7 +75,11 @@ export function SatellitePanel({
             domain={domainOf(points, "ndmi")}
             height={140}
             series={[
-              { nameKo: "NDMI", tone: "telemetry", points: toChartPoints(points, "ndmi") },
+              {
+                nameKo: "NDMI",
+                tone: "telemetry",
+                points: toChartPoints(points, "ndmi"),
+              },
             ]}
             summary={SUMMARY}
             tickStep={0.1}

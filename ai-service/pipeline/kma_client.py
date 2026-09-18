@@ -138,8 +138,18 @@ def normalize_weather_daily(rows):
     return out
 
 
+# 평년값 기준연도 → normals.source. 기준이 다른 값을 같은 이름으로 담으면 "평년보다 몇 도"
+# 계산이 지역마다 다른 잣대를 쓰게 된다 — 실측상 두 기준의 연평균 차이가 +0.3℃ 다.
+# 관측소 이전으로 1991~2020 이 끊긴 곳(143 대구·146 전주)만 옛 기준을 쓴다.
+NORMAL_SOURCE_BY_TMST = {2021: "kma", 2011: "kma-1981"}
+
+
 def fetch_normals(api_key, stn, tmst=2021, norm="D", mm1=1, dd1=1, mm2=12, dd2=31):
-    """지상관측 평년값(1991~2020, tmst=2021). DOMAIN_REF §2."""
+    """지상관측 평년값. tmst=2021 은 1991~2020, tmst=2011 은 1981~2010. DOMAIN_REF §2.
+
+    ⚠ ASOS 라고 다 있는 것은 아니다. 공항·레이더·도서·신설 관측소는 result=ok 에 data=[] 로
+    답한다(2026-09-18 실측: ASOS 121개 중 37개). pipeline/region/asos.py docstring 참고.
+    """
     resp = _get(
         f"{TYP01_URL}/arcltr_sfc_norm.php",
         {
