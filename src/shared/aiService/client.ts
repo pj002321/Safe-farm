@@ -110,6 +110,11 @@ export interface AskInput {
   plotId?: string | null;
 }
 
+/** 사진 진단 결과. 저장하지 않는 일회성 호출이라 history_id 가 없다. */
+export interface DiagnoseImageResult {
+  diagnosis: string;
+}
+
 /** 시군구 경계 + 가장 최근 관측된 일 강수량·색상. `/map` 강수 레이어가 그대로 그린다. */
 export interface SigunguRainFeatureCollection {
   type: "FeatureCollection";
@@ -478,6 +483,9 @@ const ASK_TIMEOUT_MS = 60_000;
 /** 리포트 한 건의 한계. 안에서 GDD 계산 + Open-Meteo 조회 + 비스트리밍 LLM 호출이 순차로 돈다. */
 const REPORT_TIMEOUT_MS = 30_000;
 
+/** 사진 진단 한 건의 한계. vision 호출은 텍스트만 보낼 때보다 오래 걸린다. */
+const DIAGNOSE_TIMEOUT_MS = 30_000;
+
 export const aiService = {
   /** 서비스가 살아 있는지, 무엇을 할 수 있는지. */
   status: () => call<AiServiceStatus>("/v1/status"),
@@ -526,6 +534,17 @@ export const aiService = {
         user_id: userId,
         plot_id: input.plotId ?? null,
       }),
+    }),
+
+  /**
+   * 작물 사진 한 장을 즉석에서 진단한다. 저장하지 않는 일회성 호출이라
+   * `userId` 를 넘기지 않는다 — 이력도, 일일 한도도 없다(ai-service `api/diagnose.py`).
+   */
+  diagnoseImage: (imageDataUrl: string, question: string | null) =>
+    call<DiagnoseImageResult>("/v1/diagnose/image", {
+      method: "POST",
+      body: JSON.stringify({ image_data_url: imageDataUrl, question }),
+      timeoutMs: DIAGNOSE_TIMEOUT_MS,
     }),
 
   /** 답변 하나에 up/down 평가와 사유를 남긴다. */
