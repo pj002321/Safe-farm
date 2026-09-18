@@ -33,6 +33,18 @@ export interface InspectablePlot {
   }[];
 }
 
+/**
+ * 밭 하나가 판정에 걸린 이유. `null` 이면 걸린 것이 없다.
+ *
+ * ⚠️ 여기 없는 이유도 있다 — 관측 자료 부족, 작물 마스터의 기준온도 결손 등은
+ *    **사용자가 손댈 수 없어서** 화면에 올리지 않는다. 그런 건 배치 로그가
+ *    맡는다(ai-service `plot_tasks._skip`). 사용자에게는 자기가 고칠 수 있는
+ *    것만 말한다.
+ */
+export type PlotTaskBlocker =
+  | { kind: "no-cultivation"; plotId: string; plotKo: string }
+  | { kind: "no-sowing-date"; plotId: string; plotKo: string };
+
 export type EmptyTaskReason =
   /** 밭은 있는데 기르는 작물이 없다. 사용자가 고칠 수 있다. */
   | { kind: "no-cultivation"; plotId: string; plotKo: string }
@@ -57,31 +69,34 @@ function nameOf(plot: InspectablePlot): string {
  * 목록을 늘어놓으면 무엇부터 해야 할지 오히려 흐려진다. 고치기 쉬운 순서로
  * 고른다: 작물 등록 → 파종일 입력.
  */
+export function plotTaskBlocker(plot: InspectablePlot): PlotTaskBlocker | null {
+  const rows = growing(plot);
+
+  if (rows.length === 0) {
+    return { kind: "no-cultivation", plotId: plot.id, plotKo: nameOf(plot) };
+  }
+  if (rows.some((c) => c.sowingDate === null)) {
+    return { kind: "no-sowing-date", plotId: plot.id, plotKo: nameOf(plot) };
+  }
+  return null;
+}
+
 export function emptyTaskReason(
   plots: readonly InspectablePlot[],
 ): EmptyTaskReason {
   // 밭이 없으면 여기까지 오지 않는다(홈이 온보딩으로 보낸다). 방어적으로 둔다.
   if (plots.length === 0) return { kind: "nothing-to-do" };
 
-  const withoutCultivation = plots.find((plot) => growing(plot).length === 0);
-  if (withoutCultivation) {
-    return {
-      kind: "no-cultivation",
-      plotId: withoutCultivation.id,
-      plotKo: nameOf(withoutCultivation),
-    };
-  }
+  // 밭 단위 판정을 그대로 쓴다. 규칙을 두 벌로 두면 홈 전체 문구와 밭 섹션
+  // 문구가 어느 날 서로 다른 말을 한다.
+  const blockers = plots
+    .map(plotTaskBlocker)
+    .filter((b): b is PlotTaskBlocker => b !== null);
 
-  const withoutSowingDate = plots.find((plot) =>
-    growing(plot).some((c) => c.sowingDate === null),
-  );
-  if (withoutSowingDate) {
-    return {
-      kind: "no-sowing-date",
-      plotId: withoutSowingDate.id,
-      plotKo: nameOf(withoutSowingDate),
-    };
-  }
+  // 고치기 쉬운 순서로 하나만 고른다 — 작물 등록이 파종일보다 먼저.
+  const first =
+    blockers.find((b) => b.kind === "no-cultivation") ?? blockers[0];
+  if (first) return first;
 
   // 여기까지 왔으면 화면이 아는 범위에서는 빠진 게 없다. 그래도 카드가 없다면
   // 관측 자료·작물 마스터 쪽이고, 그건 사용자가 손댈 수 없다 —

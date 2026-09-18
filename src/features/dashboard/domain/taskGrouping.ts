@@ -20,6 +20,11 @@
  */
 
 import {
+  type InspectablePlot,
+  type PlotTaskBlocker,
+  plotTaskBlocker,
+} from "./emptyTaskReason";
+import {
   type Priority,
   sortByPriority,
   type TaskCardData,
@@ -33,13 +38,22 @@ export interface PlotTaskGroup {
   open: TaskCardData[];
   /** 오늘 끝낸 일. 완료 순서(최근이 아래). */
   done: TaskCardData[];
+  /**
+   * 이 밭이 판정에 걸린 이유. 없으면 `null`.
+   *
+   * 카드가 없는 밭에 "할 일 없음"만 띄우면, 파종일을 안 넣어 판정을 못 한
+   * 것인지 정말 할 일이 없는 것인지 구분이 안 된다. 밭마다 그 자리에서 말한다.
+   */
+  blocker: PlotTaskBlocker | null;
 }
 
-/** 묶기에 필요한 최소 모양. `PlotCard` 가 이걸 만족한다. */
-export interface GroupablePlot {
-  id: string;
-  nameKo: string | null;
-}
+/**
+ * 묶기에 필요한 최소 모양. `PlotCard` 가 이걸 만족한다.
+ *
+ * 재배 목록까지 받는 이유: 카드가 없는 밭이 **왜** 없는지를 같이 내야 하고,
+ * 그 판단에 재배 상태와 파종일이 필요하다.
+ */
+export type GroupablePlot = InspectablePlot;
 
 /** 수확 여부 판단에 필요한 최소 모양. `PlotCard` 가 이걸 만족한다. */
 export interface HarvestablePlot {
@@ -80,6 +94,7 @@ export function groupTasksByPlot(
         plotKo: plot.nameKo?.trim() || "이름 없는 밭",
         open: [],
         done: [],
+        blocker: plotTaskBlocker(plot),
       },
     ]),
   );

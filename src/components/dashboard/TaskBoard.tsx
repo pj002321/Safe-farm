@@ -1,7 +1,14 @@
 import Link from "next/link";
-import { ArrowUpRightIcon, CheckIcon } from "@/components/icons";
+import {
+  AlertTriangleIcon,
+  ArrowUpRightIcon,
+  CheckIcon,
+} from "@/components/icons";
 import { Badge } from "@/components/shared/Badge";
-import type { EmptyTaskReason } from "@/features/dashboard/domain/emptyTaskReason";
+import type {
+  EmptyTaskReason,
+  PlotTaskBlocker,
+} from "@/features/dashboard/domain/emptyTaskReason";
 import type { PlotTaskGroup } from "@/features/dashboard/domain/taskGrouping";
 import type {
   Priority,
@@ -115,7 +122,9 @@ function PlotSection({
         </Link>
         <span className="font-mono text-[0.68rem] text-fg-subtle">
           {quiet
-            ? "할 일 없음"
+            ? group.blocker
+              ? "판정 못 함"
+              : "할 일 없음"
             : [
                 group.open.length > 0 ? `할 일 ${group.open.length}` : null,
                 group.done.length > 0 ? `완료 ${group.done.length}` : null,
@@ -124,6 +133,12 @@ function PlotSection({
                 .join(" · ")}
         </span>
       </div>
+
+      {/* 카드가 없는 밭. 왜 없는지에 따라 말이 달라진다 — 판정이 막힌 밭에
+          "할 일 없음"만 띄우면 사용자는 확인이 끝난 줄 알고 기다린다. */}
+      {quiet && group.blocker ? (
+        <PlotBlockerNotice blocker={group.blocker} />
+      ) : null}
 
       {quiet ? null : (
         <div className="flex flex-col gap-2.5">
@@ -144,6 +159,35 @@ function PlotSection({
         </div>
       )}
     </section>
+  );
+}
+
+/**
+ * 밭 하나가 판정에 걸렸을 때의 안내.
+ *
+ * 홈 전체 빈 상태(`EmptyTasks`)와 문구 축이 같다. 다른 점은 **자리**다 —
+ * 밭이 여럿이면 어느 밭이 막혔는지 그 줄에서 바로 보여야 한다.
+ * 한 줄로 눕히는 이유: 밭마다 카드만 한 안내가 붙으면 정작 할 일이 있는 밭이
+ * 아래로 밀린다.
+ */
+function PlotBlockerNotice({ blocker }: { blocker: PlotTaskBlocker }) {
+  const isNoCultivation = blocker.kind === "no-cultivation";
+
+  return (
+    <p className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md border border-caution/25 bg-caution/8 px-3 py-2 text-[0.8rem] text-fg-muted">
+      <AlertTriangleIcon className="size-3.5 shrink-0 text-caution" />
+      <span className="min-w-0 flex-1">
+        {isNoCultivation
+          ? "기르는 작물이 없어 판정하지 못했습니다."
+          : "파종일이 없어 생육 단계를 세지 못했습니다."}
+      </span>
+      <Link
+        className="font-medium text-accent hover:underline underline-offset-2"
+        href={`/plots/${blocker.plotId}`}
+      >
+        {isNoCultivation ? "작물 등록" : "파종일 입력"} →
+      </Link>
+    </p>
   );
 }
 
