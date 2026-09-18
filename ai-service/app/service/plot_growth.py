@@ -118,9 +118,10 @@ def _crop_for_cultivation(db: Session, cultivation: Cultivation) -> Crop | None:
        터지면서 **자정 배치 전체가 죽었다** — 밭 하나의 데이터 결손이 모든
        사용자의 할 일을 막았다.
 
-       0 이나 추정값으로 메우지 않는다. 그러면 틀린 생육단계가 나오고, 그 위에서
-       만들어진 물·비료 카드는 근거가 거짓이 된다. "근거를 못 만들면 카드를
-       만들지 않는다"는 스펙 규칙대로 판정을 보류한다.
+       0 이나 추정값으로 메우지 않는다. 지역 지도용 기본값(`BASE_TEMP_C`)을 끌어
+       쓰면 작물별 값인 척하는 틀린 숫자가 되고, 그 위에서 나온 생육단계와 물·비료
+       카드는 근거가 거짓이 된다. "근거를 못 만들면 카드를 만들지 않는다"는 스펙
+       규칙대로 판정을 보류한다.
     """
     variant = db.query(CropVariant).filter(CropVariant.variant_id == cultivation.variant_id).first()
     if variant is None:
@@ -142,10 +143,6 @@ def daily_gdd_series(
         return None
     crop = _crop_for_cultivation(db, cultivation)
     if crop is None:
-        return None
-    # `base_temp` 가 없으면 적산을 시작할 기준이 없다. 지역 지도용 기본값(`BASE_TEMP_C`)을
-    # 끌어 쓰면 작물별 값인 척하는 틀린 숫자가 된다 — 근거가 없으면 판정하지 않는다.
-    if crop.base_temp is None:
         return None
 
     since = max(cultivation.sowing_date, date.today() - timedelta(days=days))
@@ -183,10 +180,6 @@ def crop_interpretation(db: Session, plot: Plot, station: Station) -> dict | Non
     crop = _crop_for_cultivation(db, cultivation)
     if crop is None:
         return None
-    # `base_temp` 가 없으면 적산을 시작할 기준이 없다. 지역 지도용 기본값(`BASE_TEMP_C`)을
-    # 끌어 쓰면 작물별 값인 척하는 틀린 숫자가 된다 — 근거가 없으면 판정하지 않는다.
-    if crop.base_temp is None:
-        return None
     growth = compute_plot_growth(db, plot, station)
     return {
         "crop_name_ko": crop.name,
@@ -206,10 +199,6 @@ def compute_plot_growth(db: Session, plot: Plot, station: Station) -> PlotGrowth
 
     crop = _crop_for_cultivation(db, cultivation)
     if crop is None:
-        return None
-    # `base_temp` 가 없으면 적산을 시작할 기준이 없다. 지역 지도용 기본값(`BASE_TEMP_C`)을
-    # 끌어 쓰면 작물별 값인 척하는 틀린 숫자가 된다 — 근거가 없으면 판정하지 않는다.
-    if crop.base_temp is None:
         return None
 
     obs = (

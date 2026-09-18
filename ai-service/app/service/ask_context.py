@@ -100,13 +100,6 @@ def _current_stage(
     if crop.base_temp is None:
         return None
 
-    # ⚠️ crops.base_temp 는 nullable 이다(crop_variant.py 주석, 2026-09-17).
-    #    이 검사가 없으면 아래 float(crop.base_temp) 가 그대로 터진다. 같은 결손이
-    #    자정 배치를 통째로 죽인 적이 있다(plot_growth._crop_for_cultivation 주석).
-    #    여기는 그 경로를 안 타고 자체 join 으로 crop 을 가져오므로 따로 막는다.
-    if crop.base_temp is None:
-        return None
-
     obs = (
         db.query(WeatherObsDaily)
         .filter(
