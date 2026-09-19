@@ -21,12 +21,15 @@ from sqlalchemy.orm import Session
 
 from app.domain.ask_topics import topics_in
 from app.domain.gdd import past_target
+from app.domain.kst import kst_today
 from app.domain.vegetation_text import summarize_points, vegetation_lines
 from app.models.farm import Plot
+from app.service import forecast_cache
 from app.service.disaster_notes import prevention_notes_for
 from app.service.pest_notes import pest_names_for
 from app.service.plot_growth import PlotGrowth, compute_plot_growth, nearest_station
 from app.service.satellite_cache import READ_DAYS, stored_observations
+from pipeline.open_meteo_client import daily_index_of, normalize_daily_forecast
 
 
 def _satellite_line(db: Session, plot: Plot, growth: PlotGrowth) -> str | None:
@@ -52,6 +55,31 @@ def _satellite_line(db: Session, plot: Plot, growth: PlotGrowth) -> str | None:
         return None
     본날 = points[-1]["date"] if points else None
     return f"위성이 본 것({본날} 관측): {' '.join(말)}"
+
+
+def _rain_forecast_line(plot: Plot) -> str | None:
+    """앞으로 며칠 강수확률 한 줄. 예보를 못 받으면 None.
+
+    ⚠ **캐시(`forecast_cache`)를 지난다.** 리포트·날씨 탭과 같은 경로라, 여기서
+      Open-Meteo 를 직접 부르면 같은 좌표를 1시간 안에 또 묻는 낭비가 생긴다.
+    """
+    try:
+        payload = forecast_cache.forecast(float(plot.latitude), float(plot.longitude))
+        daily = payload["daily"]
+        오늘부터 = daily_index_of(daily, kst_today().isoformat())
+        if 오늘부터 is None:
+            return None
+        내일부터 = normalize_daily_forecast(daily)[오늘부터 + 1 : 오늘부터 + 7]
+    except Exception:  # noqa: BLE001 — 예보 실패가 답변 전체를 막지 않는다
+        logging.warning("[ask] 강수확률 조회 실패", exc_info=True)
+        return None
+
+    날들 = [d for d in 내일부터 if d["rain_chance"] is not None]
+    if not 날들:
+        return None
+    return "앞으로 강수확률(기상청 예보): " + " · ".join(
+        f"{d['date'][5:]} {d['rain_chance']}%" for d in 날들
+    )
 
 
 def extra_context_lines(
@@ -81,6 +109,11 @@ def extra_context_lines(
 
         if "satellite" in 갈래:
             줄 = _satellite_line(db, plot, growth)
+            if 줄:
+                lines.append(줄)
+
+        if "rain" in 갈래:
+            줄 = _rain_forecast_line(plot)
             if 줄:
                 lines.append(줄)
 

@@ -12,6 +12,7 @@ import {
   Legend,
   LiveIndicator,
   RegionInfo,
+  TyphoonBanner,
   WarnSummary,
 } from "./SigunguLegend";
 import {
@@ -24,6 +25,7 @@ import {
 } from "./sigunguLayers";
 import { usePlotMarkers } from "./usePlotMarkers";
 import { useSigunguLayer, useSigunguPolygons } from "./useSigunguLayer";
+import { useTyphoonLayer, useTyphoonTrack } from "./useTyphoonLayer";
 import { useWindArrows } from "./useWindArrows";
 
 /**
@@ -73,6 +75,7 @@ export function MapWorkspace({ points }: MapWorkspaceProps) {
   const [skyview, setSkyview] = useState(false);
 
   const { current, warn, retry } = useSigunguLayer(layer);
+  const { track } = useTyphoonTrack();
 
   /** 내 밭이 보이도록 맞춘다. 첫 진입과 "내 밭" 버튼이 같은 함수를 쓴다. */
   const focusPlots = useCallback(
@@ -153,6 +156,7 @@ export function MapWorkspace({ points }: MapWorkspaceProps) {
     onSelect: setSelectedCode,
   });
   useWindArrows({ map, layer, data: current });
+  useTyphoonLayer(map, track, { cone: true, wind: true });
 
   /**
    * 실패는 **둘**이다. 예전에는 레이어 데이터 실패만 봤다.
@@ -184,6 +188,7 @@ export function MapWorkspace({ points }: MapWorkspaceProps) {
         <LiveIndicator />
       </div>
 
+      {track && <TyphoonBanner track={track} />}
       {warn && <WarnSummary data={warn} />}
 
       {/*

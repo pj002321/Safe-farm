@@ -8,7 +8,10 @@ import {
   WindIcon,
 } from "@/components/icons";
 import { Badge } from "@/components/shared/Badge";
-import type { SigunguWarnFeatureCollection } from "@/shared/aiService/client";
+import type {
+  SigunguWarnFeatureCollection,
+  TyphoonTrack,
+} from "@/shared/aiService/client";
 import {
   GDD_DEFAULT_COLOR,
   type GddProperties,
@@ -90,6 +93,26 @@ export function WarnSummary({ data }: { data: SigunguWarnFeatureCollection }) {
           </Badge>
         );
       })}
+    </div>
+  );
+}
+
+/**
+ * 진행 중인 태풍이 있을 때만 보이는 줄. 없는 날(대부분)이 기본값이라, `WarnSummary`
+ * 처럼 "없다"를 굳이 말하지 않는다 — 지도 위 선·원이 이미 그 뜻이다.
+ */
+export function TyphoonBanner({ track }: { track: TyphoonTrack }) {
+  if (track.analysis.length === 0 && track.forecast.length === 0) return null;
+
+  const latest = track.forecast.at(-1) ?? track.analysis.at(-1);
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <Badge icon={<TyphoonIcon className="size-3.5" />} tone="unsuitable">
+        제{track.typhoonNo}호 태풍 진행 중
+      </Badge>
+      {latest && (
+        <span className="text-fg-muted text-sm">{latest.locationKo}</span>
+      )}
     </div>
   );
 }

@@ -23,6 +23,11 @@ def test_벌레를_물으면_병해충이_붙는다():
         assert "pest" in topics_in(질문), 질문
 
 
+def test_비_예보를_물으면_rain이_붙는다():
+    for 질문 in ("비가 언제쯤 올까요", "이번 주 비 올까요", "강수확률이 어떻게 되나요"):
+        assert "rain" in topics_in(질문), 질문
+
+
 def test_재해를_물으면_대비가_붙는다():
     for 질문 in ("태풍 오면 뭘 해야 하나요", "서리 내리면 어쩌죠", "가뭄이 걱정돼요"):
         assert "disaster" in topics_in(질문), 질문

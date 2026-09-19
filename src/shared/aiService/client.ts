@@ -155,6 +155,28 @@ export interface SigunguWindFeatureCollection {
   }>;
 }
 
+/** 태풍 경로 위 점 하나. `ft` 로 지나온 길(0)과 예보(1)를 가른다. */
+export interface TyphoonPoint {
+  ft: 0 | 1;
+  atUtc: string;
+  lat: number;
+  lon: number;
+  pressureHpa: number | null;
+  windMs: number | null;
+  /** 15m/s 강풍반경(km). 없으면 결측 — 지도가 fallback 값을 쓴다. */
+  rad15Km: number | null;
+  /** 70% 이상 예상확률반경(km, 예보원). 예측 점에만 값이 있다. */
+  forecastRadiusKm: number | null;
+  locationKo: string;
+}
+
+/** 태풍 경로. 태풍이 없으면 analysis·forecast 가 빈 배열이다(오류 아님). */
+export interface TyphoonTrack {
+  typhoonNo: string | null;
+  analysis: TyphoonPoint[];
+  forecast: TyphoonPoint[];
+}
+
 /** 밭 좌표 기준 실황·시간별·7일 예보. `/weather` 탭이 그린다. */
 export interface PlotForecast {
   /**
@@ -583,6 +605,14 @@ export const aiService = {
   /** 시군구 250개 폴리곤 + 최근 관측 최대풍속. */
   sigunguWind: () =>
     call<SigunguWindFeatureCollection>("/v1/map/sigungu-wind", {
+      timeoutMs: 15_000,
+    }),
+  /** 진행 중인 태풍의 분석·예측 경로. 없으면 analysis·forecast 가 빈 배열이다. */
+  typhoonTrack: () =>
+    call<TyphoonTrack>("/v1/typhoon/track", {
+      // 기상청 발표가 하루 4번(04·10·16·22시 + 수시)이다. sigungu-warn 처럼
+      // 매번 받을 이유가 없다 — 1시간 캐시로 같은 응답을 스무 번 받지 않는다.
+      revalidateSec: 60 * 60,
       timeoutMs: 15_000,
     }),
   /**

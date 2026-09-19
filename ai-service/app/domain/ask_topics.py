@@ -56,6 +56,19 @@ _TOPIC_WORDS: dict[str, tuple[str, ...]] = {
         "반점",
         "무름",
     ),
+    # 향후 강수확률 — "언제쯤 비 올까요"
+    "rain": (
+        "비가",
+        "비는",
+        "비 올",
+        "비올까",
+        "비 언제",
+        "언제 비",
+        "강수",
+        "소나기",
+        "장마",
+        "우천",
+    ),
     # 재해 대비 — 미리 해 둘 것
     "disaster": (
         "태풍",
@@ -92,7 +105,7 @@ def topics_in(question: str | None) -> frozenset[str]:
     question: 사용자가 친 질문. None·빈 글이면 빈 집합<br>
 
     # returns
-    `'satellite'`·`'pest'`·`'disaster'` 중 걸린 것들. 한 질문이 여럿에 걸릴 수 있다
+    `'satellite'`·`'pest'`·`'rain'`·`'disaster'` 중 걸린 것들. 한 질문이 여럿에 걸릴 수 있다
 
     # examples
         topics_in("요즘 벌레가 많아요")   -> frozenset({'pest'})

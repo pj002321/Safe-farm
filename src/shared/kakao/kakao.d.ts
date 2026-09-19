@@ -132,6 +132,38 @@ declare namespace kakao.maps {
     setOptions(options: Partial<PolygonOptions>): void;
   }
 
+  interface PolylineOptions {
+    path: LatLng[];
+    strokeWeight?: number;
+    strokeColor?: string;
+    strokeOpacity?: number;
+    /** 선 모양. "solid"(실선)·"shortdash"(점선) 등 — 지나온 길/예보를 가르는 데 쓴다. */
+    strokeStyle?: string;
+  }
+
+  /** 이어진 선. 태풍 경로처럼 순서가 있는 좌표열을 그릴 때 쓴다(면을 채우지 않는다). */
+  class Polyline {
+    constructor(options: PolylineOptions);
+    setMap(map: Map | null): void;
+  }
+
+  interface CircleOptions {
+    center: LatLng;
+    /** 반경. **단위는 미터다** — km 값을 그대로 넣으면 안 된다. */
+    radius: number;
+    strokeWeight?: number;
+    strokeColor?: string;
+    strokeOpacity?: number;
+    fillColor?: string;
+    fillOpacity?: number;
+  }
+
+  /** 반경 원. 태풍 예보원·강풍반경처럼 "이 안 어딘가"를 나타낼 때 쓴다. */
+  class Circle {
+    constructor(options: CircleOptions);
+    setMap(map: Map | null): void;
+  }
+
   /** 지도 클릭 시 핸들러가 받는 값. 우리가 쓰는 건 좌표 하나뿐이다. */
   interface MouseEvent {
     latLng: LatLng;

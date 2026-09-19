@@ -112,6 +112,27 @@
       "problemMatcher": []
     },
     {
+      // 옛 uvicorn 이 재시작 없이 8000 을 물고 있으면 새로 띄운 서버가 아니라
+      // 그 옛 프로세스가 계속 응답한다 — "서버 실행" 전에 늘 먼저 비운다.
+      "label": "ai-service: 포트 정리",
+      "detail": "8000 포트를 점유 중인 프로세스를 강제 종료한다",
+      "type": "shell",
+      "command": {
+        "value": "${workspaceFolder}/ai-service/.venv/bin/python",
+        "quoting": "strong"
+      },
+      "windows": {
+        "command": {
+          "value": "${workspaceFolder}/ai-service/.venv/Scripts/python.exe",
+          "quoting": "strong"
+        }
+      },
+      "args": ["scripts/free_port.py", "8000"],
+      "options": { "cwd": "${workspaceFolder}/ai-service" },
+      "presentation": { "clear": true },
+      "problemMatcher": []
+    },
+    {
       "label": "ai-service: 서버 실행",
       "detail": "uvicorn --reload 로 개발 서버 기동 (localhost:8000)",
       "type": "shell",
@@ -127,6 +148,8 @@
       },
       "args": ["-m", "uvicorn", "app.main:app", "--reload"],
       "options": { "cwd": "${workspaceFolder}/ai-service" },
+      "dependsOn": ["ai-service: 포트 정리"],
+      "dependsOrder": "sequence",
       "isBackground": true,
       "presentation": { "clear": true },
       "problemMatcher": []

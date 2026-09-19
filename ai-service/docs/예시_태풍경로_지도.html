@@ -1,0 +1,700 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>태풍 경로 지도 — typ_now.php</title>
+<style>
+  :root{
+    --slate-0:#fff; --slate-50:#f8f8fb; --slate-100:#f0f0f6; --slate-200:#e4e4ee; --slate-300:#cdcdde;
+    --slate-400:#9998b3; --slate-500:#6a6986; --slate-700:#383749; --slate-800:#24232f; --slate-850:#2b2a38;
+    --slate-900:#16161e; --slate-950:#0b0a12;
+    --orbit-50:#f0efff; --orbit-300:#a79dff; --orbit-500:#6b55f5; --orbit-600:#5a41e0; --orbit-950:#1c1840;
+    --bg:var(--slate-50); --surface:var(--slate-0); --surface-2:var(--slate-100);
+    --border-c:var(--slate-200); --border-strong:var(--slate-300);
+    --fg:var(--slate-900); --fg-muted:var(--slate-500); --fg-subtle:var(--slate-400);
+    --accent:var(--orbit-600); --accent-subtle:var(--orbit-50); --accent-on:#fff;
+    --sea:#eef2fb; --land:#e8e8f1; --analysis:#5a41e0; --forecast:#d9480f; --cone:#f08c00; --plot:#2f9e44;
+    --mono:ui-monospace,SFMono-Regular,"Cascadia Mono",Consolas,"D2Coding",monospace;
+  }
+  :root:not([data-theme="light"]){ @media (prefers-color-scheme: dark){
+    --bg:var(--slate-950); --surface:var(--slate-900); --surface-2:var(--slate-800);
+    --border-c:var(--slate-850); --border-strong:var(--slate-700);
+    --fg:var(--slate-100); --fg-muted:var(--slate-400); --fg-subtle:var(--slate-500);
+    --accent:var(--orbit-300); --accent-subtle:var(--orbit-950); --accent-on:var(--slate-950);
+    --sea:#141828; --land:#252436; --analysis:#a79dff; --forecast:#ff922b; --cone:#ffc078; --plot:#69db7c;
+  }}
+  @media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+    --bg:var(--slate-950); --surface:var(--slate-900); --surface-2:var(--slate-800);
+    --border-c:var(--slate-850); --border-strong:var(--slate-700);
+    --fg:var(--slate-100); --fg-muted:var(--slate-400); --fg-subtle:var(--slate-500);
+    --accent:var(--orbit-300); --accent-subtle:var(--orbit-950); --accent-on:var(--slate-950);
+    --sea:#141828; --land:#252436; --analysis:#a79dff; --forecast:#ff922b; --cone:#ffc078; --plot:#69db7c;
+  }}
+  *{box-sizing:border-box}
+  body{background:var(--bg);color:var(--fg);font:15px/1.7 -apple-system,BlinkMacSystemFont,"Pretendard","Malgun Gothic",sans-serif;margin:0}
+  .wrap{max-width:1080px;margin:0 auto;padding:40px 22px 80px}
+  h1{font-size:30px;line-height:1.3;margin:0 0 10px;letter-spacing:-.02em}
+  h2{font-size:21px;margin:56px 0 14px;padding-top:18px;border-top:1px solid var(--border-c);letter-spacing:-.01em}
+  h3{font-size:16px;margin:26px 0 8px;color:var(--fg)}
+  p{margin:10px 0}
+  .lede{color:var(--fg-muted);font-size:15px;margin:0 0 6px}
+  .oneline{background:var(--accent-subtle);border:1px solid var(--border-c);border-left:3px solid var(--accent);
+           border-radius:10px;padding:14px 18px;margin:22px 0}
+  .oneline b{color:var(--accent)}
+  code{font-family:var(--mono);font-size:.88em;background:var(--surface-2);padding:1px 5px;border-radius:4px}
+  table{width:100%;border-collapse:collapse;margin:14px 0;font-size:13.5px;display:block;overflow-x:auto}
+  th,td{border:1px solid var(--border-c);padding:7px 10px;text-align:left;vertical-align:top}
+  th{background:var(--surface-2);font-weight:600;white-space:nowrap}
+  td code{background:transparent;padding:0;color:var(--accent)}
+  tr.hl td{background:var(--accent-subtle)}
+  .muted{color:var(--fg-muted)}
+  .card{background:var(--surface);border:1px solid var(--border-c);border-radius:14px;padding:18px;margin:18px 0}
+  /* 지도 */
+  .mapbox{background:var(--surface);border:1px solid var(--border-c);border-radius:14px;overflow:hidden;margin:18px 0}
+  .controls{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:12px 14px;border-bottom:1px solid var(--border-c);background:var(--surface-2)}
+  .chip{border:1px solid var(--border-strong);background:var(--surface);color:var(--fg);border-radius:999px;
+        padding:5px 13px;font-size:13px;cursor:pointer;font-family:inherit}
+  .chip[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--accent-on)}
+  .sep{width:1px;height:20px;background:var(--border-strong);margin:0 4px}
+  .maparea{position:relative;background:var(--sea)}
+  svg.map{display:block;width:100%;height:auto}
+  .legend{display:flex;flex-wrap:wrap;gap:16px;padding:11px 14px;border-top:1px solid var(--border-c);
+          background:var(--surface-2);font-size:12.5px;color:var(--fg-muted)}
+  .legend i{display:inline-block;width:22px;height:0;border-top-width:3px;vertical-align:middle;margin-right:6px}
+  .tip{position:absolute;pointer-events:none;background:var(--surface);border:1px solid var(--border-strong);
+       border-radius:9px;padding:9px 11px;font-size:12.5px;line-height:1.55;box-shadow:0 6px 20px rgba(0,0,0,.14);
+       opacity:0;transition:opacity .12s;max-width:250px;z-index:5}
+  .tip b{color:var(--accent)}
+  .tip .k{color:var(--fg-subtle);display:inline-block;min-width:62px}
+  /* 탭 */
+  .tabs{display:flex;flex-wrap:wrap;gap:6px;margin:18px 0 0}
+  .tab{border:1px solid var(--border-c);border-bottom:none;background:var(--surface-2);color:var(--fg-muted);
+       border-radius:9px 9px 0 0;padding:8px 14px;font-size:13.5px;cursor:pointer;font-family:inherit}
+  .tab[aria-selected="true"]{background:var(--surface);color:var(--fg);font-weight:600;box-shadow:inset 0 2px 0 var(--accent)}
+  .panel{border:1px solid var(--border-c);border-radius:0 10px 10px 10px;background:var(--surface);overflow:hidden}
+  .panel[hidden]{display:none!important}
+  .panel .file{font-family:var(--mono);font-size:12px;color:var(--fg-muted);padding:9px 14px;
+               border-bottom:1px solid var(--border-c);background:var(--surface-2)}
+  pre{margin:0;padding:16px;overflow-x:auto;font-family:var(--mono);font-size:12.5px;line-height:1.65;color:var(--fg)}
+  .note{border-left:3px solid var(--cone);background:var(--surface);border:1px solid var(--border-c);
+        border-left:3px solid var(--cone);border-radius:9px;padding:12px 15px;margin:14px 0;font-size:14px}
+  .note b{color:var(--forecast)}
+  ol.steps{padding-left:20px} ol.steps li{margin:7px 0}
+  .foot{margin-top:56px;padding-top:18px;border-top:1px solid var(--border-c);color:var(--fg-subtle);font-size:12.5px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>태풍 경로를 지도에 얹기 — <code>typ_now.php</code> 배선 예시</h1>
+<p class="lede">2026-09-19 · 기상청 API허브 <b>태풍정보 1.3 태풍정보+예측(시점기준)</b> · 아래 지도는 <b>실제 응답으로 그린 것</b>이다(가짜 데이터 아님).</p>
+
+<div class="oneline">
+  <b>결론:</b> 지도에 경로를 그릴 거면 <code>typ_now.php?tm=&lt;UTC&gt;&amp;mode=1&amp;disp=1</code> 하나면 된다.
+  태풍 번호를 몰라도 되고, <b>과거 경로(분석)와 앞으로의 경로(예측)가 한 응답에 같이 온다.</b>
+  우리 키는 <b>이미 승인돼 있어</b> 지금 바로 호출된다 — 아래 2026년 제25호가 그 응답이다.
+</div>
+
+<h2>1. 넷 중 왜 1.3 인가</h2>
+<table>
+<thead><tr><th>번호</th><th>엔드포인트</th><th>주는 것</th><th>지도용</th></tr></thead>
+<tbody>
+<tr><td>1.1</td><td><code>typ_lst.php?YY=</code></td><td>그해 태풍 <b>목록</b> — 번호·이름·발생/소멸일·<code>NOW</code>(진행여부)·<code>EFF</code>(한반도영향)</td><td>경로 없음. <b>보조</b>(지금 태풍 있나 확인)</td></tr>
+<tr><td>1.2</td><td><code>typ_data.php?YY&amp;typ&amp;seq</code></td><td>특정 태풍·발표번호의 경로</td><td>태풍 번호를 <b>미리 알아야</b> 한다 — 배치엔 부적합</td></tr>
+<tr class="hl"><td>1.3</td><td><code>typ_now.php?tm&amp;mode</code></td><td>그 시각 기준 진행 중 태풍의 <b>과거 분석 + 최신 예측</b></td><td><b>✔ 이것</b>. 번호 몰라도 됨</td></tr>
+<tr><td>2.1</td><td><code>getTyphoonList</code></td><td>연도별 “우리나라에 영향을 미친 태풍” 통계</td><td>좌표 없음. 랜딩 문구용</td></tr>
+</tbody>
+</table>
+
+<h2>2. 요청 인자</h2>
+<table>
+<thead><tr><th>인자</th><th>의미</th><th>우리가 넣을 값</th></tr></thead>
+<tbody>
+<tr class="hl"><td><code>tm</code></td><td>기준시간(UTC) — 이 시각 기준 과거 12시간 안에 발표된 태풍</td><td><b>지금(UTC)</b>. KST 아님 — 아래 함정 ③</td></tr>
+<tr class="hl"><td><code>mode</code></td><td>0 분석만 · <b>1 과거 분석 + 최신 예측</b> · 2 최신 분석+예측 · 3 과거 분석 + 모든 예측</td><td><b>1</b> — 지나온 선과 앞으로의 선을 같이 그리려면 이것</td></tr>
+<tr class="hl"><td><code>disp</code></td><td>0 포트란 고정폭(default) · 1 쉼표 구분</td><td><b>1</b> — 0 은 파싱 지옥. 특보(<code>wrn_now_data_new</code>)도 같은 이유로 1을 쓴다</td></tr>
+<tr><td><code>help</code></td><td>0 시작·종료표시+변수명 · 1 설명 추가 · 2 값만</td><td><b>0</b> — 헤더는 <code>#</code> 로 시작해 걸러내면 된다</td></tr>
+<tr><td><code>YY</code>·<code>typ</code>·<code>seq</code></td><td>연도·태풍번호·발표번호</td><td><b>안 넣는다</b> — 넣는 순간 1.2 와 같아진다</td></tr>
+<tr><td><code>authKey</code></td><td>인증키</td><td><code>KMA_API_KEY</code> (이미 <code>.env</code> 에 있다)</td></tr>
+</tbody>
+</table>
+
+<h2>3. 출력 변수 — 지도에 쓰는 칸</h2>
+<table>
+<thead><tr><th>변수</th><th>의미(단위)</th><th>지도에서 무엇이 되나</th></tr></thead>
+<tbody>
+<tr class="hl"><td><code>LAT</code> · <code>LON</code></td><td>중심 위도·경도(deg)</td><td><b>점과 선</b> — 경로 그 자체</td></tr>
+<tr class="hl"><td><code>FT</code></td><td>0 분석 · 1 예측</td><td><b>실선/점선을 가르는 칸.</b> 지나온 길과 예보를 섞으면 안 된다</td></tr>
+<tr class="hl"><td><code>FT_TM</code></td><td>예측 시각(UTC)</td><td>점 옆 라벨 · 애니메이션 순서</td></tr>
+<tr class="hl"><td><code>RAD</code></td><td>70% 이상 예상확률반경(km)</td><td><b>예보원(cone)</b> — 예측 점에만 값이 있다. 분석 구간은 0</td></tr>
+<tr><td><code>RAD15</code> · <code>RAD25</code></td><td>15·25m/s 강풍반경(km)</td><td>강풍 원. <code>-999</code> 는 결측</td></tr>
+<tr><td><code>PS</code> · <code>WS</code></td><td>중심기압(hPa) · 최대풍속(m/s)</td><td>점 크기·색(세기) · 라벨</td></tr>
+<tr><td><code>DIR</code> · <code>SP</code></td><td>진행방향(16방위) · 속도(km/h)</td><td>화살표 · 툴팁</td></tr>
+<tr><td><code>LOC</code></td><td>위치 설명(“괌 북동쪽 약 590 km 부근 해상”)</td><td>툴팁 · 조언 문장에 그대로 인용</td></tr>
+<tr><td><code>EFF</code> · <code>NOW</code></td><td>한반도영향 · 진행여부 <span class="muted">(1.1 목록에 있음)</span></td><td>레이어를 켤지 말지의 게이트</td></tr>
+</tbody>
+</table>
+
+<h2>4. 그러면 이런 그림이 나온다</h2>
+<p>아래는 위 응답을 그대로 그린 것이다. 우리 지도와 같은 <b>시군구 폴리곤</b>(<code>data/ref/sigungu.geojson</code> 250개를 단순화)
+위에 태풍 레이어를 얹었다. 점에 마우스를 올리면 그 행의 원본 값이 보인다.</p>
+<div class="mapbox">
+  <div class="controls">
+    <button class="chip" data-track="y2026" aria-pressed="true">2026 제25호 (실시간)</button>
+    <button class="chip" data-track="y2011" aria-pressed="false">2011 제9호 무이파</button>
+    <span class="sep"></span>
+    <button class="chip" data-layer="cone" aria-pressed="true">예보원</button>
+    <button class="chip" data-layer="wind" aria-pressed="false">강풍반경</button>
+    <button class="chip" data-layer="label" aria-pressed="true">시각 라벨</button>
+    <button class="chip" data-layer="plots" aria-pressed="true">내 밭</button>
+  </div>
+  <div class="maparea">
+    <svg class="map" id="map" viewBox="0 0 940 744" role="img" aria-label="태풍 경로 지도"></svg>
+    <div class="tip" id="tip"></div>
+  </div>
+  <div class="legend">
+    <span><i style="border-top:3px solid var(--analysis)"></i>분석 경로 (FT=0)</span>
+    <span><i style="border-top:3px dashed var(--forecast)"></i>예측 경로 (FT=1)</span>
+    <span><i style="border-top:3px solid var(--cone)"></i>예보원 RAD (70% 확률)</span>
+    <span><i style="border-top:3px solid var(--plot)"></i>내 밭</span>
+    <span id="meta" class="muted"></span>
+  </div>
+</div>
+
+<div class="note">
+  <b>읽는 법.</b> 보라 실선은 <b>이미 지나온 길</b>(FT=0, 관측 분석)이고, 주황 점선은 <b>앞으로의 예보</b>(FT=1)다.
+  예보원은 뒤로 갈수록 커진다 — 2026 제25호는 12시간 뒤 40km, 4일 뒤 290km다.
+  <b>“태풍이 온다”가 아니라 “이 반경 어딘가”</b>가 예보의 정확한 뜻이고, 우리 조언 문구도 그렇게 써야 한다.
+</div>
+<h2>5. 코드 — 네 곳만 손대면 된다</h2>
+<p>기존 <code>kma_client.py</code> → <code>service</code> → <code>api</code> → 프런트 흐름을 그대로 탄다. 새 계층은 없다.</p>
+
+<div class="tabs" role="tablist">
+  <button class="tab" role="tab" aria-selected="true"  data-panel="p1">① 수집 · kma_client.py</button>
+  <button class="tab" role="tab" aria-selected="false" data-panel="p2">② 가공 · domain/typhoon.py</button>
+  <button class="tab" role="tab" aria-selected="false" data-panel="p3">③ 노출 · api + client.ts</button>
+  <button class="tab" role="tab" aria-selected="false" data-panel="p4">④ 지도 · useTyphoonLayer.ts</button>
+</div>
+<div class="panel" id="p1"><div class="file">ai-service/pipeline/kma_client.py</div><pre># pipeline/kma_client.py — 맨 아래에 잇는다. 기존 _get·clean 을 그대로 쓴다.
+
+TYPHOON_URL = f&quot;{TYP01_URL}/typ_now.php&quot;
+
+# 응답이 EUC-KR 이다. requests 가 UTF-8 로 짐작해 LOC(&quot;괌 북동쪽 …&quot;)가 깨진다.
+# 다른 기상청 API 는 _get 이 JSON 으로 받아 문제가 없었는데, 이 엔드포인트만 평문이라
+# 여기서 인코딩을 못박는다. 실제로 UnicodeDecodeError 로 한 번 터졌다.
+TYPHOON_ENCODING = &quot;euc-kr&quot;
+
+# 출력 19칸의 순서. disp=1 이면 이 순서로 쉼표 구분돼 온다(help=0 헤더는 &#x27;#&#x27; 로 시작).
+_TYPHOON_COLS = (
+    &quot;ft&quot;, &quot;yy&quot;, &quot;typ&quot;, &quot;seq&quot;, &quot;tmd&quot;, &quot;typ_tm&quot;, &quot;ft_tm&quot;, &quot;lat&quot;, &quot;lon&quot;,
+    &quot;dir&quot;, &quot;sp&quot;, &quot;ps&quot;, &quot;ws&quot;, &quot;rad15&quot;, &quot;rad25&quot;, &quot;rad&quot;, &quot;ed15&quot;, &quot;er15&quot;, &quot;loc&quot;,
+)
+
+
+def fetch_typhoon_track(api_key, tm=None):
+    &quot;&quot;&quot;
+    # summary
+    지금 진행 중인 태풍의 과거 분석 경로 + 최신 예측 경로를 한 번에 받는다.
+
+    ⚠ tm 은 **UTC** 다. KST 를 넣으면 9시간 뒤를 묻는 꼴이라 빈손으로 온다 —
+      _kst_day_utc_range 와 같은 함정이다.
+    ⚠ mode=1 이 &quot;과거 분석 + 가장 최근 예측&quot; 이다. 0 은 예보가 빠져 지도에 점선이 안 생긴다.
+    ⚠ 태풍이 없으면 **빈 리스트가 정상**이다. 문서의 보유기간이 &quot;현재 진행 중인 태풍에 한하여&quot; 다.
+
+    # params
+    api_key: KMA_API_KEY&lt;br&gt;
+    tm: 기준시각(UTC, datetime). None 이면 지금&lt;br&gt;
+
+    # returns
+    dict 목록. ft=0 분석 · 1 예측이 시각 순으로 섞여 온다. 없으면 빈 리스트
+
+    # examples
+        fetch_typhoon_track(key)
+        -&gt; [{&#x27;ft&#x27;: 0, &#x27;typ&#x27;: &#x27;25&#x27;, &#x27;lat&#x27;: 16.5, &#x27;lon&#x27;: 149.3, &#x27;ps&#x27;: 998, ...}, ...]
+    &quot;&quot;&quot;
+    when = tm or datetime.now(UTC)
+    resp = requests.get(
+        TYPHOON_URL,
+        params={
+            &quot;tm&quot;: when.strftime(&quot;%Y%m%d%H%M&quot;),
+            &quot;mode&quot;: 1,
+            &quot;disp&quot;: 1,   # 0 은 포트란 고정폭이라 자릿수로 잘라야 한다. 쓰지 말 것
+            &quot;help&quot;: 0,
+            &quot;authKey&quot;: api_key,
+        },
+        timeout=20,
+    )
+    resp.raise_for_status()
+    resp.encoding = TYPHOON_ENCODING
+    return parse_typhoon_rows(resp.text)
+
+
+def parse_typhoon_rows(text):
+    &quot;&quot;&quot;쉼표 평문 → dict 목록. &#x27;#&#x27; 로 시작하는 헤더와 칸 수가 모자란 줄은 버린다.&quot;&quot;&quot;
+    rows = []
+    for line in text.splitlines():
+        if not line or line.startswith(&quot;#&quot;):
+            continue
+        cells = [c.strip() for c in line.split(&quot;,&quot;)]
+        if len(cells) &lt; len(_TYPHOON_COLS):
+            continue
+        row = dict(zip(_TYPHOON_COLS, cells))
+        rows.append(
+            {
+                &quot;ft&quot;: int(row[&quot;ft&quot;]),
+                &quot;typ_no&quot;: row[&quot;typ&quot;],
+                &quot;ft_tm&quot;: row[&quot;ft_tm&quot;],
+                &quot;lat&quot;: float(row[&quot;lat&quot;]),
+                &quot;lon&quot;: float(row[&quot;lon&quot;]),
+                &quot;dir&quot;: row[&quot;dir&quot;],
+                # -999 는 결측이다. clean 이 이미 그 규칙을 안다(missing_below=-900)
+                &quot;speed_kmh&quot;: clean(row[&quot;sp&quot;]),
+                &quot;pressure_hpa&quot;: clean(row[&quot;ps&quot;]),
+                &quot;wind_ms&quot;: clean(row[&quot;ws&quot;]),
+                &quot;rad15_km&quot;: clean(row[&quot;rad15&quot;]),
+                &quot;rad25_km&quot;: clean(row[&quot;rad25&quot;]),
+                &quot;forecast_radius_km&quot;: clean(row[&quot;rad&quot;]),
+                &quot;location_ko&quot;: row[&quot;loc&quot;],
+            }
+        )
+    return rows
+</pre></div><div class="panel" id="p2" hidden><div class="file">ai-service/app/domain/typhoon.py  (신규)</div><pre># app/domain/typhoon.py — 새 파일. 순수 함수만 둔다(테스트가 붙는 유일한 층).
+
+&quot;&quot;&quot;태풍 경로를 지도·조언이 쓰는 모양으로 정리한다. DB·HTTP 를 모르는 계산만 한다.
+
+⚠ 예보는 점이 아니라 **원**이다. RAD(70% 확률반경)가 4일 뒤 290km 까지 커진다.
+  &quot;태풍이 옵니다&quot; 가 아니라 &quot;이 반경 안 어딘가로 예상됩니다&quot; 가 자료가 말하는 것이다.
+⚠ 거리는 하버사인으로 잰다. 위경도 차를 그대로 빼면 위도 35도에서 경도 1도가
+  111km 가 아니라 91km 라, 동서로 20% 틀린다 — domain/geo.haversine_km 이 이미 있다.
+&quot;&quot;&quot;
+
+from dataclasses import dataclass
+
+from app.domain.geo import haversine_km
+
+# 경보를 낼 거리. 강풍반경(RAD15)이 없을 때만 쓰는 대체값이다.
+# 기상청 강풍반경 중앙값이 300~500km 대라 그 하단을 잡았다.
+FALLBACK_REACH_KM = 300.0
+
+
+@dataclass(frozen=True)
+class TyphoonPoint:
+    ft: int                     # 0 분석 · 1 예측
+    at_utc: str
+    lat: float
+    lon: float
+    pressure_hpa: float | None
+    wind_ms: float | None
+    rad15_km: float | None
+    forecast_radius_km: float | None
+    location_ko: str
+
+
+def split_track(rows):
+    &quot;&quot;&quot;
+    # summary
+    한 응답을 분석 구간과 예측 구간으로 가른다. 지도가 실선/점선을 따로 그리려면 필요하다.
+
+    # params
+    rows: fetch_typhoon_track 결과&lt;br&gt;
+
+    # returns
+    (분석 점들, 예측 점들). 각각 시각 오름차순. 태풍이 없으면 ([], [])
+    &quot;&quot;&quot;
+    pts = sorted((TyphoonPoint(**_pick(r)) for r in rows), key=lambda p: p.at_utc)
+    return [p for p in pts if p.ft == 0], [p for p in pts if p.ft == 1]
+
+
+def closest_approach(points, lat, lon):
+    &quot;&quot;&quot;
+    # summary
+    예측 경로 중 이 좌표에 가장 가까워지는 점과 그 거리를 찾는다.
+    밭 하나가 &quot;언제 얼마나 가까워지나&quot; 를 아는 것이 조언의 근거다.
+
+    # params
+    points: split_track 의 예측 구간&lt;br&gt;
+    lat, lon: 밭 좌표&lt;br&gt;
+
+    # returns
+    (TyphoonPoint, 거리 km). 예측이 없으면 None
+    &quot;&quot;&quot;
+    if not points:
+        return None
+    return min(((p, haversine_km(lat, lon, p.lat, p.lon)) for p in points), key=lambda x: x[1])
+
+
+def reaches(point, distance_km):
+    &quot;&quot;&quot;그 시점의 강풍반경(없으면 FALLBACK_REACH_KM) 안에 드는가.
+
+    예보원(forecast_radius_km)까지 더하지 않는다 — 그건 &#x27;중심이 어디쯤&#x27; 의 불확실성이지
+    바람이 부는 범위가 아니다. 둘을 더하면 온 나라가 늘 경보가 된다.
+    &quot;&quot;&quot;
+    reach = point.rad15_km or FALLBACK_REACH_KM
+    return distance_km &lt;= reach
+
+
+def _pick(row):
+    return {
+        &quot;ft&quot;: row[&quot;ft&quot;], &quot;at_utc&quot;: row[&quot;ft_tm&quot;], &quot;lat&quot;: row[&quot;lat&quot;], &quot;lon&quot;: row[&quot;lon&quot;],
+        &quot;pressure_hpa&quot;: row[&quot;pressure_hpa&quot;], &quot;wind_ms&quot;: row[&quot;wind_ms&quot;],
+        &quot;rad15_km&quot;: row[&quot;rad15_km&quot;], &quot;forecast_radius_km&quot;: row[&quot;forecast_radius_km&quot;],
+        &quot;location_ko&quot;: row[&quot;location_ko&quot;],
+    }
+</pre></div><div class="panel" id="p3" hidden><div class="file">ai-service/app/api/typhoon.py (신규) · src/shared/aiService/client.ts</div><pre># ─── ai-service/app/api/typhoon.py (새 파일) ────────────────────────────────
+
+&quot;&quot;&quot;진행 중인 태풍 경로(지도 레이어용). DB 를 안 탄다 — satellite.py 와 같은 이유로
+그때그때 기상청을 부른다. 적재 파이프라인은 지도가 실제로 쓰이기 시작하면 만든다.&quot;&quot;&quot;
+
+router = APIRouter(prefix=&quot;/v1/typhoon&quot;, tags=[&quot;typhoon&quot;])
+
+
+@router.get(&quot;/track&quot;, dependencies=[Depends(require_service_token)])
+def track() -&gt; dict:
+    &quot;&quot;&quot;지금 진행 중인 태풍의 분석·예측 경로.
+
+    태풍이 없으면 200 에 빈 배열이다 — 404 가 아니다.
+    &quot;없음&quot; 은 오류가 아니라 **평상시의 정상 상태**이고, 프런트가 레이어를 감추면 된다.
+    &quot;&quot;&quot;
+    if not KMA_API_KEY:
+        raise HTTPException(status_code=503, detail=&quot;KMA_API_KEY 가 설정되지 않았습니다.&quot;)
+    try:
+        rows = fetch_typhoon_track(KMA_API_KEY)
+    except Exception as exc:  # noqa: BLE001 — 외부 API 장애를 502 로 환원
+        raise HTTPException(status_code=502, detail=f&quot;태풍 조회 실패: {exc}&quot;) from exc
+
+    analysis, forecast = split_track(rows)
+    return {
+        &quot;typhoonNo&quot;: rows[0][&quot;typ_no&quot;] if rows else None,
+        &quot;analysis&quot;: [asdict(p) for p in analysis],
+        &quot;forecast&quot;: [asdict(p) for p in forecast],
+    }
+
+
+# ─── ai-service/app/main.py ────────────────────────────────────────────────
+app.include_router(typhoon.router)
+
+
+# ─── src/shared/aiService/client.ts ────────────────────────────────────────
+
+/** 태풍 경로. 태풍이 없으면 analysis·forecast 가 빈 배열이다(오류 아님). */
+export interface TyphoonTrack {
+  typhoonNo: string | null;
+  analysis: TyphoonPoint[];
+  forecast: TyphoonPoint[];
+}
+
+// 기상청 발표가 하루 4번(04·10·16·22시 + 수시)이다. 30분마다 칠 이유가 없다 —
+// alerts 처럼 자주 부르면 같은 응답을 스무 번 받는다.
+const TYPHOON_REVALIDATE_SEC = 60 * 60;
+
+  /** 진행 중인 태풍의 분석·예측 경로. 없으면 빈 배열. */
+  typhoonTrack: () =&gt;
+    call&lt;TyphoonTrack&gt;(&quot;/v1/typhoon/track&quot;, {
+      revalidateSec: TYPHOON_REVALIDATE_SEC,
+      timeoutMs: 15_000,
+    }),
+</pre></div><div class="panel" id="p4" hidden><div class="file">src/components/map/useTyphoonLayer.ts  (신규)</div><pre>/**
+ * ---------------------------------------------
+ * [Feature]: 지도 태풍 레이어 (카카오 오버레이)
+ *
+ * [Description]
+ * - 시군구 레이어(useSigunguLayer)와 **같은 지도 인스턴스**에 얹는다. 지도를 하나 더
+ *   만들지 않는다 — 두 개면 줌·중심이 어긋나 사용자가 다른 데를 본다.
+ * - 분석은 실선, 예측은 점선으로 **반드시 가른다.** 한 줄로 이으면 예보를 관측처럼
+ *   읽는다. 색까지 다르게 준다(색약 대비: 선 모양이 1차, 색이 2차).
+ * - 예보원은 Circle 로 그린다. 반경 단위가 **m** 다 — RAD 는 km 라 1000 을 곱한다.
+ *   실제로 이 단위를 빼먹어 반경 40m 짜리 점이 찍힌 적이 있다(강풍반경도 같다).
+ *
+ * [Usage]
+ * ```tsx
+ * useTyphoonLayer(map, track, { cone: true, wind: false });
+ * ```
+ * ---------------------------------------------
+ */
+export function useTyphoonLayer(
+  map: kakao.maps.Map | null,
+  track: TyphoonTrack | null,
+  show: { cone: boolean; wind: boolean },
+) {
+  useEffect(() =&gt; {
+    if (!map || !track) return;
+    const sdk = window.kakao;
+    const shapes: Array&lt;{ setMap: (m: kakao.maps.Map | null) =&gt; void }&gt; = [];
+
+    const toPath = (pts: TyphoonPoint[]) =&gt;
+      pts.map((p) =&gt; new sdk.maps.LatLng(p.lat, p.lon));
+
+    // 분석 — 실선. 지나온 길이라 불확실성 표시가 없다
+    if (track.analysis.length &gt; 1) {
+      shapes.push(
+        new sdk.maps.Polyline({
+          path: toPath(track.analysis),
+          strokeWeight: 4,
+          strokeColor: &quot;#5a41e0&quot;,
+          strokeStyle: &quot;solid&quot;,
+        }),
+      );
+    }
+
+    // 예측 — 점선. 분석의 마지막 점에서 이어 붙인다.
+    // 안 이으면 두 선 사이가 끊겨 &quot;여기서 사라졌다 저기서 나타난다&quot;로 보인다
+    if (track.forecast.length &gt; 0) {
+      const last = track.analysis.at(-1);
+      const path = toPath(last ? [last, ...track.forecast] : track.forecast);
+      shapes.push(
+        new sdk.maps.Polyline({
+          path,
+          strokeWeight: 4,
+          strokeColor: &quot;#d9480f&quot;,
+          strokeStyle: &quot;shortdash&quot;,
+        }),
+      );
+    }
+
+    for (const p of track.forecast) {
+      // 예보원 — 중심이 어디쯤일지의 불확실성. 뒤로 갈수록 커진다
+      if (show.cone &amp;&amp; p.forecast_radius_km) {
+        shapes.push(
+          new sdk.maps.Circle({
+            center: new sdk.maps.LatLng(p.lat, p.lon),
+            radius: p.forecast_radius_km * 1000, // ⚠ km → m
+            strokeWeight: 1,
+            strokeColor: &quot;#f08c00&quot;,
+            strokeOpacity: 0.7,
+            fillColor: &quot;#f08c00&quot;,
+            fillOpacity: 0.08,
+          }),
+        );
+      }
+      // 강풍반경 — 실제로 바람이 부는 범위. 없으면(-999 → null) 그리지 않는다
+      if (show.wind &amp;&amp; p.rad15_km) {
+        shapes.push(
+          new sdk.maps.Circle({
+            center: new sdk.maps.LatLng(p.lat, p.lon),
+            radius: p.rad15_km * 1000,
+            strokeWeight: 1,
+            strokeColor: &quot;#868e96&quot;,
+            strokeOpacity: 0.5,
+            fillOpacity: 0,
+          }),
+        );
+      }
+    }
+
+    for (const s of shapes) s.setMap(map);
+    // 레이어를 끄거나 자료가 바뀌면 **반드시 걷는다.** 카카오 오버레이는 지도에 붙으면
+    // 컴포넌트가 사라져도 남는다 — 안 걷으면 토글할 때마다 선이 겹쳐 쌓인다
+    return () =&gt; {
+      for (const s of shapes) s.setMap(null);
+    };
+  }, [map, track, show.cone, show.wind]);
+}
+</pre></div><h2>6. 붙일 때 밟는 함정 여섯 — 전부 실제로 확인한 것</h2>
+<table>
+<thead><tr><th>#</th><th>함정</th><th>증상</th><th>대응</th></tr></thead>
+<tbody>
+<tr><td>①</td><td>응답이 <b>EUC-KR</b></td><td><code>UnicodeDecodeError</code> 또는 <code>LOC</code> 가 깨진 글자</td><td><code>resp.encoding = "euc-kr"</code></td></tr>
+<tr><td>②</td><td><code>disp</code> 기본값이 <b>0</b>(포트란 고정폭)</td><td>자릿수로 잘라야 해서 파싱이 무너진다</td><td>항상 <code>disp=1</code></td></tr>
+<tr><td>③</td><td><code>tm</code> 이 <b>UTC</b></td><td>KST 를 넣으면 9시간 뒤를 물어 빈손</td><td><code>datetime.now(UTC)</code>. <code>_kst_day_utc_range</code> 와 같은 함정</td></tr>
+<tr><td>④</td><td><code>-999</code> 는 <b>결측</b></td><td>강풍반경이 −999km 로 계산돼 원이 뒤집힌다</td><td><code>clean(v, missing_below=-900)</code> — 이미 있는 함수</td></tr>
+<tr><td>⑤</td><td>평상시엔 <b>빈 응답</b></td><td>“태풍 없음”을 오류로 처리하면 1년 중 대부분이 에러</td><td>빈 배열 + 200. 레이어를 감춘다</td></tr>
+<tr><td>⑥</td><td>카카오 <code>Circle.radius</code> 단위가 <b>m</b></td><td><code>RAD</code>(km)를 그대로 넣으면 반경 40m 짜리 점</td><td><code>* 1000</code></td></tr>
+</tbody>
+</table>
+
+<h3>갱신 주기</h3>
+<p>발표가 <b>하루 4번(04·10·16·22시 + 수시)</b>이다. <code>alerts-ingest</code> 처럼 30분마다 칠 이유가 없다 —
+1시간 캐시로 충분하고, 같은 응답을 스무 번 받지 않는다.</p>
+
+<h3>조언과 잇는 자리</h3>
+<p><code>service/report.py</code> 의 <code>ReportInput</code> 에 <code>closest_approach()</code> 결과를 넣으면
+물 조언과 한 문장으로 붙는다. 이때도 <b>기간과 숫자로만</b> 말한다.</p>
+<div class="note">
+  <b>좋은 문장:</b> “9월 21일경 태풍 중심이 밭에서 약 180km 지점을 지날 것으로 예보됐습니다(예보원 130km).
+  그 전후로 비 예보가 60mm 이니 물은 주지 말고 지주와 배수를 보세요.”<br>
+  <b>나쁜 문장:</b> “태풍이 옵니다. 물을 주지 마세요.” — 언제·얼마나 가까운지가 없고, 예보를 확정처럼 말한다.
+</div>
+
+<h2>7. 직접 확인하기</h2>
+<ol class="steps">
+  <li><code>ai-service/</code> 에서 아래를 돌리면 위 지도와 같은 자료가 그대로 나온다(승인돼 있어 바로 된다).</li>
+</ol>
+<div class="panel"><div class="file">ai-service/ · 확인용 한 줄</div><pre>$env:PYTHONIOENCODING = "utf-8"
+py -c "
+import requests, datetime
+from app.core.config import KMA_API_KEY
+r = requests.get('https://apihub.kma.go.kr/api/typ01/url/typ_now.php', timeout=20, params={
+    'tm': datetime.datetime.now(datetime.UTC).strftime('%Y%m%d%H%M'),
+    'mode': 1, 'disp': 1, 'help': 0, 'authKey': KMA_API_KEY})
+r.encoding = 'euc-kr'
+print(r.text)"</pre></div>
+
+<p class="foot">
+  이 문서의 지도는 2026-09-19 04:xx UTC 에 받은 <code>typ_now.php</code> 응답(제25호, 17행)과
+  2011-08-07 01:00 UTC 응답(제9호 무이파, 62행)을 그대로 그린 것이다. 좌표·기압·반경 어느 값도 손대지 않았다.<br>
+  해안선은 우리 지도가 쓰는 <code>ai-service/data/ref/sigungu.geojson</code>(시군구 250개)을 0.035° 로 단순화했다.
+  인증키는 이 파일에 들어 있지 않다 — 위 확인용 코드는 <code>.env</code> 의 <code>KMA_API_KEY</code> 를 읽는다.
+</p>
+</div>
+<script>window.__TYPHOON__={"tracks":{"y2026":{"label":"2026년 제25호 (진행 중 · 실시간 응답)","tm":"지금","rows":[{"ft":0,"yy":"2026","typ":"25","ft_tm":"202609161200","lat":16.5,"lon":149.3,"dir":"N","sp":29,"ps":998,"ws":19,"rad15":310,"rad25":-999,"rad":0,"loc":"괌 북동쪽 약 590 km 부근 해상","x":613.0,"y":577.6},{"ft":0,"yy":"2026","typ":"25","ft_tm":"202609161800","lat":17.4,"lon":149.6,"dir":"NNE","sp":23,"ps":996,"ws":20,"rad15":320,"rad25":-999,"rad":0,"loc":"괌 북동쪽 약 670 km 부근 해상","x":618.8,"y":560.0},{"ft":0,"yy":"2026","typ":"25","ft_tm":"202609170000","lat":18.8,"lon":150.3,"dir":"NE","sp":30,"ps":994,"ws":21,"rad15":320,"rad25":-999,"rad":0,"loc":"괌 북동쪽 약 830 km 부근 해상","x":632.5,"y":532.5},{"ft":0,"yy":"2026","typ":"25","ft_tm":"202609170600","lat":21.6,"lon":150.1,"dir":"NNW","sp":57,"ps":990,"ws":24,"rad15":350,"rad25":-999,"rad":0,"loc":"괌 북북동쪽 약 1060 km 부근 해상","x":628.6,"y":477.7},{"ft":0,"yy":"2026","typ":"25","ft_tm":"202609171200","lat":23.4,"lon":148.6,"dir":"NW","sp":45,"ps":985,"ws":27,"rad15":350,"rad25":50,"rad":0,"loc":"괌 북북동쪽 약 1170 km 부근 해상","x":599.2,"y":442.5},{"ft":0,"yy":"2026","typ":"25","ft_tm":"202609171800","lat":24.7,"lon":146.1,"dir":"WNW","sp":68,"ps":985,"ws":27,"rad15":350,"rad25":50,"rad":0,"loc":"괌 북쪽 약 1250 km 부근 해상","x":550.3,"y":417.0},{"ft":0,"yy":"2026","typ":"25","ft_tm":"202609180000","lat":25.3,"lon":144.5,"dir":"W","sp":30,"ps":975,"ws":32,"rad15":420,"rad25":60,"rad":0,"loc":"일본 도쿄 남남동쪽 약 1240 km 부근 해상","x":519.0,"y":405.3},{"ft":0,"yy":"2026","typ":"25","ft_tm":"202609180600","lat":25.4,"lon":142.9,"dir":"WNW","sp":13,"ps":975,"ws":32,"rad15":500,"rad25":60,"rad":0,"loc":"일본 도쿄 남남동쪽 약 1180 km 부근 해상","x":487.6,"y":403.3},{"ft":0,"yy":"2026","typ":"25","ft_tm":"202609181200","lat":25.6,"lon":141.6,"dir":"W","sp":26,"ps":975,"ws":32,"rad15":500,"rad25":60,"rad":0,"loc":"일본 도쿄 남쪽 약 1130 km 부근 해상","x":462.2,"y":399.4},{"ft":0,"yy":"2026","typ":"25","ft_tm":"202609181800","lat":26.0,"lon":140.9,"dir":"NW","sp":17,"ps":975,"ws":32,"rad15":500,"rad25":60,"rad":0,"loc":"일본 도쿄 남쪽 약 1080 km 부근 해상","x":448.5,"y":391.6},{"ft":0,"yy":"2026","typ":"25","ft_tm":"202609190000","lat":26.4,"lon":139.8,"dir":"WSW","sp":10,"ps":975,"ws":32,"rad15":500,"rad25":60,"rad":0,"loc":"일본 도쿄 남쪽 약 1030 km 부근 해상","x":426.9,"y":383.7},{"ft":1,"yy":"2026","typ":"25","ft_tm":"202609191200","lat":27.6,"lon":138.2,"dir":"NW","sp":18,"ps":970,"ws":35,"rad15":520,"rad25":70,"rad":40,"loc":"일본 도쿄 남쪽 약 910 km 부근 해상","x":395.6,"y":360.3},{"ft":1,"yy":"2026","typ":"25","ft_tm":"202609200000","lat":28.9,"lon":137.5,"dir":"NNW","sp":13,"ps":970,"ws":35,"rad15":520,"rad25":70,"rad":80,"loc":"일본 도쿄 남남서쪽 약 780 km 부근 해상","x":381.9,"y":334.8},{"ft":1,"yy":"2026","typ":"25","ft_tm":"202609201200","lat":30.3,"lon":137.3,"dir":"N","sp":13,"ps":970,"ws":35,"rad15":520,"rad25":70,"rad":110,"loc":"일본 도쿄 남남서쪽 약 640 km 부근 해상","x":378.0,"y":307.4},{"ft":1,"yy":"2026","typ":"25","ft_tm":"202609210000","lat":32.3,"lon":138.3,"dir":"NNE","sp":20,"ps":970,"ws":35,"rad15":520,"rad25":60,"rad":130,"loc":"일본 도쿄 남남서쪽 약 400 km 부근 해상","x":397.5,"y":268.2},{"ft":1,"yy":"2026","typ":"25","ft_tm":"202609220000","lat":37.5,"lon":146.2,"dir":"NE","sp":38,"ps":980,"ws":29,"rad15":480,"rad25":50,"rad":190,"loc":"일본 삿포로 남동쪽 약 740 km 부근 해상","x":552.2,"y":166.4},{"ft":1,"yy":"2026","typ":"25","ft_tm":"202609230000","lat":42.1,"lon":159.1,"dir":"ENE","sp":51,"ps":985,"ws":27,"rad15":-999,"rad25":-999,"rad":290,"loc":"일본 삿포로 동쪽 약 1460 km 부근 해상","x":804.9,"y":76.4}]},"y2011":{"label":"2011년 제9호 무이파 (문서 예시 tm=201108070100)","tm":"201108070100","rows":[{"ft":0,"yy":"2011","typ":"9","ft_tm":"201107280600","lat":12.1,"lon":135.2,"dir":"W","sp":22,"ps":998,"ws":18,"rad15":200,"rad25":-9,"rad":-9,"loc":"미국 괌 서쪽 약 1060 km 부근 해상","x":336.8,"y":663.7},{"ft":0,"yy":"2011","typ":"9","ft_tm":"201107281200","lat":12.3,"lon":134.0,"dir":"W","sp":23,"ps":996,"ws":19,"rad15":220,"rad25":-9,"rad":-9,"loc":"필리핀 마닐라 동쪽 약 1430 km 부근 해상","x":313.3,"y":659.8},{"ft":0,"yy":"2011","typ":"9","ft_tm":"201107281800","lat":12.4,"lon":133.2,"dir":"W","sp":15,"ps":992,"ws":22,"rad15":220,"rad25":-9,"rad":-9,"loc":"필리핀 마닐라 동쪽 약 1340 km 부근 해상","x":297.7,"y":657.9},{"ft":0,"yy":"2011","typ":"9","ft_tm":"201107290000","lat":12.5,"lon":132.7,"dir":"W","sp":10,"ps":992,"ws":22,"rad15":220,"rad25":-9,"rad":-9,"loc":"필리핀 마닐라 동쪽 약 1290 km 부근 해상","x":287.9,"y":655.9},{"ft":0,"yy":"2011","typ":"9","ft_tm":"201107290600","lat":12.8,"lon":132.5,"dir":"NNW","sp":7,"ps":990,"ws":24,"rad15":250,"rad25":-9,"rad":-9,"loc":"필리핀 마닐라 동쪽 약 1260 km 부근 해상","x":284.0,"y":650.0},{"ft":0,"yy":"2011","typ":"9","ft_tm":"201107291200","lat":13.9,"lon":132.5,"dir":"N","sp":21,"ps":990,"ws":24,"rad15":250,"rad25":-9,"rad":-9,"loc":"필리핀 마닐라 동쪽 약 1240 km 부근 해상","x":284.0,"y":628.5},{"ft":0,"yy":"2011","typ":"9","ft_tm":"201107291800","lat":15.0,"lon":132.5,"dir":"N","sp":21,"ps":990,"ws":24,"rad15":250,"rad25":-9,"rad":-9,"loc":"필리핀 마닐라 동쪽 약 1240 km 부근 해상","x":284.0,"y":606.9},{"ft":0,"yy":"2011","typ":"9","ft_tm":"201107300000","lat":15.7,"lon":133.4,"dir":"NE","sp":21,"ps":980,"ws":31,"rad15":300,"rad25":50,"rad":-9,"loc":"필리핀 마닐라 동쪽 약 1340 km 부근 해상","x":301.6,"y":593.2},{"ft":0,"yy":"2011","typ":"9","ft_tm":"201107300600","lat":16.2,"lon":133.0,"dir":"NW","sp":12,"ps":970,"ws":36,"rad15":350,"rad25":100,"rad":-9,"loc":"필리핀 마닐라 동쪽 약 1300 km 부근 해상","x":293.8,"y":583.5},{"ft":0,"yy":"2011","typ":"9","ft_tm":"201107301200","lat":16.5,"lon":132.7,"dir":"NW","sp":8,"ps":945,"ws":45,"rad15":500,"rad25":150,"rad":-9,"loc":"필리핀 마닐라 동쪽 약 1280 km 부근 해상","x":287.9,"y":577.6},{"ft":0,"yy":"2011","typ":"9","ft_tm":"201107301800","lat":16.6,"lon":132.4,"dir":"WNW","sp":6,"ps":935,"ws":48,"rad15":550,"rad25":170,"rad":-9,"loc":"필리핀 마닐라 동쪽 약 1250 km 부근 해상","x":282.0,"y":575.6},{"ft":0,"yy":"2011","typ":"9","ft_tm":"201107310000","lat":16.8,"lon":132.6,"dir":"NE","sp":6,"ps":930,"ws":50,"rad15":580,"rad25":170,"rad":-9,"loc":"필리핀 마닐라 동북동쪽 약 1270 km 부근 해상","x":285.9,"y":571.7},{"ft":0,"yy":"2011","typ":"9","ft_tm":"201107310600","lat":17.2,"lon":132.8,"dir":"NNE","sp":9,"ps":930,"ws":50,"rad15":580,"rad25":170,"rad":-9,"loc":"필리핀 마닐라 동북동쪽 약 1300 km 부근 해상","x":289.8,"y":563.9},{"ft":0,"yy":"2011","typ":"9","ft_tm":"201107311200","lat":17.7,"lon":133.5,"dir":"NE","sp":16,"ps":930,"ws":50,"rad15":580,"rad25":170,"rad":-9,"loc":"일본 오키나와 남남동쪽 약 1120 km 부근 해상","x":303.5,"y":554.1},{"ft":0,"yy":"2011","typ":"9","ft_tm":"201107311800","lat":18.5,"lon":133.5,"dir":"N","sp":15,"ps":930,"ws":50,"rad15":580,"rad25":170,"rad":-9,"loc":"일본 오키나와 남동쪽 약 1050 km 부근 해상","x":303.5,"y":538.4},{"ft":0,"yy":"2011","typ":"9","ft_tm":"201108010000","lat":18.9,"lon":133.6,"dir":"NNE","sp":8,"ps":935,"ws":48,"rad15":530,"rad25":150,"rad":-9,"loc":"일본 오키나와 남동쪽 약 1020 km 부근 해상","x":305.5,"y":530.6},{"ft":0,"yy":"2011","typ":"9","ft_tm":"201108010600","lat":19.8,"lon":134.0,"dir":"NNE","sp":19,"ps":945,"ws":45,"rad15":500,"rad25":150,"rad":-9,"loc":"일본 오키나와 남동쪽 약 960 km 부근 해상","x":313.3,"y":513.0},{"ft":0,"yy":"2011","typ":"9","ft_tm":"201108011200","lat":20.7,"lon":134.2,"dir":"NNE","sp":18,"ps":945,"ws":45,"rad15":500,"rad25":150,"rad":-9,"loc":"일본 오키나와 남동쪽 약 900 km 부근 해상","x":317.2,"y":495.3},{"ft":0,"yy":"2011","typ":"9","ft_tm":"201108011800","lat":21.5,"lon":134.2,"dir":"N","sp":15,"ps":945,"ws":45,"rad15":500,"rad25":150,"rad":-9,"loc":"일본 오키나와 남동쪽 약 840 km 부근 해상","x":317.2,"y":479.7},{"ft":0,"yy":"2011","typ":"9","ft_tm":"201108020000","lat":22.0,"lon":134.1,"dir":"NNW","sp":10,"ps":945,"ws":45,"rad15":500,"rad25":150,"rad":-9,"loc":"일본 오키나와 남동쪽 약 800 km 부근 해상","x":315.3,"y":469.9},{"ft":0,"yy":"2011","typ":"9","ft_tm":"201108020600","lat":22.7,"lon":134.1,"dir":"N","sp":13,"ps":945,"ws":45,"rad15":500,"rad25":150,"rad":-9,"loc":"일본 오키나와 동남동쪽 약 750 km 부근 해상","x":315.3,"y":456.2},{"ft":0,"yy":"2011","typ":"9","ft_tm":"201108021200","lat":23.3,"lon":133.8,"dir":"NNW","sp":13,"ps":945,"ws":45,"rad15":500,"rad25":150,"rad":-9,"loc":"일본 오키나와 동남동쪽 약 690 km 부근 해상","x":309.4,"y":444.4},{"ft":0,"yy":"2011","typ":"9","ft_tm":"201108021800","lat":23.8,"lon":133.3,"dir":"NW","sp":13,"ps":945,"ws":45,"rad15":500,"rad25":150,"rad":-9,"loc":"일본 오키나와 동남동쪽 약 620 km 부근 해상","x":299.6,"y":434.7},{"ft":0,"yy":"2011","typ":"9","ft_tm":"201108030000","lat":24.2,"lon":132.8,"dir":"WNW","sp":12,"ps":945,"ws":45,"rad15":500,"rad25":150,"rad":-9,"loc":"일본 오키나와 동남동쪽 약 550 km 부근 해상","x":289.8,"y":426.8},{"ft":0,"yy":"2011","typ":"9","ft_tm":"201108030600","lat":24.3,"lon":132.0,"dir":"W","sp":14,"ps":945,"ws":45,"rad15":500,"rad25":150,"rad":-9,"loc":"일본 오키나와 동남동쪽 약 480 km 부근 해상","x":274.2,"y":424.9},{"ft":0,"yy":"2011","typ":"9","ft_tm":"201108031200","lat":24.4,"lon":131.4,"dir":"W","sp":11,"ps":945,"ws":45,"rad15":500,"rad25":150,"rad":-9,"loc":"일본 오키나와 동남동쪽 약 420 km 부근 해상","x":262.4,"y":422.9},{"ft":0,"yy":"2011","typ":"9","ft_tm":"201108031800","lat":24.5,"lon":130.5,"dir":"W","sp":16,"ps":945,"ws":45,"rad15":500,"rad25":150,"rad":-9,"loc":"일본 오키나와 남동쪽 약 340 km 부근 해상","x":244.8,"y":420.9},{"ft":0,"yy":"2011","typ":"9","ft_tm":"201108040000","lat":24.7,"lon":129.6,"dir":"WNW","sp":16,"ps":945,"ws":45,"rad15":500,"rad25":150,"rad":-9,"loc":"일본 오키나와 남동쪽 약 250 km 부근 해상","x":227.2,"y":417.0},{"ft":0,"yy":"2011","typ":"9","ft_tm":"201108040600","lat":24.8,"lon":129.1,"dir":"W","sp":9,"ps":945,"ws":45,"rad15":500,"rad25":150,"rad":-9,"loc":"일본 오키나와 남동쪽 약 210 km 부근 해상","x":217.4,"y":415.1},{"ft":0,"yy":"2011","typ":"9","ft_tm":"201108041200","lat":24.8,"lon":128.7,"dir":"W","sp":7,"ps":945,"ws":45,"rad15":500,"rad25":150,"rad":-9,"loc":"일본 오키나와 남남동쪽 약 190 km 부근 해상","x":209.5,"y":415.1},{"ft":0,"yy":"2011","typ":"9","ft_tm":"201108041800","lat":25.1,"lon":128.1,"dir":"WNW","sp":12,"ps":945,"ws":45,"rad15":500,"rad25":-9,"rad":-9,"loc":"일본 오키나와 남남동쪽 약 140 km 부근 해상","x":197.8,"y":409.2},{"ft":0,"yy":"2011","typ":"9","ft_tm":"201108050000","lat":25.3,"lon":127.6,"dir":"WNW","sp":10,"ps":945,"ws":45,"rad15":500,"rad25":150,"rad":-9,"loc":"일본 오키나와 남쪽 약 110 km 부근 해상","x":188.0,"y":405.3},{"ft":0,"yy":"2011","typ":"9","ft_tm":"201108050600","lat":25.8,"lon":127.1,"dir":"NW","sp":13,"ps":945,"ws":45,"rad15":500,"rad25":150,"rad":-9,"loc":"일본 오키나와 서남서쪽 약 90 km 부근 해상","x":178.2,"y":395.5},{"ft":0,"yy":"2011","typ":"9","ft_tm":"201108051200","lat":26.1,"lon":126.8,"dir":"NW","sp":8,"ps":945,"ws":45,"rad15":500,"rad25":150,"rad":-9,"loc":"일본 오키나와 서쪽 약 100 km 부근 해상","x":172.3,"y":389.6},{"ft":0,"yy":"2011","typ":"9","ft_tm":"201108051800","lat":26.4,"lon":126.5,"dir":"NW","sp":8,"ps":950,"ws":43,"rad15":450,"rad25":130,"rad":-9,"loc":"일본 오키나와 서쪽 약 130 km 부근 해상","x":166.5,"y":383.7},{"ft":0,"yy":"2011","typ":"9","ft_tm":"201108060000","lat":27.3,"lon":126.2,"dir":"NNW","sp":18,"ps":955,"ws":41,"rad15":450,"rad25":120,"rad":-9,"loc":"일본 오키나와 북서쪽 약 190 km 부근 해상","x":160.6,"y":366.1},{"ft":0,"yy":"2011","typ":"9","ft_tm":"201108060600","lat":28.5,"lon":125.3,"dir":"NW","sp":27,"ps":955,"ws":41,"rad15":430,"rad25":100,"rad":-9,"loc":"중국 상하이 남동쪽 약 480 km 부근 해상","x":143.0,"y":342.6},{"ft":0,"yy":"2011","typ":"9","ft_tm":"201108060900","lat":28.9,"lon":125.0,"dir":"NW","sp":18,"ps":960,"ws":40,"rad15":430,"rad25":100,"rad":-9,"loc":"서귀포 남남서쪽 약 500 km 부근 해상","x":137.1,"y":334.8},{"ft":0,"yy":"2011","typ":"9","ft_tm":"201108061200","lat":29.3,"lon":124.9,"dir":"NNW","sp":16,"ps":960,"ws":40,"rad15":430,"rad25":180,"rad":-9,"loc":"서귀포 남남서쪽 약 470 km 부근 해상","x":135.1,"y":327.0},{"ft":0,"yy":"2011","typ":"9","ft_tm":"201108061500","lat":29.8,"lon":124.8,"dir":"NNW","sp":19,"ps":965,"ws":38,"rad15":430,"rad25":180,"rad":-9,"loc":"서귀포 남남서쪽 약 420 km 부근 해상","x":133.2,"y":317.2},{"ft":1,"yy":"2011","typ":"9","ft_tm":"201108070300","lat":31.7,"lon":123.7,"dir":"NNW","sp":20,"ps":970,"ws":36,"rad15":420,"rad25":-9,"rad":100,"loc":"서귀포 서남서쪽 약 320 km 부근 해상","x":111.6,"y":280.0},{"ft":1,"yy":"2011","typ":"9","ft_tm":"201108071500","lat":34.2,"lon":122.6,"dir":"NNW","sp":25,"ps":975,"ws":34,"rad15":390,"rad25":-9,"rad":150,"loc":"목포 서쪽 약 350 km 부근 해상","x":90.1,"y":231.0},{"ft":1,"yy":"2011","typ":"9","ft_tm":"201108080300","lat":36.9,"lon":122.2,"dir":"N","sp":26,"ps":980,"ws":31,"rad15":360,"rad25":-9,"rad":200,"loc":"백령도 서남서쪽 약 250 km 부근 해상","x":82.3,"y":178.2},{"ft":1,"yy":"2011","typ":"9","ft_tm":"201108081500","lat":39.4,"lon":121.9,"dir":"N","sp":23,"ps":990,"ws":24,"rad15":300,"rad25":-9,"rad":250,"loc":"신의주 서남서쪽 약 230 km 부근 육상","x":76.4,"y":129.2},{"ft":1,"yy":"2011","typ":"9","ft_tm":"201108091500","lat":44.2,"lon":123.6,"dir":"NNE","sp":23,"ps":998,"ws":-9,"rad15":-9,"rad25":-9,"rad":-9,"loc":"강계 북서쪽 약 440 km 부근 육상","x":109.7,"y":35.2},{"ft":0,"yy":"2011","typ":"10","ft_tm":"201108030600","lat":23.4,"lon":160.9,"dir":"W","sp":24,"ps":1000,"ws":18,"rad15":150,"rad25":-9,"rad":-9,"loc":"일본 도쿄 동남동쪽 약 2450 km 부근 해상","x":840.1,"y":442.5},{"ft":0,"yy":"2011","typ":"10","ft_tm":"201108031200","lat":23.7,"lon":160.0,"dir":"WNW","sp":17,"ps":1000,"ws":18,"rad15":150,"rad25":-9,"rad":-9,"loc":"일본 도쿄 동남동쪽 약 2360 km 부근 해상","x":822.5,"y":436.6},{"ft":0,"yy":"2011","typ":"10","ft_tm":"201108031800","lat":23.6,"lon":159.0,"dir":"W","sp":18,"ps":1000,"ws":18,"rad15":150,"rad25":-9,"rad":-9,"loc":"일본 도쿄 동남동쪽 약 2290 km 부근 해상","x":802.9,"y":438.6},{"ft":0,"yy":"2011","typ":"10","ft_tm":"201108040000","lat":24.5,"lon":158.4,"dir":"NW","sp":20,"ps":1000,"ws":18,"rad15":150,"rad25":-9,"rad":-9,"loc":"","x":791.2,"y":420.9},{"ft":0,"yy":"2011","typ":"10","ft_tm":"201108040600","lat":24.6,"lon":157.4,"dir":"W","sp":17,"ps":998,"ws":18,"rad15":180,"rad25":-9,"rad":-9,"loc":"일본 도쿄 동남동쪽 약 2090 km 부근 해상","x":771.6,"y":419.0},{"ft":0,"yy":"2011","typ":"10","ft_tm":"201108041200","lat":24.9,"lon":156.8,"dir":"WNW","sp":12,"ps":998,"ws":18,"rad15":180,"rad25":-9,"rad":-9,"loc":"일본 도쿄 동남동쪽 약 2020 km 부근 해상","x":759.8,"y":413.1},{"ft":0,"yy":"2011","typ":"10","ft_tm":"201108041800","lat":25.1,"lon":156.2,"dir":"WNW","sp":11,"ps":998,"ws":18,"rad15":200,"rad25":-9,"rad":-9,"loc":"일본 도쿄 동남동쪽 약 1960 km 부근 해상","x":748.1,"y":409.2},{"ft":0,"yy":"2011","typ":"10","ft_tm":"201108050000","lat":25.5,"lon":155.2,"dir":"WNW","sp":15,"ps":996,"ws":19,"rad15":200,"rad25":-9,"rad":-9,"loc":"일본 도쿄 남동쪽 약 1860 km 부근 해상","x":728.5,"y":401.4},{"ft":0,"yy":"2011","typ":"10","ft_tm":"201108050600","lat":26.8,"lon":155.3,"dir":"N","sp":25,"ps":990,"ws":24,"rad15":250,"rad25":-9,"rad":-9,"loc":"일본 도쿄 동남동쪽 약 1770 km 부근 해상","x":730.5,"y":375.9},{"ft":0,"yy":"2011","typ":"10","ft_tm":"201108051200","lat":27.3,"lon":154.8,"dir":"NW","sp":11,"ps":990,"ws":24,"rad15":250,"rad25":-9,"rad":-9,"loc":"일본 도쿄 동남동쪽 약 1700 km 부근 해상","x":720.7,"y":366.1},{"ft":0,"yy":"2011","typ":"10","ft_tm":"201108051800","lat":27.5,"lon":154.4,"dir":"WNW","sp":8,"ps":985,"ws":27,"rad15":280,"rad25":-9,"rad":-9,"loc":"일본 도쿄 동남동쪽 약 1660 km 부근 해상","x":712.8,"y":362.2},{"ft":0,"yy":"2011","typ":"10","ft_tm":"201108060000","lat":28.1,"lon":154.0,"dir":"NW","sp":13,"ps":985,"ws":27,"rad15":280,"rad25":30,"rad":-9,"loc":"일본 도쿄 동남동쪽 약 1580 km 부근 해상","x":705.0,"y":350.5},{"ft":0,"yy":"2011","typ":"10","ft_tm":"201108060600","lat":28.8,"lon":153.7,"dir":"NNW","sp":14,"ps":985,"ws":27,"rad15":280,"rad25":30,"rad":-9,"loc":"일본 도쿄 동남동쪽 약 1520 km 부근 해상","x":699.1,"y":336.8},{"ft":0,"yy":"2011","typ":"10","ft_tm":"201108061200","lat":29.3,"lon":153.7,"dir":"N","sp":10,"ps":980,"ws":31,"rad15":300,"rad25":70,"rad":-9,"loc":"일본 도쿄 동남동쪽 약 1490 km 부근 해상","x":699.1,"y":327.0},{"ft":1,"yy":"2011","typ":"10","ft_tm":"201108071200","lat":31.7,"lon":154.5,"dir":"NNE","sp":12,"ps":975,"ws":34,"rad15":330,"rad25":-9,"rad":150,"loc":"일본 도쿄 동남동쪽 약 1430 km 부근 해상","x":714.8,"y":280.0},{"ft":1,"yy":"2011","typ":"10","ft_tm":"201108081200","lat":35.0,"lon":158.0,"dir":"NE","sp":21,"ps":980,"ws":31,"rad15":300,"rad25":-9,"rad":250,"loc":"일본 삿포로 동남동쪽 약 1690 km 부근 해상","x":783.3,"y":215.4},{"ft":1,"yy":"2011","typ":"10","ft_tm":"201108091200","lat":40.0,"lon":162.3,"dir":"NE","sp":28,"ps":990,"ws":24,"rad15":250,"rad25":-9,"rad":400,"loc":"일본 삿포로 동쪽 약 1770 km 부근 해상","x":867.5,"y":117.5}]}},"korea":"M176.7,164.9 L175.6,165.1 L175.3,164.0 L176.7,164.9Z M177.8,165.0 L176.7,164.9 L177.6,164.3 L177.8,165.0Z M177.1,163.9 L175.9,163.8 L176.1,162.9 L177.1,163.9Z M177.3,162.8 L177.1,163.9 L176.4,162.7 L177.3,162.8Z M178.4,163.6 L177.3,164.1 L177.3,162.8 L178.4,163.6Z M175.4,163.9 L173.9,164.6 L174.4,163.5 L175.4,163.9Z M175.6,165.1 L174.3,164.9 L175.3,164.2 L175.6,165.1Z M174.3,164.9 L175.5,165.5 L173.4,165.0 L174.3,164.9Z M173.8,166.2 L172.8,165.6 L173.9,165.5 L173.8,166.2Z M173.4,165.0 L173.6,165.8 L171.6,165.3 L172.4,164.4 L173.4,165.0Z M173.8,166.2 L174.3,166.8 L172.6,166.9 L173.8,166.2Z M175.2,165.8 L174.4,166.7 L173.9,165.4 L175.2,165.8Z M175.9,166.9 L174.4,166.7 L175.3,166.1 L175.9,166.9Z M175.9,166.9 L175.1,167.7 L174.3,166.8 L175.9,166.9Z M178.1,167.3 L177.2,167.8 L175.9,166.3 L178.1,167.3Z M177.6,165.9 L178.5,167.2 L176.4,165.9 L177.6,165.9Z M179.1,166.1 L178.7,167.1 L177.6,165.9 L179.1,166.1Z M179.1,166.1 L178.5,165.3 L179.7,164.8 L179.1,166.1Z M216.3,211.5 L217.0,212.3 L215.7,212.7 L216.3,211.5Z M217.3,212.2 L217.6,213.6 L216.7,213.3 L217.3,212.2Z M216.3,210.0 L216.3,211.5 L215.2,211.5 L216.3,210.0Z M219.5,211.8 L218.4,212.4 L217.6,211.3 L218.3,210.5 L219.5,211.8Z M214.1,213.2 L215.4,213.0 L215.6,214.4 L214.8,214.7 L214.1,213.2Z M218.3,210.5 L217.5,211.3 L216.1,210.3 L217.5,209.4 L218.3,210.5Z M212.4,214.2 L212.0,215.6 L211.3,214.2 L212.4,214.2Z M211.9,213.5 L211.4,212.3 L212.9,212.4 L213.0,211.3 L215.4,210.7 L214.0,213.5 L211.9,213.5Z M215.8,211.7 L214.6,213.1 L214.8,211.7 L215.8,211.7Z M221.4,208.9 L219.5,211.8 L217.6,209.4 L217.7,208.1 L219.3,207.8 L221.4,208.9Z M210.2,195.9 L210.7,198.4 L207.9,198.4 L207.9,195.7 L210.2,195.9Z M207.8,198.2 L205.7,197.9 L206.2,196.2 L208.0,196.3 L207.8,198.2Z M210.1,198.6 L209.5,199.8 L207.4,199.5 L207.9,198.4 L210.1,198.6Z M205.3,199.4 L205.8,198.3 L207.3,199.5 L206.7,200.2 L205.3,199.4Z M207.3,199.5 L209.2,199.9 L209.2,201.3 L206.9,201.0 L205.7,202.8 L203.1,203.4 L203.7,202.7 L202.7,201.6 L204.4,201.4 L203.3,200.5 L203.9,199.6 L207.3,199.5Z M205.7,197.9 L205.0,198.9 L203.4,198.7 L204.7,196.9 L205.7,197.9Z M164.9,167.9 L163.6,167.0 L166.5,165.8 L168.0,166.4 L164.9,167.9Z M169.9,166.9 L170.3,167.7 L169.0,167.8 L169.9,166.9Z M168.4,168.1 L170.5,167.7 L169.7,169.4 L168.0,169.6 L169.5,169.2 L168.4,168.1Z M171.7,167.0 L170.9,168.7 L169.7,168.5 L170.1,167.0 L171.7,167.0Z M171.6,166.0 L171.7,167.0 L170.1,166.9 L170.2,166.0 L171.6,166.0Z M172.2,164.8 L171.6,166.0 L170.0,165.8 L170.0,164.8 L172.2,164.8Z M170.9,164.6 L170.0,164.8 L170.1,167.0 L168.5,166.5 L167.9,164.7 L169.5,163.7 L170.9,164.6Z M163.1,161.6 L164.1,162.8 L163.3,163.6 L161.9,162.3 L163.1,161.6Z M161.9,160.3 L163.1,160.8 L160.7,161.2 L161.9,160.3Z M165.3,160.1 L167.0,161.6 L166.8,164.9 L163.9,164.2 L164.7,163.4 L163.5,160.8 L165.3,160.1Z M158.8,170.9 L159.9,171.7 L158.3,171.9 L158.8,170.9Z M166.1,171.4 L165.2,171.7 L165.2,170.8 L166.4,170.8 L166.1,171.4Z M131.0,157.0 L132.1,157.4 L131.1,158.2 L129.5,157.3 L131.0,157.0Z M176.3,213.0 L174.9,213.9 L174.4,212.4 L176.3,213.0Z M174.4,212.4 L172.4,213.5 L173.1,211.9 L174.4,212.4Z M174.5,212.5 L174.4,213.8 L171.4,214.1 L174.5,212.5Z M176.4,212.7 L173.1,211.9 L173.0,210.9 L174.9,210.4 L176.4,212.7Z M173.0,210.9 L173.5,211.8 L172.0,214.0 L169.5,213.1 L169.5,211.6 L171.1,210.4 L173.0,210.9Z M186.3,187.5 L187.2,188.0 L184.9,192.0 L184.4,189.1 L186.3,187.5Z M184.5,191.7 L183.4,190.2 L184.2,188.9 L185.2,190.0 L184.5,191.7Z M183.9,188.5 L182.8,192.2 L181.7,190.9 L183.9,188.5Z M184.1,186.9 L184.3,188.4 L181.3,190.4 L181.8,187.7 L183.7,186.0 L184.1,186.9Z M185.9,187.2 L185.4,188.9 L184.2,188.9 L183.9,187.0 L185.7,186.5 L185.9,187.2Z M222.2,204.6 L220.4,203.8 L222.2,203.7 L222.2,204.6Z M222.2,204.6 L222.6,206.5 L220.1,204.9 L222.2,204.6Z M223.0,205.1 L224.4,204.3 L223.9,206.0 L223.0,205.1Z M224.2,202.6 L223.4,205.3 L221.1,203.8 L222.3,202.1 L224.2,202.6Z M221.2,202.8 L220.1,204.9 L222.7,206.6 L221.5,208.9 L214.8,204.4 L218.2,201.2 L221.2,202.8Z M181.8,182.3 L182.1,184.3 L184.3,186.0 L181.2,187.8 L179.6,186.1 L180.3,184.5 L178.8,181.9 L181.8,182.3Z M177.0,171.4 L175.7,171.7 L174.9,170.3 L177.0,171.4Z M178.0,170.4 L177.1,171.6 L177.0,169.9 L178.0,170.4Z M179.7,168.3 L178.5,168.0 L179.8,166.9 L179.7,168.3Z M179.7,168.3 L178.5,169.7 L176.8,168.9 L179.7,168.3Z M179.1,161.4 L177.3,162.8 L176.3,161.7 L179.1,161.4Z M175.2,167.6 L174.2,169.2 L173.7,168.1 L175.2,167.6Z M175.9,168.4 L175.5,169.1 L174.8,168.2 L175.5,167.6 L175.9,168.4Z M172.8,165.6 L172.8,167.2 L171.2,166.7 L171.7,165.4 L172.8,165.6Z M173.8,166.7 L174.3,167.7 L173.4,168.3 L172.8,167.2 L173.8,166.7Z M178.7,173.4 L178.3,175.5 L179.3,176.2 L178.1,177.3 L174.5,178.1 L171.9,176.1 L178.7,173.4Z M178.0,157.2 L179.3,158.7 L178.4,159.4 L176.4,158.3 L178.0,157.2Z M173.9,168.8 L173.8,169.9 L175.1,170.4 L173.2,171.0 L173.0,169.4 L173.9,168.8Z M168.1,170.5 L169.3,170.9 L169.3,172.5 L168.9,171.6 L167.3,172.2 L167.1,170.6 L168.7,170.1 L168.1,170.5Z M173.1,169.1 L173.2,170.2 L170.7,170.2 L173.1,169.1Z M176.1,162.9 L173.4,165.0 L171.6,163.9 L173.3,161.8 L174.9,161.5 L174.4,163.1 L176.1,162.9Z M173.1,162.0 L172.2,163.9 L171.0,163.5 L173.1,162.0Z M171.8,162.4 L171.0,163.5 L169.8,162.8 L171.8,162.4Z M177.2,167.8 L175.5,167.9 L176.3,167.0 L177.2,167.8Z M179.6,164.8 L178.2,165.2 L178.5,163.6 L179.6,164.8Z M183.5,163.5 L181.9,166.3 L177.8,162.5 L182.1,161.1 L183.5,163.5Z M178.3,173.4 L176.2,172.7 L177.5,172.3 L178.3,173.4Z M171.4,168.0 L171.9,167.0 L173.0,167.2 L173.9,168.8 L168.7,170.1 L172.1,168.5 L171.4,168.0Z M175.1,168.8 L174.9,170.2 L173.8,169.9 L175.1,168.8Z M177.1,168.3 L174.9,170.2 L176.0,168.2 L177.1,168.3Z M181.9,166.1 L179.1,166.9 L179.8,164.6 L181.9,166.1Z M182.9,170.9 L184.4,174.5 L181.4,173.2 L178.7,174.4 L179.7,170.7 L179.0,169.6 L181.8,169.4 L181.7,170.9 L182.9,170.9Z M179.2,171.9 L177.6,171.7 L178.2,169.9 L179.6,170.3 L179.2,171.9Z M179.0,169.6 L177.8,170.5 L176.6,169.2 L179.0,169.6Z M175.7,157.8 L174.3,160.1 L174.9,161.5 L169.9,162.5 L169.8,157.5 L176.0,156.4 L175.7,157.8Z M188.5,173.2 L188.1,174.9 L185.8,175.2 L186.3,174.1 L182.7,171.9 L182.9,170.6 L185.5,169.1 L186.9,170.1 L186.4,172.6 L188.5,173.2Z M184.6,173.3 L186.2,175.0 L181.9,178.3 L178.6,176.8 L178.7,174.4 L181.4,173.2 L184.4,174.5 L184.6,173.3Z M169.7,160.9 L169.8,162.9 L172.2,164.8 L169.5,163.7 L167.6,164.3 L166.9,160.7 L169.7,160.9Z M171.2,175.5 L169.4,173.2 L169.1,170.6 L172.0,171.7 L172.4,170.5 L173.3,171.2 L174.6,170.5 L175.7,171.7 L179.3,172.2 L178.3,173.4 L176.4,172.4 L176.2,174.8 L174.0,174.9 L173.2,175.9 L171.2,175.5Z M184.1,168.0 L185.0,169.1 L182.9,170.9 L181.7,170.9 L181.8,169.4 L178.9,169.4 L179.7,166.7 L182.6,165.7 L184.1,168.0Z M176.4,158.0 L178.6,160.6 L176.3,161.3 L176.4,162.8 L174.4,163.1 L174.3,160.1 L175.6,157.8 L176.4,158.0Z M184.7,154.4 L185.0,155.6 L181.3,161.2 L178.3,160.9 L179.3,158.7 L178.0,157.0 L179.1,156.7 L178.5,155.5 L180.0,155.4 L179.7,153.1 L180.6,153.9 L182.1,153.2 L181.7,154.2 L182.8,154.8 L184.7,154.4Z M191.1,169.0 L190.9,171.9 L189.4,173.5 L186.4,172.6 L186.9,170.1 L184.0,168.1 L186.2,167.6 L191.1,169.0Z M178.1,151.1 L179.8,153.0 L180.0,155.4 L178.4,155.6 L179.1,156.8 L176.4,158.0 L176.0,156.4 L172.1,156.9 L173.5,154.5 L175.6,153.9 L175.9,152.2 L178.1,151.1Z M186.8,156.6 L188.3,158.5 L186.6,159.9 L186.2,162.0 L187.2,161.9 L187.4,164.3 L186.0,165.0 L181.5,160.9 L185.0,155.6 L186.8,156.6Z M183.5,163.5 L184.7,163.1 L186.0,165.0 L188.0,163.4 L192.7,165.3 L191.1,166.4 L191.9,167.0 L191.5,168.9 L184.1,168.0 L183.4,165.8 L182.2,166.0 L183.5,163.5Z M193.9,155.6 L196.4,156.3 L194.5,160.0 L192.2,159.7 L192.8,161.5 L188.3,163.0 L187.5,161.9 L186.2,162.1 L186.6,159.8 L188.3,158.5 L186.9,157.2 L187.3,155.0 L191.7,156.7 L193.9,155.6Z M198.0,170.4 L200.0,170.6 L199.9,171.3 L196.6,172.5 L195.2,171.2 L193.9,173.3 L191.0,172.6 L191.1,169.0 L192.2,167.5 L193.2,168.4 L194.4,166.3 L194.8,167.3 L197.5,167.9 L196.5,169.7 L198.0,170.4Z M213.0,159.7 L216.5,163.0 L216.3,165.5 L214.1,165.7 L213.1,164.6 L211.8,166.3 L209.7,165.8 L210.4,161.7 L207.6,161.2 L207.3,159.3 L211.7,158.2 L213.0,159.7Z M217.6,164.8 L218.3,167.1 L214.6,167.5 L214.9,165.8 L217.6,164.8Z M217.3,174.3 L213.0,174.7 L214.8,169.7 L215.7,169.6 L215.4,172.1 L217.3,174.3Z M207.6,152.6 L207.8,153.5 L205.0,154.3 L204.1,153.2 L207.6,152.6Z M218.5,166.9 L222.4,171.6 L222.5,173.4 L220.7,173.9 L220.1,175.4 L215.6,172.5 L215.6,169.4 L213.6,172.0 L212.4,169.6 L214.0,167.4 L218.5,166.9Z M205.3,158.7 L207.4,159.4 L206.2,161.9 L201.9,162.4 L200.8,163.9 L198.2,162.9 L192.9,165.4 L186.7,163.5 L187.4,161.9 L188.3,163.0 L192.8,161.5 L192.2,159.7 L194.5,160.0 L195.7,157.8 L199.0,158.7 L200.0,160.3 L205.3,158.7Z M200.8,163.9 L201.7,165.7 L200.6,166.8 L201.0,168.2 L198.0,170.4 L196.5,169.7 L197.7,168.3 L197.0,167.5 L194.8,167.3 L194.4,166.3 L192.9,168.5 L191.1,166.5 L198.2,162.9 L200.8,163.9Z M207.1,171.0 L208.4,172.6 L210.6,172.1 L213.2,172.9 L213.4,175.3 L211.1,174.4 L210.5,175.7 L205.6,173.7 L204.2,174.2 L203.4,173.1 L201.6,173.6 L201.0,173.1 L202.3,172.0 L197.9,170.5 L199.5,168.5 L201.2,168.2 L203.1,170.5 L204.1,169.5 L207.1,171.0Z M207.3,160.1 L207.6,161.2 L210.4,161.7 L210.8,163.0 L205.9,167.3 L207.5,170.7 L204.1,169.5 L203.1,170.5 L200.7,167.5 L201.7,165.8 L200.8,163.9 L201.9,162.4 L206.2,161.9 L207.3,160.1Z M214.9,165.8 L215.1,167.0 L212.4,169.5 L213.7,173.3 L207.1,171.9 L207.5,170.7 L205.7,168.0 L207.6,165.1 L211.8,166.4 L213.1,164.6 L214.9,165.8Z M193.7,150.6 L190.1,151.8 L188.0,151.1 L185.9,154.1 L182.9,154.9 L181.7,154.2 L182.1,153.2 L180.6,153.9 L178.1,151.1 L180.9,150.1 L186.0,150.8 L191.6,149.8 L193.7,150.6Z M193.2,151.1 L194.1,155.5 L193.1,156.3 L189.0,156.2 L187.5,155.0 L186.8,156.6 L185.2,156.3 L184.7,154.4 L187.9,151.1 L193.2,151.1Z M196.4,156.3 L194.0,156.0 L193.2,151.1 L198.9,150.2 L197.5,153.7 L198.1,155.9 L196.4,156.3Z M204.5,152.6 L205.0,154.3 L203.9,155.2 L205.9,156.4 L204.5,159.3 L202.6,160.0 L201.6,159.2 L200.0,160.3 L199.0,158.7 L195.4,157.5 L198.1,155.7 L197.5,153.7 L199.2,151.1 L198.0,150.1 L201.1,149.3 L202.1,151.4 L204.2,151.7 L204.5,152.6Z M207.3,152.1 L204.7,152.8 L200.3,149.3 L201.8,147.3 L201.9,145.0 L202.8,144.6 L203.9,145.8 L207.3,152.1Z M210.0,156.2 L211.7,158.2 L207.2,159.3 L205.2,158.7 L205.9,156.4 L203.7,154.8 L207.8,153.5 L210.0,156.2Z M191.7,177.4 L189.0,176.5 L190.8,172.0 L191.7,173.4 L194.2,172.9 L196.7,174.0 L197.6,176.6 L196.6,177.1 L196.5,179.0 L198.5,179.6 L195.5,179.8 L194.9,178.4 L191.7,177.4Z M199.9,171.3 L202.3,172.0 L201.0,173.1 L201.8,174.3 L200.1,175.2 L201.0,177.0 L200.1,179.9 L196.6,179.1 L197.5,174.7 L195.6,174.0 L194.3,171.9 L195.8,171.2 L196.6,172.5 L199.9,171.3Z M191.3,184.0 L188.6,184.1 L186.2,187.8 L185.0,185.8 L185.7,183.2 L189.3,181.5 L191.3,184.0Z M185.7,186.5 L184.1,186.9 L183.6,184.8 L185.7,183.1 L185.0,185.7 L185.7,186.5Z M182.5,181.6 L185.7,183.1 L182.9,184.8 L181.7,183.3 L182.5,181.6Z M188.4,181.9 L185.7,183.2 L182.5,181.6 L187.3,180.5 L188.4,181.9Z M191.9,184.0 L193.9,185.5 L193.5,188.5 L189.3,187.1 L186.3,187.5 L188.9,183.9 L191.9,184.0Z M193.5,188.5 L189.0,191.4 L189.0,192.4 L185.8,191.0 L186.5,188.2 L188.9,187.1 L193.5,188.5Z M196.7,190.9 L196.9,191.9 L195.4,191.9 L195.1,194.4 L193.4,195.4 L189.2,195.0 L187.8,193.2 L192.1,189.7 L196.7,190.9Z M185.0,176.0 L185.0,177.2 L187.7,178.8 L187.3,180.5 L184.9,181.1 L181.9,178.3 L185.0,176.0Z M197.0,179.8 L197.2,181.9 L195.1,181.4 L193.4,182.4 L194.5,182.7 L194.3,184.0 L193.5,182.9 L191.3,184.0 L188.4,180.5 L188.9,179.0 L191.7,178.5 L191.9,177.2 L194.9,178.4 L195.5,179.8 L197.0,179.8Z M189.9,173.5 L189.0,176.5 L191.9,178.1 L188.3,179.5 L185.0,177.2 L185.0,175.9 L188.1,174.9 L188.5,173.2 L189.9,173.5Z M208.6,174.9 L204.5,177.6 L204.1,179.9 L200.6,178.7 L201.0,177.0 L200.1,175.2 L202.4,173.1 L208.6,174.9Z M188.7,179.2 L188.9,182.1 L186.8,180.0 L188.7,179.2Z M184.5,180.9 L181.8,182.3 L179.4,181.4 L179.2,183.7 L176.4,182.9 L178.7,179.8 L181.7,178.4 L184.5,180.9Z M178.5,180.4 L178.2,176.9 L181.9,178.3 L178.5,180.4Z M176.4,182.9 L178.8,183.0 L180.3,184.4 L179.6,185.8 L181.8,187.7 L181.5,189.3 L176.1,189.9 L176.6,187.2 L174.6,186.9 L174.0,185.7 L175.4,182.6 L176.4,182.9Z M167.7,185.9 L168.4,186.4 L167.1,187.2 L168.7,186.3 L170.9,188.4 L169.9,189.3 L171.1,191.1 L169.7,192.3 L166.9,192.1 L166.5,189.3 L167.6,188.9 L166.1,188.3 L167.1,187.2 L166.0,186.2 L167.7,185.9Z M178.5,180.4 L176.0,183.1 L172.9,180.9 L173.2,178.5 L177.7,177.4 L178.5,180.4Z M164.4,178.4 L164.9,177.4 L163.1,176.3 L165.1,175.9 L167.0,179.6 L169.0,179.9 L169.5,181.1 L168.0,183.0 L165.3,184.0 L163.7,183.6 L162.9,179.3 L164.4,178.4Z M180.1,189.2 L180.2,190.9 L182.8,191.9 L182.6,193.3 L178.0,194.4 L175.9,191.7 L178.4,189.1 L180.1,189.2Z M181.3,189.4 L182.0,190.6 L181.0,191.2 L180.1,189.2 L181.3,189.4Z M170.3,176.2 L172.0,176.7 L173.4,180.3 L169.7,180.7 L165.9,178.5 L166.4,174.9 L170.3,176.2Z M184.5,191.7 L186.7,190.9 L188.0,191.5 L188.3,195.8 L183.6,195.3 L182.5,192.4 L183.4,190.5 L184.5,191.7Z M175.8,189.2 L177.6,190.6 L175.9,191.7 L176.4,192.9 L174.1,193.0 L173.7,194.4 L172.2,192.2 L170.2,192.1 L171.1,190.8 L170.0,189.6 L170.6,188.6 L173.3,188.2 L173.5,189.5 L175.8,189.2Z M169.3,194.8 L166.3,192.7 L172.0,192.2 L173.7,194.4 L171.1,195.8 L169.3,194.8Z M174.3,184.8 L174.6,186.9 L176.6,187.2 L175.9,189.2 L173.5,189.5 L173.3,188.2 L171.7,188.9 L170.2,187.8 L169.8,186.7 L174.3,184.8Z M171.8,185.3 L169.6,186.8 L166.1,185.7 L165.3,184.0 L171.3,182.7 L171.8,185.3Z M173.0,180.4 L175.7,182.3 L174.5,184.7 L171.3,185.4 L171.1,182.6 L168.1,183.7 L169.5,180.6 L173.0,180.4Z M164.0,184.1 L165.0,188.0 L163.1,187.2 L162.8,184.3 L164.0,184.1Z M159.4,181.6 L159.6,179.2 L160.1,179.9 L160.1,178.5 L162.4,178.1 L162.6,176.6 L163.1,178.3 L162.2,179.8 L163.6,180.3 L163.7,183.6 L162.4,184.3 L162.1,181.4 L160.5,182.6 L159.5,182.0 L160.8,181.3 L159.4,181.6Z M180.5,199.7 L177.9,201.1 L177.2,200.6 L177.4,199.0 L180.5,199.7Z M180.5,199.7 L177.7,199.2 L176.3,197.9 L178.9,197.7 L180.5,199.7Z M173.3,197.4 L169.9,198.3 L168.2,196.8 L165.3,199.4 L166.9,196.3 L171.0,196.1 L173.6,194.6 L174.6,195.8 L173.3,197.4Z M176.4,192.9 L179.0,194.7 L178.1,197.2 L176.2,198.1 L173.5,197.6 L174.6,195.8 L173.7,195.1 L173.9,193.2 L176.4,192.9Z M177.5,202.1 L178.4,205.4 L175.8,204.5 L175.0,206.0 L171.8,206.2 L171.7,204.4 L170.7,204.1 L170.9,202.7 L173.8,200.5 L177.5,202.1Z M187.7,204.5 L189.4,206.7 L188.1,209.1 L185.5,208.2 L183.8,209.5 L179.9,209.0 L183.2,205.6 L182.8,204.5 L185.4,204.7 L186.9,206.2 L187.7,204.5Z M173.3,197.4 L176.2,197.9 L176.2,199.4 L177.7,200.2 L177.4,202.3 L173.9,200.5 L172.6,201.3 L170.3,199.5 L169.9,198.3 L173.3,197.4Z M177.4,199.0 L177.5,199.9 L176.2,199.4 L176.4,198.4 L177.4,199.0Z M178.1,203.2 L177.5,201.6 L180.8,199.3 L176.8,197.4 L178.1,197.2 L178.9,194.1 L182.9,193.2 L183.7,195.2 L181.3,201.8 L179.7,200.9 L178.1,203.2Z M186.5,196.1 L188.5,198.8 L186.4,199.5 L185.4,203.2 L181.9,201.9 L181.4,200.4 L183.4,195.4 L186.5,196.1Z M193.4,195.4 L193.6,197.5 L190.0,199.9 L188.4,199.3 L186.5,196.1 L186.6,195.0 L188.3,195.8 L188.7,194.4 L193.4,195.4Z M190.0,199.9 L187.2,206.1 L183.4,204.5 L183.6,203.4 L185.4,203.2 L186.5,199.5 L188.4,198.9 L190.0,199.9Z M181.6,200.1 L181.9,201.9 L184.8,203.2 L182.8,204.5 L183.2,205.6 L179.1,206.3 L178.1,203.2 L179.7,200.9 L181.3,201.8 L181.6,200.1Z M173.7,206.3 L175.8,204.5 L179.1,206.3 L182.4,206.2 L178.3,209.5 L177.1,209.1 L176.9,206.2 L175.1,207.7 L173.7,206.3Z M165.1,206.6 L168.7,204.2 L171.7,204.4 L171.4,207.2 L169.3,209.1 L167.1,209.4 L165.1,206.6Z M172.9,201.4 L170.9,202.7 L170.7,204.1 L165.7,203.4 L167.6,201.7 L166.9,201.0 L167.8,201.9 L169.1,199.7 L171.6,199.8 L172.9,201.4Z M165.6,219.4 L163.5,219.4 L164.9,218.4 L165.6,219.4Z M191.3,224.6 L191.7,225.4 L189.9,224.4 L191.3,224.6Z M189.3,223.5 L190.1,223.9 L188.7,224.0 L189.3,223.5Z M191.6,221.0 L191.8,223.5 L190.2,222.8 L190.7,220.6 L191.6,221.0Z M186.9,218.4 L188.0,217.4 L188.7,218.7 L191.4,218.1 L191.0,220.5 L189.1,220.1 L188.3,221.1 L188.9,222.7 L187.0,221.9 L187.9,220.3 L186.9,218.4Z M187.6,217.0 L186.7,218.5 L181.0,217.6 L179.7,215.8 L179.9,213.0 L182.6,214.0 L184.5,211.7 L186.7,213.2 L187.6,217.0Z M171.8,214.0 L174.2,213.9 L173.7,217.5 L170.9,217.5 L169.9,216.4 L169.9,217.7 L168.5,216.7 L167.6,217.9 L166.7,217.0 L168.4,215.4 L168.3,213.4 L171.0,213.2 L171.8,214.0Z M190.7,216.5 L191.6,217.6 L190.1,217.1 L190.7,216.5Z M191.1,216.0 L188.8,217.6 L187.5,216.9 L186.7,213.3 L188.1,213.0 L188.5,211.8 L191.3,214.4 L191.1,216.0Z M178.1,209.5 L178.6,211.6 L177.5,211.8 L177.6,213.1 L173.4,209.6 L176.9,206.2 L177.1,209.1 L178.1,209.5Z M183.8,209.5 L184.3,212.5 L182.6,214.0 L180.1,212.8 L180.0,211.2 L178.4,211.5 L177.8,210.5 L179.9,208.8 L183.8,209.5Z M187.5,209.3 L188.1,213.0 L187.1,213.5 L183.6,211.6 L184.8,208.3 L187.5,209.3Z M185.6,225.9 L186.8,226.5 L185.8,226.9 L185.6,225.9Z M180.5,225.3 L180.3,226.5 L178.2,226.3 L180.5,225.3Z M185.4,224.3 L186.2,225.4 L184.9,225.4 L185.4,224.3Z M182.2,221.9 L182.7,220.2 L180.9,219.9 L183.2,218.8 L186.2,223.3 L184.0,223.5 L184.7,224.9 L182.6,226.3 L181.2,224.7 L178.7,224.6 L181.2,221.0 L182.2,221.9Z M184.0,219.5 L181.9,219.1 L177.2,222.5 L175.7,221.1 L178.0,216.6 L180.1,215.6 L180.7,217.4 L184.3,218.5 L183.2,218.5 L184.6,219.0 L184.0,219.5Z M180.1,212.8 L179.8,215.7 L177.3,218.5 L172.8,217.9 L173.8,217.4 L174.2,213.8 L177.8,213.0 L177.5,211.8 L179.9,211.2 L180.1,212.8Z M174.1,226.0 L173.2,226.1 L173.9,222.7 L172.2,219.5 L173.8,217.8 L175.1,218.8 L177.0,218.5 L175.7,221.1 L177.2,222.3 L175.4,222.6 L176.4,223.0 L175.8,225.7 L174.1,226.0Z M172.2,224.2 L171.9,222.9 L171.5,225.7 L170.0,225.7 L170.5,221.6 L169.5,220.6 L171.9,219.6 L173.9,222.7 L173.2,226.2 L172.1,225.9 L172.2,224.2Z M170.4,226.4 L168.7,227.1 L168.5,228.8 L166.8,229.2 L166.8,227.9 L165.8,227.9 L166.8,226.8 L165.6,226.2 L165.7,224.5 L161.7,223.0 L162.2,220.1 L167.3,222.1 L170.5,221.6 L169.7,224.4 L171.1,226.0 L170.4,226.4Z M172.8,217.9 L173.5,218.1 L172.2,219.7 L170.0,220.2 L169.2,221.8 L167.3,222.1 L166.0,220.5 L163.7,220.4 L166.6,219.9 L168.4,216.8 L169.9,217.7 L170.1,216.4 L172.8,217.9Z M165.6,213.9 L167.3,215.9 L166.6,219.9 L164.2,217.8 L164.0,215.4 L163.9,216.9 L162.7,216.8 L164.1,214.4 L163.2,213.6 L161.8,214.3 L161.4,213.2 L163.4,212.2 L163.1,213.5 L164.3,213.7 L164.6,214.8 L165.6,213.9Z M169.5,211.6 L167.9,215.9 L166.5,215.6 L165.8,213.4 L163.9,212.2 L168.4,210.7 L169.5,211.6Z M165.5,207.0 L167.1,209.4 L169.3,209.1 L168.0,211.5 L163.9,212.2 L164.0,211.2 L162.5,211.0 L164.4,208.1 L165.4,208.5 L164.5,207.6 L165.5,207.0Z M173.7,206.3 L174.8,207.6 L173.5,209.1 L173.9,210.4 L171.1,210.4 L169.9,211.6 L168.1,210.7 L171.0,208.0 L171.2,206.5 L173.7,206.3Z M167.4,231.5 L168.8,231.9 L166.7,232.6 L167.4,231.5Z M174.1,230.7 L174.6,231.9 L173.4,232.0 L174.1,230.7Z M167.8,230.4 L168.7,231.4 L167.4,231.2 L167.8,230.4Z M173.1,228.8 L171.4,228.4 L174.3,228.3 L173.1,228.8Z M176.8,228.3 L176.0,227.9 L178.2,228.3 L176.8,228.3Z M170.3,227.2 L171.9,229.3 L169.3,228.5 L169.2,227.5 L170.3,227.2Z M175.1,227.3 L174.4,228.0 L173.5,227.0 L175.1,227.3Z M173.0,226.4 L173.6,227.3 L171.7,228.0 L171.7,226.9 L173.0,226.4Z M157.5,228.8 L158.5,229.5 L157.1,229.4 L157.5,228.8Z M157.2,228.2 L157.9,228.7 L156.6,228.5 L157.2,228.2Z M161.6,223.5 L164.0,224.9 L163.8,226.3 L162.3,227.8 L159.2,227.9 L158.5,226.4 L161.6,223.5Z M157.8,222.7 L158.7,224.1 L157.3,224.6 L158.4,223.5 L157.8,222.7Z M159.8,221.8 L160.6,222.5 L159.1,222.9 L159.8,221.8Z M145.4,221.3 L146.2,221.5 L144.9,222.7 L145.4,221.3Z M156.1,220.7 L156.9,221.5 L155.1,221.8 L156.1,220.7Z M159.5,221.2 L158.1,221.1 L157.9,219.9 L160.1,220.2 L159.5,221.2Z M156.5,219.1 L156.6,220.0 L154.5,220.6 L156.5,219.1Z M159.8,218.9 L159.9,220.0 L158.3,219.5 L159.8,218.9Z M158.9,217.7 L159.6,218.4 L158.2,219.4 L157.5,218.8 L158.9,217.7Z M162.4,218.3 L161.1,218.3 L162.5,216.9 L164.0,218.6 L162.4,218.3Z M157.9,216.7 L158.3,218.0 L156.0,217.8 L157.9,216.7Z M159.9,216.1 L159.1,216.4 L159.5,215.6 L158.6,215.2 L159.9,215.0 L159.9,216.1Z M161.5,213.5 L161.7,215.1 L159.8,214.1 L161.5,213.5Z M157.8,213.9 L159.9,212.5 L158.6,214.4 L157.8,213.9Z M223.3,195.0 L224.3,195.9 L226.6,194.3 L225.5,198.9 L222.1,197.9 L220.9,194.6 L223.3,195.0Z M223.8,193.9 L222.3,195.5 L220.8,194.2 L218.9,195.3 L215.2,192.5 L217.0,191.2 L216.6,190.5 L218.8,191.4 L221.0,189.3 L221.4,190.5 L222.8,190.5 L223.8,193.9Z M224.7,201.8 L221.2,202.8 L218.3,201.2 L216.9,202.8 L214.8,200.6 L215.9,197.6 L218.0,197.2 L218.4,194.7 L220.8,194.2 L222.5,198.4 L225.6,199.0 L224.7,201.8Z M201.6,194.1 L201.5,194.9 L199.1,195.1 L198.8,196.5 L196.8,197.0 L197.3,198.9 L193.6,197.9 L193.4,195.4 L195.1,194.4 L195.4,191.9 L196.9,191.9 L196.6,190.9 L200.4,191.3 L201.6,194.1Z M215.2,181.1 L215.1,187.9 L213.7,190.0 L210.9,186.4 L207.6,187.9 L206.6,186.2 L204.3,185.9 L207.7,183.0 L207.5,181.8 L210.3,182.1 L210.5,180.0 L215.2,181.1Z M201.5,189.0 L206.3,192.0 L206.9,193.6 L201.6,194.1 L201.1,192.0 L198.4,190.5 L201.5,189.0Z M209.7,175.4 L208.3,178.4 L208.8,179.3 L210.1,178.8 L210.3,182.1 L207.4,182.1 L206.6,180.8 L205.1,180.6 L204.2,178.4 L207.3,175.3 L209.7,175.4Z M215.2,192.5 L218.4,194.7 L218.1,197.1 L216.7,196.9 L215.7,198.8 L213.7,199.1 L212.6,196.7 L209.5,195.1 L210.4,193.7 L211.5,194.1 L213.4,192.3 L215.2,192.5Z M194.3,184.0 L195.4,185.7 L197.2,183.9 L199.3,184.1 L202.5,187.9 L198.0,191.1 L192.9,190.4 L194.0,185.9 L191.8,184.1 L193.5,182.9 L194.3,184.0Z M203.0,180.1 L202.6,183.1 L201.0,183.8 L201.1,185.4 L198.2,183.6 L196.9,185.1 L194.5,185.4 L194.6,183.0 L193.4,182.4 L195.1,181.4 L197.2,181.9 L197.0,179.8 L200.1,179.9 L200.6,178.7 L203.0,180.1Z M214.8,199.0 L214.1,200.5 L210.8,201.6 L209.2,200.0 L210.7,198.4 L210.2,195.9 L212.7,196.7 L213.1,198.9 L214.8,199.0Z M213.1,191.9 L213.3,193.0 L211.5,194.1 L210.4,193.7 L208.6,195.7 L208.1,194.2 L207.0,194.7 L206.7,192.3 L204.5,191.5 L203.9,190.2 L204.7,189.4 L208.3,190.7 L208.3,191.7 L213.1,191.9Z M204.2,185.6 L206.6,186.2 L207.6,187.9 L210.5,186.2 L212.1,186.9 L213.4,191.8 L208.3,191.7 L207.5,190.3 L201.8,189.3 L202.5,185.5 L204.2,185.6Z M218.4,186.0 L220.4,189.2 L219.9,190.4 L218.8,191.4 L216.9,190.4 L215.9,192.2 L213.3,192.3 L212.4,190.7 L214.8,189.0 L215.4,184.2 L218.4,186.0Z M220.7,182.6 L219.7,184.3 L220.3,185.8 L218.0,186.0 L215.4,184.1 L215.1,180.7 L218.1,178.7 L220.9,178.7 L221.6,180.5 L220.7,182.6Z M223.7,183.2 L224.0,187.4 L222.8,190.5 L221.4,190.5 L218.4,186.0 L220.3,185.8 L220.0,182.8 L223.7,183.2Z M216.3,202.6 L215.2,203.4 L213.0,203.0 L211.3,204.3 L207.6,204.0 L206.3,203.2 L206.2,201.4 L209.6,200.8 L210.8,201.6 L215.7,198.8 L214.9,200.9 L216.3,202.6Z M205.0,198.9 L203.3,200.5 L204.3,201.5 L202.7,201.6 L203.4,203.3 L199.0,202.5 L199.8,202.0 L199.1,199.4 L200.7,200.1 L201.2,199.2 L203.0,199.8 L203.4,198.7 L205.0,198.9Z M201.5,194.9 L203.6,197.0 L203.0,199.8 L198.4,199.9 L196.8,197.0 L198.8,196.5 L199.1,195.1 L201.5,194.9Z M206.9,193.6 L208.4,195.6 L206.2,196.2 L205.6,198.0 L204.7,196.9 L203.6,197.8 L201.5,195.0 L201.6,194.1 L206.9,193.6Z M207.4,182.1 L207.7,183.0 L204.9,185.3 L202.5,185.5 L202.0,186.9 L201.0,186.5 L201.0,183.8 L202.6,183.1 L203.3,179.9 L204.9,179.2 L205.1,180.6 L207.4,182.1Z M219.0,175.4 L217.1,176.0 L218.4,178.7 L215.2,181.1 L211.6,179.7 L210.1,180.3 L210.1,178.8 L208.4,179.0 L209.6,175.6 L211.1,174.4 L212.9,175.3 L217.3,174.3 L219.0,175.4Z M223.7,175.2 L224.7,182.1 L223.7,183.2 L220.8,182.7 L221.0,178.9 L218.5,178.7 L217.1,176.0 L220.1,175.4 L222.1,173.3 L223.7,175.2Z M252.8,165.6 L252.2,167.3 L250.7,166.7 L250.5,166.0 L252.8,165.6Z M201.2,210.3 L203.0,211.5 L202.9,212.6 L199.9,213.2 L199.4,214.4 L198.7,213.1 L195.9,213.1 L193.6,211.1 L198.8,208.5 L199.6,210.4 L201.2,210.3Z M200.5,222.2 L201.7,222.5 L200.5,223.0 L200.5,222.2Z M202.8,218.5 L204.4,218.7 L204.1,220.0 L202.8,218.5Z M199.7,218.1 L200.4,218.4 L199.4,218.8 L199.7,218.1Z M204.5,215.9 L204.4,218.5 L201.7,217.3 L204.5,215.9Z M196.3,214.8 L195.4,214.7 L196.0,215.7 L194.6,215.7 L193.5,212.5 L198.6,213.1 L199.4,214.4 L197.5,217.0 L196.4,216.2 L197.0,213.8 L196.3,214.8Z M212.9,207.9 L214.8,208.9 L215.4,210.7 L213.0,211.3 L212.9,212.4 L210.3,212.1 L209.4,209.3 L212.9,207.9Z M215.5,203.2 L214.8,206.2 L212.9,207.9 L210.4,208.6 L207.1,206.4 L207.4,203.9 L215.5,203.2Z M209.0,219.5 L208.3,220.0 L209.1,220.7 L207.1,221.2 L207.5,219.8 L206.4,219.5 L207.4,218.4 L205.8,219.1 L205.1,217.8 L206.2,216.9 L208.1,217.5 L207.3,216.3 L208.5,216.2 L209.1,214.6 L209.9,215.0 L209.4,217.7 L210.6,217.5 L209.6,218.5 L210.3,219.5 L209.0,219.5Z M219.4,207.8 L216.3,210.0 L212.9,207.9 L214.7,205.4 L216.5,205.0 L219.4,207.8Z M208.6,208.0 L210.8,208.6 L209.4,209.3 L209.4,211.1 L207.8,211.0 L206.9,209.0 L207.4,207.7 L208.6,208.0Z M210.0,210.7 L210.3,212.3 L207.4,211.9 L210.0,210.7Z M204.9,213.6 L204.2,214.3 L202.7,213.2 L203.0,211.6 L204.3,212.2 L207.4,211.1 L207.0,212.8 L208.2,214.0 L207.1,214.3 L206.4,213.0 L204.9,213.6Z M207.3,210.0 L208.1,211.1 L205.2,211.7 L205.4,210.0 L207.3,210.0Z M210.9,214.1 L209.4,212.5 L207.8,212.4 L211.4,212.3 L212.3,213.2 L210.8,213.3 L210.9,214.1Z M203.3,205.3 L204.2,208.2 L202.0,208.3 L201.2,210.3 L199.7,210.4 L198.9,208.5 L197.6,208.6 L199.6,207.6 L199.9,205.9 L203.3,205.3Z M207.1,207.9 L207.4,210.0 L205.4,210.0 L204.4,212.1 L201.2,210.3 L202.1,208.3 L207.1,207.9Z M207.4,203.9 L207.1,206.4 L208.6,208.0 L204.8,207.9 L203.2,206.8 L204.1,205.9 L202.7,204.9 L202.8,203.4 L206.2,202.0 L207.4,203.9Z M202.6,212.9 L204.2,213.7 L203.1,215.1 L205.0,213.9 L205.6,215.1 L202.0,216.1 L201.2,217.3 L200.2,216.4 L199.8,217.4 L197.9,217.3 L199.6,213.4 L202.6,212.9Z M196.5,216.9 L196.0,218.0 L196.8,217.4 L197.5,218.7 L195.2,218.4 L196.5,216.9Z M194.0,218.1 L194.9,219.2 L197.1,218.9 L197.0,221.0 L195.0,221.1 L194.8,219.7 L193.0,220.7 L192.4,217.3 L194.3,216.5 L194.0,218.1Z M189.7,209.1 L191.4,211.1 L193.7,210.5 L194.6,212.1 L193.5,212.5 L194.5,214.4 L193.8,216.2 L191.8,216.7 L191.3,214.4 L188.4,211.6 L187.5,209.3 L189.7,209.1Z M195.0,205.2 L198.1,208.9 L194.0,211.0 L190.1,210.2 L189.7,209.1 L193.1,204.1 L195.0,205.2Z M193.0,204.2 L190.6,208.8 L188.4,208.8 L189.4,206.7 L187.7,204.5 L189.3,200.3 L193.4,202.3 L193.0,204.2Z M197.3,198.9 L196.5,200.0 L197.7,202.0 L195.9,202.9 L194.7,205.3 L192.6,204.0 L193.4,202.3 L189.5,200.3 L193.1,197.6 L197.3,198.9Z M199.0,200.2 L199.8,202.0 L199.0,202.5 L202.7,202.7 L203.3,205.3 L199.9,205.9 L199.6,207.6 L197.6,208.2 L194.9,204.7 L197.7,202.0 L196.6,199.9 L197.7,199.1 L199.0,200.2Z M174.3,244.4 L171.5,246.3 L159.8,248.9 L162.8,245.3 L171.6,243.4 L174.3,244.4Z M174.5,245.1 L175.0,246.1 L173.1,248.4 L168.4,249.9 L163.1,249.8 L162.0,250.7 L160.0,249.1 L174.5,245.1Z","meta":{"LON0":118.0,"LON1":166.0,"LAT0":8.0,"LAT1":46.0,"W":940,"H":744},"plots":[[34.839,126.479],[34.84,126.478],[34.84,126.485],[34.841,126.486],[36.038,125.983],[36.409,128.168],[36.411,128.158],[36.411,128.159],[36.411,128.16],[36.412,128.158],[36.413,128.172],[36.767,127.085],[36.774,127.077],[36.788,127.092],[36.969,127.056],[37.001,127.101],[37.003,127.102],[37.02,127.105],[37.021,127.093],[37.413,126.978],[37.416,126.971],[38.62,126.419]]};</script>
+<script>(function () {
+  var P = window.__TYPHOON__, M = P.meta, svg = document.getElementById("map"),
+      tip = document.getElementById("tip"), meta = document.getElementById("meta");
+  var state = { track: "y2026", cone: true, wind: false, label: true, plots: true };
+  var NS = "http://www.w3.org/2000/svg";
+
+  function px(lon) { return (lon - M.LON0) / (M.LON1 - M.LON0) * M.W; }
+  function py(lat) { return (M.LAT1 - lat) / (M.LAT1 - M.LAT0) * M.H; }
+  // km → 화면 반경. 등장방형도법이라 가로세로 축척이 달라 원이 아니라 타원이 된다.
+  // 위도 1도 = 111.32km 고정, 경도 1도 = 111.32 * cos(위도) 다.
+  function rxy(km, lat) {
+    var degLat = km / 111.32, degLon = km / (111.32 * Math.cos(lat * Math.PI / 180));
+    return [degLon / (M.LON1 - M.LON0) * M.W, degLat / (M.LAT1 - M.LAT0) * M.H];
+  }
+  function el(name, attrs) {
+    var n = document.createElementNS(NS, name);
+    for (var k in attrs) if (attrs[k] !== null && attrs[k] !== undefined) n.setAttribute(k, attrs[k]);
+    return n;
+  }
+  function hhmm(t) { return t.slice(4, 6) + "/" + t.slice(6, 8) + " " + t.slice(8, 10) + "Z"; }
+
+  function render() {
+    var t = P.tracks[state.track], rows = t.rows;
+    while (svg.firstChild) svg.removeChild(svg.firstChild);
+
+    svg.appendChild(el("rect", { x: 0, y: 0, width: M.W, height: M.H, fill: "var(--sea)" }));
+
+    // 경위도 격자 — 거리를 눈으로 가늠할 자가 없으면 경로가 얼마나 긴지 모른다
+    var g = el("g", { stroke: "var(--border-c)", "stroke-width": 1, opacity: .55 });
+    for (var lon = 120; lon <= M.LON1; lon += 10) {
+      g.appendChild(el("line", { x1: px(lon), y1: 0, x2: px(lon), y2: M.H }));
+      g.appendChild(el("text", { x: px(lon) + 4, y: M.H - 8, fill: "var(--fg-subtle)",
+        "font-size": 11, stroke: "none" })).textContent = lon + "°E";
+    }
+    for (var lat = 10; lat <= M.LAT1; lat += 10) {
+      g.appendChild(el("line", { x1: 0, y1: py(lat), x2: M.W, y2: py(lat) }));
+      g.appendChild(el("text", { x: 6, y: py(lat) - 5, fill: "var(--fg-subtle)",
+        "font-size": 11, stroke: "none" })).textContent = lat + "°N";
+    }
+    svg.appendChild(g);
+
+    // 우리 지도와 같은 시군구 폴리곤
+    svg.appendChild(el("path", { d: P.korea, fill: "var(--land)",
+      stroke: "var(--border-strong)", "stroke-width": .5, "stroke-linejoin": "round" }));
+
+    if (state.plots) {
+      var pg = el("g", null);
+      P.plots.forEach(function (p) {
+        pg.appendChild(el("circle", { cx: px(p[1]), cy: py(p[0]), r: 3.4,
+          fill: "var(--plot)", stroke: "var(--surface)", "stroke-width": 1.2 }));
+      });
+      svg.appendChild(pg);
+    }
+
+    var ana = rows.filter(function (r) { return r.ft === 0; }),
+        fc  = rows.filter(function (r) { return r.ft === 1; });
+
+    // 예보원 — 선보다 아래에 깔아야 선이 안 묻힌다
+    if (state.cone) {
+      var cg = el("g", null);
+      fc.forEach(function (r) {
+        if (!r.rad || r.rad <= 0) return;
+        var s = rxy(r.rad, r.lat);
+        cg.appendChild(el("ellipse", { cx: r.x, cy: r.y, rx: s[0], ry: s[1],
+          fill: "var(--cone)", "fill-opacity": .10, stroke: "var(--cone)",
+          "stroke-opacity": .55, "stroke-width": 1 }));
+      });
+      svg.appendChild(cg);
+    }
+    if (state.wind) {
+      var wg = el("g", null);
+      rows.forEach(function (r) {
+        if (!r.rad15 || r.rad15 <= 0) return;          // -999 는 결측
+        var s = rxy(r.rad15, r.lat);
+        wg.appendChild(el("ellipse", { cx: r.x, cy: r.y, rx: s[0], ry: s[1],
+          fill: "none", stroke: "var(--fg-subtle)", "stroke-opacity": .45, "stroke-width": 1 }));
+      });
+      svg.appendChild(wg);
+    }
+
+    var line = function (pts, color, dash) {
+      if (pts.length < 2) return;
+      svg.appendChild(el("polyline", {
+        points: pts.map(function (r) { return r.x + "," + r.y; }).join(" "),
+        fill: "none", stroke: color, "stroke-width": 3.2,
+        "stroke-linecap": "round", "stroke-linejoin": "round",
+        "stroke-dasharray": dash || null }));
+    };
+    line(ana, "var(--analysis)");
+    // 예측선은 분석의 마지막 점에서 이어 붙인다 — 안 그러면 선이 끊겨 보인다
+    line(ana.length ? [ana[ana.length - 1]].concat(fc) : fc, "var(--forecast)", "9 7");
+
+    rows.forEach(function (r) {
+      var isF = r.ft === 1;
+      var c = el("circle", { cx: r.x, cy: r.y, r: isF ? 5 : 4.2,
+        fill: isF ? "var(--surface)" : "var(--analysis)",
+        stroke: isF ? "var(--forecast)" : "var(--surface)",
+        "stroke-width": isF ? 2.4 : 1.4, style: "cursor:pointer" });
+      c.addEventListener("mouseenter", function (e) { showTip(e, r); });
+      c.addEventListener("mouseleave", function () { tip.style.opacity = 0; });
+      svg.appendChild(c);
+    });
+
+    if (state.label) {
+      var lg = el("g", { "font-size": 10.5, fill: "var(--fg-muted)" });
+      rows.forEach(function (r, i) {
+        if (r.ft === 0 && i % Math.ceil(ana.length / 5) !== 0) return;
+        lg.appendChild(el("text", { x: r.x + 8, y: r.y - 7 })).textContent =
+          hhmm(r.ft_tm) + (r.ft === 1 ? " · " + r.ps + "hPa" : "");
+      });
+      svg.appendChild(lg);
+    }
+
+    meta.textContent = t.label + " — 분석 " + ana.length + "점 · 예측 " + fc.length + "점";
+  }
+
+  function showTip(e, r) {
+    tip.innerHTML =
+      "<b>" + (r.ft === 1 ? "예측" : "분석") + " · " + hhmm(r.ft_tm) + "</b><br>" +
+      "<span class='k'>좌표</span>" + r.lat + ", " + r.lon + "<br>" +
+      "<span class='k'>기압·풍속</span>" + r.ps + " hPa · " + r.ws + " m/s<br>" +
+      "<span class='k'>진행</span>" + r.dir + " " + r.sp + " km/h<br>" +
+      "<span class='k'>강풍반경</span>" + (r.rad15 > 0 ? r.rad15 + " km" : "결측(-999)") + "<br>" +
+      "<span class='k'>예보원</span>" + (r.rad > 0 ? r.rad + " km" : "—") + "<br>" +
+      "<span class='k'>위치</span>" + r.loc;
+    var box = svg.getBoundingClientRect(), sc = box.width / M.W;
+    tip.style.left = Math.min(r.x * sc + 14, box.width - 262) + "px";
+    tip.style.top = Math.max(r.y * sc - 10, 4) + "px";
+    tip.style.opacity = 1;
+  }
+
+  document.querySelectorAll("[data-track]").forEach(function (b) {
+    b.addEventListener("click", function () {
+      state.track = b.dataset.track;
+      document.querySelectorAll("[data-track]").forEach(function (o) {
+        o.setAttribute("aria-pressed", String(o === b)); });
+      render();
+    });
+  });
+  document.querySelectorAll("[data-layer]").forEach(function (b) {
+    b.addEventListener("click", function () {
+      var k = b.dataset.layer;
+      state[k] = !state[k];
+      b.setAttribute("aria-pressed", String(state[k]));
+      render();
+    });
+  });
+  document.querySelectorAll(".tab").forEach(function (t) {
+    t.addEventListener("click", function () {
+      document.querySelectorAll(".tab").forEach(function (o) {
+        o.setAttribute("aria-selected", String(o === t)); });
+      document.querySelectorAll(".panel[id]").forEach(function (p) {
+        p.hidden = p.id !== t.dataset.panel; });
+    });
+  });
+  render();
+})();
+</script>
+</body>
+</html>
