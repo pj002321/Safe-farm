@@ -1,3 +1,5 @@
+import { type MaturityType, toMaturityType } from "@/shared/growth/maturity";
+
 /**
  * ---------------------------------------------
  * [Feature]: 작물 선택 폼 값 파싱 (순수 함수)
@@ -19,6 +21,11 @@ export interface CultivationSelection {
   sowingDate: string | null;
   sowingUnknown: boolean;
   sowingMethod: "seed" | "seedling";
+  /**
+   * 고른 숙기. 라디오가 뜨지 않는 작물(숙기가 하나뿐인 56작물)은 null 이고,
+   * 그때는 `resolveVariantIds` 가 중생 우선으로 정한다.
+   */
+  maturity: MaturityType | null;
 }
 
 /** `cropIds` 로 체크된 작물마다, 그 작물 전용 파종 필드를 읽는다. */
@@ -44,6 +51,10 @@ export function parseCultivationSelections(
         formData.get(`sowingMethod.${cropId}`) === "seedling"
           ? ("seedling" as const)
           : ("seed" as const),
+      // ⚠ 폼에서 온 글자를 그대로 믿지 않는다. 폼 밖에서 직접 POST 하면 아무 글자나
+      //   올 수 있고, 그 값이 DB CHECK 에 걸려 등록 전체가 깨진다. 셋이 아니면 null 로
+      //   떨어뜨려 중생 우선 규칙에 맡긴다
+      maturity: toMaturityType(formData.get(`maturity.${cropId}`)),
     };
   });
 }

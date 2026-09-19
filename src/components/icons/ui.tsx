@@ -166,6 +166,17 @@ export function SearchIcon(props: IconProps) {
   );
 }
 
+/** 액자 안 산 + 해. 사진 첨부 버튼. */
+export function ImageIcon(props: IconProps) {
+  return (
+    <svg {...ICON_BASE} aria-hidden="true" {...props}>
+      <rect x="3.5" y="4.5" width="17" height="15" rx="2" />
+      <circle cx="8.5" cy="9.5" r="1.5" />
+      <path d="M4.5 16.5 9.5 11.5 13 15 17 11 19.5 13.5" />
+    </svg>
+  );
+}
+
 /** 어깨선 위의 머리. 계정·내 정보. 하단 탭에 쓰려고 추가했다(기존에 사람 아이콘이 없었다). */
 export function UserIcon(props: IconProps) {
   return (

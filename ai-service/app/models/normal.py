@@ -20,4 +20,7 @@ class Normal(Base):
     tmax_normal = Column(Float)
     tmin_normal = Column(Float)
     rain_normal = Column(Float)
-    source = Column(String, nullable=False)  # "kma" | "open-meteo-era5"
+    # 실제로 들어 있는 값은 "kma"(최신 30년, 174곳) 과 "kma-1981"(1981~2010, 72곳)
+    # 두 가지다. 70곳은 양쪽에 다 있다 — **읽는 쪽은 반드시 source 를 걸어야 한다.**
+    # 안 걸면 기간이 다른 두 벌을 섞어 평균 내게 된다.
+    source = Column(String, nullable=False)

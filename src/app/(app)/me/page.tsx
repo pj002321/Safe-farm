@@ -1,12 +1,14 @@
 import type { Metadata } from "next";
 import { SignOutButton } from "@/components/auth/SignOutButton";
 import { AccountPanel } from "@/components/me/AccountPanel";
+import { AskHistoryPanel } from "@/components/me/AskHistoryPanel";
 import { MeRail } from "@/components/me/MeRail";
 import { ME_SECTIONS } from "@/components/me/meSections";
 import { RecordPanel } from "@/components/me/RecordPanel";
 import { SAMPLE_RECORDS } from "@/components/me/sampleRecords";
 import { ButtonLink } from "@/components/shared/Button";
 import { SectionHeading } from "@/components/shared/SectionHeading";
+import { listAskHistory } from "@/features/ask/askHistoryStore";
 import { countPlots } from "@/features/plots/plotStore";
 import { requireConsentOrRedirect } from "@/shared/auth/consentGate";
 import { updateAccount } from "./actions";
@@ -52,6 +54,15 @@ export default async function Page({
 
   const plotCount = await countPlots(profile.id);
   const year = parseYear(params.year);
+  // 조회가 실패해도 마이페이지 전체가 500이 되면 안 된다 — 계정·텃밭 구역은
+  // 멀쩡한데 질문 기록 하나 때문에 화면이 통째로 죽을 이유가 없다(dashboard/history
+  // 와 같은 방침).
+  const askHistory = await listAskHistory(profile.id).catch(
+    (error: unknown) => {
+      console.error("[me] 질문 기록 조회 실패", error);
+      return [];
+    },
+  );
 
   const savedKey = Array.isArray(params.saved) ? params.saved[0] : params.saved;
   const errorKey = Array.isArray(params.error) ? params.error[0] : params.error;
@@ -128,6 +139,10 @@ export default async function Page({
 
             <Section section={ME_SECTIONS[2]}>
               <RecordPanel records={SAMPLE_RECORDS} year={year} />
+            </Section>
+
+            <Section section={ME_SECTIONS[3]}>
+              <AskHistoryPanel entries={askHistory} />
             </Section>
           </div>
         </div>
