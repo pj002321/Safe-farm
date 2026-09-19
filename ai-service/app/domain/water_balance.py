@@ -57,6 +57,13 @@ RAIN_HEAVY_MM = 40.0  # 7일 예보 강수 합이 이보다 많으면 '주지 �
 #   값이 없으면(None) 판정에서 빠진다. 없는 것과 0.0 은 다르다.
 SOIL_DRY = 0.20
 
+#: 이 값이면 **흙이 아니다.** 물·바다 위 좌표에서 정확히 0.000 이 온다.
+#:
+#: ⚠ 2026-09-19 실측 — '서해에 땅이 있어요' 밭이 0.000 이었다. 그걸 "가장 마름" 으로
+#:   읽으면 **바다에 물을 주라고 등급을 올린다.** 진짜 마른 흙도 위조점 언저리라
+#:   0.05~0.15 는 되지, 정확히 0 이 되지 않는다.
+SOIL_NO_DATA = 0.0
+
 Verdict = Literal["give", "watch", "hold", "skip"]
 
 
@@ -139,9 +146,12 @@ def is_soil_dry(b: WaterBalance) -> bool:
     그래서 이 함수는 따로 둔다. 쓰는 쪽(task_rules)이 `give` 일 때 이것까지 참이면
     **priority 를 올리는 데만** 쓴다.
 
-    ⚠ 모델값이다(파일 머리 ⚠). 값이 없으면 거짓 — "모른다" 를 "말랐다" 로 읽지 않는다.
+    ⚠ **정확히 0 은 '마름' 이 아니라 '흙이 아님' 이다**(SOIL_NO_DATA). 바다 위
+      좌표에서 그 값이 온다 — 거르지 않으면 바다에 물을 주라고 등급을 올린다.
     """
-    return b.soil_moisture is not None and b.soil_moisture < SOIL_DRY
+    if b.soil_moisture is None or b.soil_moisture <= SOIL_NO_DATA:
+        return False
+    return b.soil_moisture < SOIL_DRY
 
 
 def 기간말(일수: int | None) -> str | None:

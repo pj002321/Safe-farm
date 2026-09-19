@@ -226,3 +226,16 @@ def test_관측을_밝히는_기준이_한_곳이다():
     assert 관측을_밝힐까(None, 3.0) is True
     # 관측이 없으면 적을 것이 없다
     assert 관측을_밝힐까(0.1, None) is False
+
+
+def test_토양수분_0_은_마름이_아니라_흙이_아님이다():
+    """★ 2026-09-19 — '서해에 땅이 있어요' 밭이 0.000 이었다.
+
+    바다 위 좌표에서 정확히 0 이 온다. 그걸 "가장 마름" 으로 읽으면 **바다에 물을
+    주라고 등급을 올린다.** 진짜 마른 흙도 위조점 언저리라 0.05~0.15 는 된다.
+    """
+    from app.domain.water_balance import SOIL_NO_DATA, is_soil_dry
+
+    assert is_soil_dry(WaterBalance(soil_moisture=SOIL_NO_DATA)) is False
+    # 아주 마른 흙은 그대로 잡힌다
+    assert is_soil_dry(WaterBalance(soil_moisture=0.05)) is True

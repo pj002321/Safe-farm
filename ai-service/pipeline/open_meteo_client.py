@@ -152,6 +152,29 @@ def normalize_current(current):
     }
 
 
+def hourly_value_at(hourly, iso_hour, key):
+    """`iso_hour`("2026-09-19T14:00") 시점의 hourly 값 하나. 못 찾으면 None.
+
+    ⚠ **배열 끝을 쓰면 안 된다.** hourly 는 `past_days` 만큼 앞이 늘고 예보만큼
+      뒤가 늘어, 마지막 원소는 **엿새 뒤 예보**다. 토양수분을 그렇게 읽으면
+      오늘 흙이 아니라 다음 주 흙을 보고 카드를 낸다.
+
+    ⚠ 딱 그 시각이 없으면 **그보다 앞선 마지막 시각**을 쓴다. 정시 배열이라
+      대개 맞아떨어지지만, 응답이 밀리거나 분 단위 시각이 오면 어긋난다 —
+      지난 값이 앞으로의 값보다 낫다.
+    """
+    times = (hourly or {}).get("time") or []
+    values = (hourly or {}).get(key) or []
+    자리 = None
+    for i, t in enumerate(times):
+        if t > iso_hour:
+            break
+        자리 = i
+    if 자리 is None or 자리 >= len(values):
+        return None
+    return values[자리]
+
+
 def normalize_hourly(hourly, start_time, span=HOURLY_SPAN):
     """`start_time`(현재 실황 시각) **이후** 시간별 예보 span 건.
 

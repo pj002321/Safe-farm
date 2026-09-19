@@ -196,3 +196,29 @@ def test_실황_풍향은_0_도_살려_둔다():
         }
     )
     assert now["windDirDeg"] == 0
+
+
+def test_시각으로_hourly_값을_찾는다():
+    """★ 배열 끝을 쓰면 **엿새 뒤 예보**를 읽는다.
+
+    hourly 는 past_days 만큼 앞이 늘고 예보만큼 뒤가 늘어난다. 토양수분을 그렇게
+    읽으면 오늘 흙이 아니라 다음 주 흙을 보고 카드를 낸다.
+    """
+    from pipeline.open_meteo_client import hourly_value_at
+
+    h = {
+        "time": ["2026-09-19T12:00", "2026-09-19T13:00", "2026-09-25T23:00"],
+        "soil_moisture_9_to_27cm": [0.21, 0.19, 0.33],
+    }
+    assert hourly_value_at(h, "2026-09-19T13:00", "soil_moisture_9_to_27cm") == 0.19
+    # 딱 그 시각이 없으면 그보다 앞선 마지막 값 — 앞으로의 값보다 지난 값이 낫다
+    assert hourly_value_at(h, "2026-09-19T13:30", "soil_moisture_9_to_27cm") == 0.19
+
+
+def test_그_시각보다_앞선_값이_없으면_None():
+    """모름을 0 으로 치면 '흙이 말랐다' 가 된다."""
+    from pipeline.open_meteo_client import hourly_value_at
+
+    h = {"time": ["2026-09-19T12:00"], "soil_moisture_9_to_27cm": [0.21]}
+    assert hourly_value_at(h, "2026-09-19T11:00", "soil_moisture_9_to_27cm") is None
+    assert hourly_value_at({}, "2026-09-19T12:00", "x") is None

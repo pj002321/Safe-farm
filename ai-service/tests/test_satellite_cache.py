@@ -77,14 +77,16 @@ def test_캐시_수명이_하루보다_짧다():
 def test_오래된_관측은_지금_것으로_안_친다():
     """★ 창과 신선도는 다른 값이다.
 
-    창(READ_DAYS)은 "점을 찾아볼 범위" 이고, 신선도(NDVI_STALE_DAYS)는 "그 점을
+    창(READ_DAYS)은 "점을 찾아볼 범위" 이고, 신선도(SATELLITE_FRESH_DAYS)는 "그 점을
     지금 것으로 쳐도 되나" 다. 예전에는 창 안의 마지막 점을 그냥 썼는데, 구름이
-    길게 끼면 그 점이 석 달 전 것일 수 있다 — 두 달 전에 거둔 밭에 "거둘 때
-    살펴보세요" 가 오류도 없이 나간다.
-    """
-    from app.domain.vegetation_text import NDMI_MAX_GAP_DAYS
-    from app.service.plot_tasks import NDVI_STALE_DAYS
+    길게 끼면 그 점이 석 달 전 것일 수 있다.
 
-    assert NDVI_STALE_DAYS < READ_DAYS
-    # NDMI 비교를 포기하는 간격과 같은 눈금이다 — 실측 최장 공백이 32일이었다
-    assert NDVI_STALE_DAYS == NDMI_MAX_GAP_DAYS
+    14일인 까닭은 이 값이 **물 카드를 막는** 데 쓰이기 때문이다 — 열흘 전 잎으로
+    오늘 물 카드를 막으면 그 사이 마른 밭이 조용해진다. 실측(밭 6곳)으로 최장
+    관측 간격이 11일이라 좁혀도 잃는 것이 없었다.
+    """
+    from app.service.plot_tasks import SATELLITE_FRESH_DAYS
+
+    assert SATELLITE_FRESH_DAYS < READ_DAYS
+    # 실측 최장(11일)보다는 넉넉해야 한 번 걸러도 안 놓친다
+    assert SATELLITE_FRESH_DAYS >= 14

@@ -33,7 +33,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from app.domain.korean import 조사
-from app.domain.vegetation_text import crop_is_standing
+from app.domain.vegetation_text import NDMI_STEP, Vegetation, crop_is_standing
 from app.domain.water_balance import (
     WaterBalance,
     dryness_note,
@@ -113,8 +113,12 @@ class PlotTaskInputs:
     gdd_target_passed: bool = False
     #: 심는 법('씨뿌림'·'아주심기' …). 비면 다년생을 의심한다 — harvest_clears_field
     sow_method: str | None = None
-    #: 최근 위성 NDVI. 없으면 None — 수확 판정에서 빠진다(없으면 거짓)
-    ndvi: float | None = None
+    #: 위성이 본 것. **비어 있는 것이 기본값이다** — `water` 와 같은 결이다.
+    #:
+    #: ⚠ 부르는 쪽이 **너무 오래된 관측은 빈 값으로 지워서** 넘긴다
+    #:   (plot_tasks.SATELLITE_FRESH_DAYS). 여기서 날짜를 세지 않는 것은 domain 이
+    #:   시계를 읽지 않기 때문이다.
+    vegetation: Vegetation = field(default_factory=Vegetation)
 
     # ── 재해 한계: 작물이 몇 도부터 상하나 ──────────────────────
     #: 아침 최저가 이 아래면 언다·상한다(crop_disaster_rules). 모르면 None
@@ -420,6 +424,33 @@ def _hazard_candidate(inputs: PlotTaskInputs) -> TaskCandidate | None:
     )
 
 
+def _watering_already_done(inputs: PlotTaskInputs) -> bool:
+    """이미 물을 주고 계신 밭인가. 위성이 그렇다고 말할 때만 참이다.
+
+    ★ 2026-09-19 — **물수지는 하늘에서 온 물만 안다.** 호스로 준 물도, 멀칭도,
+      어제 댄 물도 모른다. 부지런한 분일수록 헛카드를 더 받는 꼴이라, 잎을 직접
+      본 위성으로 막는다.
+
+    ⚠ **틀리는 방향이 다른 규칙들과 반대다.** 여태 만든 것은 "모르면 침묵" 이지만
+      여기는 **"모르면 카드를 낸다"** 가 안전하다 — 위성이 없다고 물 카드를 막으면
+      진짜 가문 밭이 조용해진다. 그래서 세 가지가 **모두** 참일 때만 막는다.
+
+          ① 잎이 우거져 있다            NDVI ≥ 0.40. 맨땅이면 볼 잎이 없다
+          ② 물기가 줄지 않았다          NDMI 가 비슷하거나 늘었다
+          ③ 견줄 앞 관측이 있다         하나뿐이면 추세를 모른다
+
+    ⚠ 관측이 오래됐으면 부르는 쪽이 빈 값으로 지워 넘긴다. 열흘 전 잎으로 오늘
+      물 카드를 막으면 그 사이 마른 밭이 조용해진다.
+    """
+    v = inputs.vegetation
+    if not crop_is_standing(v.ndvi):
+        return False
+    if v.ndmi_now is None or v.ndmi_before is None:
+        return False
+    # 줄지 않았다 = 준 폭이 임계보다 작다. 늘어난 것도 여기 든다
+    return v.ndmi_now - v.ndmi_before > -NDMI_STEP
+
+
 def _needs_water_attention(inputs: PlotTaskInputs) -> bool:
     """이 단계가 물이 중요한 시기인가.
 
@@ -509,7 +540,7 @@ def build_task_candidates(inputs: PlotTaskInputs) -> list[TaskCandidate]:
     if (
         inputs.gdd_target_passed
         and harvest_clears_field(inputs.crop_name_ko, inputs.sow_method)
-        and crop_is_standing(inputs.ndvi)
+        and crop_is_standing(inputs.vegetation.ndvi)
     ):
         candidates.append(
             TaskCandidate(
@@ -529,6 +560,11 @@ def build_task_candidates(inputs: PlotTaskInputs) -> list[TaskCandidate]:
     # ── 물 ────────────────────────────────────────────────────────
     # judge_water 가 None 이면 근거가 없다는 뜻이다. "괜찮습니다" 라고 말하지 않는다.
     verdict = judge_water(inputs.water) or _fallback_verdict(inputs)
+
+    # ⚠ **`hold`(주지 마라)는 막지 않는다.** 저건 "주지 말라" 는 말이라, 이미
+    #   주고 계셔도 그대로 나가야 한다.
+    if verdict in ("give", "watch") and _watering_already_done(inputs):
+        verdict = "skip"
 
     if verdict == "give" and _needs_water_attention(inputs):
         candidates.append(

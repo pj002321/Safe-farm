@@ -29,3 +29,18 @@ def kst_today() -> date:
         kst_today().isoformat()  -> '2026-09-19'
     """
     return datetime.now(KST).date()
+
+
+def kst_hour() -> str:
+    """
+    # summary
+    지금 정시를 Open-Meteo hourly 배열과 같은 꼴로. 그 배열도 KST 다
+    (요청에 `timezone=Asia/Seoul` 을 준다).
+
+    # returns
+    `"2026-09-19T14:00"` 꼴 문자열
+
+    # examples
+        hourly_value_at(payload["hourly"], kst_hour(), "soil_moisture_9_to_27cm")
+    """
+    return datetime.now(KST).strftime("%Y-%m-%dT%H:00")

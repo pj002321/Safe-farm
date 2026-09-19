@@ -20,13 +20,14 @@ from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
 from app.domain.gdd import past_target
-from app.domain.kst import KST, kst_today
+from app.domain.kst import KST, kst_hour, kst_today
 from app.domain.task_rules import (
     DRY_MM,
     RAIN_WINDOW_DAYS,
     PlotTaskInputs,
     build_task_candidates,
 )
+from app.domain.vegetation_text import Vegetation, summarize_points
 from app.domain.water_balance import WaterBalance, judge_water
 from app.models.farm import Plot, PlotTask, WeatherObsDaily
 from app.service.crop_hazard import temp_limits_for
@@ -42,6 +43,7 @@ from app.service.warn_region import plot_warning
 from pipeline.open_meteo_client import (
     daily_index_of,
     fetch_forecast,
+    hourly_value_at,
     normalize_daily_forecast,
 )
 
@@ -114,31 +116,31 @@ def _why_no_growth(db: Session, plot: Plot) -> str:
     return "생육단계를 낼 수 없습니다 — crop_stages 와 관측 자료를 확인하세요"
 
 
-#: 관측이 이보다 오래됐으면 "지금 밭에 서 있다" 의 근거로 쓰지 않는다.
+#: 관측이 이보다 오래됐으면 **없는 셈 친다**(일).
 #:
-#: ⚠ 창(READ_DAYS=90)과 **다른 값이다.** 창은 "점을 찾아볼 범위" 이고 이건 "그 점을
-#:   지금 것으로 쳐도 되나" 다. 90일 전 관측으로 "아직 푸르다" 고 하면, 두 달 전에
-#:   거둔 밭에 수확 카드를 보낸다.
+#: ⚠ 창(READ_DAYS=90)과 다른 값이다. 창은 "점을 찾아볼 범위" 이고 이건 "그 점을
+#:   지금 것으로 쳐도 되나" 다.
 #:
-#: 30일인 까닭은 NDMI 비교를 포기하는 간격(NDMI_MAX_GAP_DAYS)과 같다 — 실측으로
-#: 관측이 평균 18일에 한 번, 최장 공백이 32일이었다. 한 달을 넘기면 그 사이에
-#: 수확이 들어갈 수 있다.
-NDVI_STALE_DAYS = 30
+#: 14일인 까닭 — 이 값이 **물 카드를 막는** 데 쓰인다. 열흘 전 잎으로 오늘 물
+#: 카드를 막으면 그 사이 마른 밭이 조용해진다. 관측이 평균 18일에 한 번이라
+#: 좁으면 걸리는 밭이 줄 것을 걱정했는데, 실측(2026-09-19 · 밭 6곳)으로 **최장이
+#: 11일**이라 여섯 곳이 다 걸렸다. 좁은 쪽이 안전하고 손해도 없다.
+SATELLITE_FRESH_DAYS = 14
 
 
-def _latest_ndvi(db: Session, plot: Plot) -> float | None:
-    """이 밭의 **최근** NDVI. 표에 있는 것만 보고, 오래된 것은 안 쓴다.
+def _vegetation(db: Session, plot: Plot) -> Vegetation:
+    """이 밭의 **최근** 위성 관측. 오래됐거나 없으면 빈 값이다.
 
     ⚠ 여기서 Sentinel Hub 를 부르면 밭마다 1.5초가 붙어 50초 한도에 금방 닿는다.
-      표가 비면 None 이고, 그러면 수확 카드가 안 나갈 뿐이다(없으면 거짓).
-      표를 채우는 일은 사람이 날씨 화면을 열 때 일어난다(satellite_cache).
+      표에 있는 것만 본다 — 표를 채우는 일은 사람이 날씨 화면을 열 때 일어난다.
 
-    ⚠ **날짜를 봐야 한다.** 예전에는 창 안의 마지막 점을 그냥 썼는데, 구름이
-      길게 끼면 그 점이 석 달 전 것일 수 있다. 그걸 "지금 밭이 푸르다" 로 읽으면
-      이미 거둔 밭에 "거둘 때 살펴보세요" 가 나간다 — 오류도 없이.
+    ⚠ **날짜를 여기서 거른다.** domain(task_rules)은 시계를 읽지 않으므로, 오래된
+      관측은 이 자리에서 빈 값으로 지워 넘긴다.
     """
-    points = stored_observations(db, float(plot.latitude), float(plot.longitude), NDVI_STALE_DAYS)
-    return points[-1]["ndvi"] if points else None
+    points = stored_observations(
+        db, float(plot.latitude), float(plot.longitude), SATELLITE_FRESH_DAYS
+    )
+    return summarize_points(points)
 
 
 def _active_warnings(db: Session, plot: Plot) -> tuple[str, ...]:
@@ -148,7 +150,7 @@ def _active_warnings(db: Session, plot: Plot) -> tuple[str, ...]:
       함수를 쓴다. 특보 판정은 거기 한 곳이고 여기서 다시 하지 않는다.
 
     ⚠ 실패해도 배치를 막지 않는다. 특보를 못 읽으면 대비 카드가 안 나갈 뿐이고,
-      물·시비 카드는 그대로 나가야 한다(_water_balance 와 같은 판단).
+      물·시비 카드는 그대로 나가야 한다(_plot_weather 와 같은 판단).
     """
     try:
         warning, _ = plot_warning(db, float(plot.latitude), float(plot.longitude))
@@ -264,7 +266,10 @@ def _fetch_plot_weather(lat: float, lon: float) -> _PlotWeather:
         rain_past_days=len(past) or None,
         rain_3d_mm=합("rainfall_mm", ahead[:3]),
         rain_7d_mm=합("rainfall_mm", ahead[:7]),
-        soil_moisture=None,  # hourly 에 있다. 지금은 안 쓴다 — is_soil_dry 가 False 로 떨어진다
+        # ★ 2026-09-19 — 채웠다. `d0001f3` 부터 None 이라 **is_soil_dry 가 영영
+        #   거짓**이었고, 그래서 물 카드가 '급함' 으로 올라간 적이 없었다.
+        #   왕복은 안 는다 — 같은 응답의 hourly 에 실려 온다.
+        soil_moisture=hourly_value_at(payload.get("hourly"), kst_hour(), "soil_moisture_9_to_27cm"),
     )
     return _PlotWeather(물, tomorrow=ahead[0] if ahead else None)
 
@@ -318,7 +323,7 @@ def generate_tasks_for_plot(
         # 수확 — GDD 가 '때'를, 위성이 '아직 있나'를 말한다(task_rules 주석)
         gdd_target_passed=past_target(growth.accumulated_gdd, growth.gdd_target),
         sow_method=growth.sow_method,
-        ndvi=_latest_ndvi(db, plot),
+        vegetation=_vegetation(db, plot),
         # 이맘때 이 작물에 자주 나오는 병해충. DB 조회 한 번이라 배치를 안 늦춘다
         pest_names=pest_names_for(db, growth.crop_name_ko, kst_today()),
         # 재해 — 기상청이 판정한 것을 **받아 적기만** 한다(task_rules 주석)

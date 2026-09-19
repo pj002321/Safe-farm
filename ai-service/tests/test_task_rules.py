@@ -8,6 +8,7 @@
 """
 
 from app.domain.task_rules import DRY_MM, PlotTaskInputs, build_task_candidates
+from app.domain.vegetation_text import NDMI_STEP, Vegetation
 from app.domain.water_balance import BALANCE_DRY_MM, RAIN_HEAVY_MM, SOIL_DRY, WaterBalance
 
 마른날 = WaterBalance(balance_14d_mm=BALANCE_DRY_MM - 10, rain_3d_mm=0.0, rain_7d_mm=0.0)
@@ -221,7 +222,12 @@ def test_물수지가_있으면_안전망이_안_돈다():
 # ★ 2026-09-19 — 하나만으로는 못 낸다. GDD 만 보면 이미 거둔 밭에도 카드가 가고,
 #   위성만 보면 한창 자라는 밭더러 우거졌으니 거두라는 말이 된다.
 
-익음 = dict(crop_name_ko="벼", sow_method="모기르기", gdd_target_passed=True, ndvi=0.79)
+익음 = dict(
+    crop_name_ko="벼",
+    sow_method="모기르기",
+    gdd_target_passed=True,
+    vegetation=Vegetation(ndvi=0.79),
+)
 
 
 def test_다_익었고_아직_푸르면_살펴보라고_한다():
@@ -230,7 +236,7 @@ def test_다_익었고_아직_푸르면_살펴보라고_한다():
 
 def test_이미_거둔_밭에는_말하지_않는다():
     """참깨 추수 후 실측이 0.27 이었다 — 맨땅은 NDVI 가 떨어진다."""
-    assert 제목들(밭(**{**익음, "ndvi": 0.27})) == []
+    assert 제목들(밭(**{**익음, "vegetation": Vegetation(ndvi=0.27)})) == []
 
 
 def test_아직_때가_아니면_말하지_않는다():
@@ -240,7 +246,7 @@ def test_아직_때가_아니면_말하지_않는다():
 
 def test_위성이_없으면_말하지_않는다():
     """구름에 가려 90일에 한 점도 없을 수 있다. 모름을 '있다'로 읽지 않는다."""
-    assert 제목들(밭(**{**익음, "ndvi": None})) == []
+    assert 제목들(밭(**{**익음, "vegetation": Vegetation()})) == []
 
 
 def test_거둬도_남는_작물에는_말하지_않는다():
@@ -469,3 +475,60 @@ def test_특보_카드와_따로다():
     assert len(titles) == 2
     assert titles[0].startswith("한파 특보")
     assert titles[1] == "배추 추위 대비하기"
+
+
+# ── 위성이 물 조언을 막는다 ─────────────────────────────────────
+#
+# ★ 물수지는 **하늘에서 온 물만** 안다. 호스로 준 물은 모른다 —
+#   부지런한 분일수록 헛카드를 더 받는 꼴이다.
+#
+# ⚠ 틀리는 방향이 다른 규칙들과 반대다. 여기는 "모르면 카드를 낸다" 가 안전하다.
+
+물준밭 = Vegetation(ndvi=0.72, ndmi_now=0.35, ndmi_before=0.34, gap_days=5)
+
+
+def test_잎이_멀쩡하면_물_카드를_안_낸다():
+    """기상은 말랐다는데 잎이 우거지고 물기도 그대로면 이미 주고 계신 밭이다."""
+    assert 제목들(밭(water=마른날, irrigate_needed=True, vegetation=물준밭)) == []
+
+
+def test_위성이_없으면_막지_않는다():
+    """모르면 카드를 낸다 — 막았다가 진짜 가문 밭이 조용해지면 안 된다."""
+    assert "배추밭 물 주기" in 제목들(밭(water=마른날, irrigate_needed=True))
+
+
+def test_견줄_앞_관측이_없으면_막지_않는다():
+    """관측이 하나뿐이면 물기가 준 건지 모른다(18일에 한 번이라 흔한 일이다)."""
+    하나뿐 = Vegetation(ndvi=0.72, ndmi_now=0.35)
+    assert "배추밭 물 주기" in 제목들(밭(water=마른날, irrigate_needed=True, vegetation=하나뿐))
+
+
+def test_잎이_성기면_막지_않는다():
+    """맨땅이면 볼 잎이 없다 — 위성이 물 준 것을 알 길이 없다."""
+    맨땅 = Vegetation(ndvi=0.27, ndmi_now=0.1, ndmi_before=0.1)
+    assert "배추밭 물 주기" in 제목들(밭(water=마른날, irrigate_needed=True, vegetation=맨땅))
+
+
+def test_물기가_줄었으면_막지_않는다():
+    """잎이 마르고 있으면 기상 판정이 맞다."""
+    마르는중 = Vegetation(ndvi=0.72, ndmi_now=0.30, ndmi_before=0.30 + NDMI_STEP * 2)
+    assert "배추밭 물 주기" in 제목들(밭(water=마른날, irrigate_needed=True, vegetation=마르는중))
+
+
+def test_살피기_카드도_막는다():
+    """'비 지나간 뒤 보세요' 도 이미 주고 계신 밭에는 군말이다."""
+    assert 제목들(밭(water=비올날, irrigate_needed=True, vegetation=물준밭)) == []
+
+
+def test_주지_말라는_말은_막지_않는다():
+    """저건 '주지 마라' 라서, 이미 주고 계셔도 그대로 나가야 한다."""
+    titles = 제목들(밭(water=큰비날, stage_hazards=("과습",), vegetation=물준밭))
+    assert "배추밭 물 주지 않기" in titles
+
+
+def test_물을_막아도_다른_카드는_나간다():
+    """막는 것은 물 카드뿐이다 — 시비·병해충은 제 근거로 나간다."""
+    titles = 제목들(
+        밭(water=마른날, irrigate_needed=True, fertilize_needed=True, vegetation=물준밭)
+    )
+    assert titles == ["배추 웃거름 주기"]

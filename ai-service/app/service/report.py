@@ -21,7 +21,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import OPENAI_MODEL
 from app.domain.gdd import past_target
-from app.domain.kst import kst_today
+from app.domain.kst import kst_hour, kst_today
 from app.domain.report_payload import ReportPayload, parse_report_json
 from app.domain.vegetation_text import Vegetation, summarize_points, vegetation_lines
 from app.domain.water_balance import (
@@ -44,7 +44,8 @@ from app.service.satellite_cache import observations as satellite_observations
 from app.service.warn_region import plot_warning
 from pipeline.open_meteo_client import (
     daily_index_of,
-    fetch_daily_forecast,
+    fetch_forecast,
+    hourly_value_at,
     normalize_daily_forecast,
 )
 
@@ -135,9 +136,12 @@ def build_report_input(db: Session, plot: Plot) -> ReportInput | None:
         #   그것이 **사용자 체감에 그대로 닿는다** — build_report_input 은 배치가 아니라
         #   화면 경로이고, advices 캐시보다 **먼저** 불린다(api/reports.py).
         #   실측(2026-09-19): payload 는 커져도 응답 시간은 거의 같다(1,17x ms).
-        daily = fetch_daily_forecast(
+        # ⚠ `fetch_daily_forecast` 가 아니라 `fetch_forecast` 다. **같은 요청 한 번**
+        #   인데 저 래퍼는 hourly 를 버린다 — 토양수분이 거기 실려 온다.
+        payload = fetch_forecast(
             float(plot.latitude), float(plot.longitude), past_days=WATER_PAST_DAYS
         )
+        daily = payload["daily"]
         forecast = normalize_daily_forecast(daily)
         # ⚠ **자리로 세지 않는다.** 예전에는 `forecast[1]` 을 내일로 봤는데, 그건
         #   `past_days=0` 일 때만 맞다. 물 수지를 내려고 과거를 같이 받는 순간 맨 앞이
@@ -153,7 +157,13 @@ def build_report_input(db: Session, plot: Plot) -> ReportInput | None:
             after = forecast[today_idx + 1 : today_idx + 7]
             tomorrow = after[0] if after else None
             forecast_week = after or None
-            water = _water_from(forecast, today_idx)
+            water = _water_from(
+                forecast,
+                today_idx,
+                hourly_value_at(
+                    payload.get("hourly"), kst_hour(), "soil_moisture_9_to_27cm"
+                ),
+            )
     except Exception:  # noqa: BLE001 — 외부 API 장애로 리포트 전체를 막지 않는다
         tomorrow = None
         forecast_week = None
@@ -201,7 +211,9 @@ def build_report_input(db: Session, plot: Plot) -> ReportInput | None:
 WATER_PAST_DAYS = 14
 
 
-def _water_from(rows: list[dict], today_idx: int) -> WaterBalance:
+def _water_from(
+    rows: list[dict], today_idx: int, soil_moisture: float | None = None
+) -> WaterBalance:
     """이미 받아 둔 일별 예보에서 물 사정을 뽑는다. **새 호출을 하지 않는다.**
 
     ⚠ `rows` 는 과거를 포함한 배열이고 `today_idx` 가 오늘 자리다. 자리로 세면
@@ -225,6 +237,9 @@ def _water_from(rows: list[dict], today_idx: int) -> WaterBalance:
         rain_past_days=len(past) or None,
         rain_3d_mm=합("rainfall_mm", ahead[:3]),
         rain_7d_mm=합("rainfall_mm", ahead[:7]),
+        # ⚠ 판정을 뒤집지 않고 **등급만 거든다**(water_balance.is_soil_dry).
+        #   모델값이라 우리 밭의 멀칭도 어제 준 물도 모른다.
+        soil_moisture=soil_moisture,
     )
 
 
