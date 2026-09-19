@@ -15,13 +15,13 @@ import logging
 import math
 import uuid
 from dataclasses import dataclass, field
-from datetime import date, datetime, timedelta
-from zoneinfo import ZoneInfo
+from datetime import date, timedelta
 
 from sqlalchemy.orm import Session
 
 from app.core.config import OPENAI_MODEL
 from app.domain.gdd import past_target
+from app.domain.kst import kst_today
 from app.domain.report_payload import ReportPayload, parse_report_json
 from app.domain.vegetation_text import Vegetation, summarize_points, vegetation_lines
 from app.domain.water_balance import (
@@ -143,7 +143,7 @@ def build_report_input(db: Session, plot: Plot) -> ReportInput | None:
         #   `past_days=0` 일 때만 맞다. 물 수지를 내려고 과거를 같이 받는 순간 맨 앞이
         #   14일 전이 되어 **오류 없이** 서리 경고가 지난주 날씨로 나간다.
         #   오늘을 날짜로 찾고 그 다음날부터 센다.
-        today_idx = daily_index_of(daily, _kst_today().isoformat())
+        today_idx = daily_index_of(daily, kst_today().isoformat())
         if today_idx is None:
             # 응답에 오늘이 없다(타임존이 어긋났거나 형태가 다르다). 지난날을 내일이라고
             # 말하느니 예보를 비운다 — 아래 except 와 같은 판단이다.
@@ -179,7 +179,7 @@ def build_report_input(db: Session, plot: Plot) -> ReportInput | None:
         stage_gdd_to=growth.stage_gdd_to,
         is_last_stage=growth.is_last_stage,
         stage_count=growth.stage_count,
-        prevention_notes=prevention_notes_for(db, growth.crop_name_ko, _kst_today().month),
+        prevention_notes=prevention_notes_for(db, growth.crop_name_ko, kst_today().month),
         water_need_mm=growth.water_need_mm,
         fertilize_needed=growth.fertilize_needed,
         water=water,
@@ -226,15 +226,6 @@ def _water_from(rows: list[dict], today_idx: int) -> WaterBalance:
         rain_3d_mm=합("rainfall_mm", ahead[:3]),
         rain_7d_mm=합("rainfall_mm", ahead[:7]),
     )
-
-
-def _kst_today() -> date:
-    """한국 날짜. Open-Meteo 에 `timezone=Asia/Seoul` 을 주므로 응답 날짜도 KST 다.
-
-    ⚠ `date.today()` 를 그냥 쓰지 않는다 — 서버가 UTC 면 한국 자정 직후 9시간 동안
-      **어제**가 나와 예보에서 오늘을 못 찾는다(운영 서버는 UTC 다).
-    """
-    return datetime.now(ZoneInfo("Asia/Seoul")).date()
 
 
 def _days_to_target(
@@ -372,7 +363,7 @@ def _vegetation_for(db: Session, plot: Plot) -> Vegetation:
       못 받으면 빈 Vegetation 이라 프롬프트에서 위성 줄이 빠질 뿐이다 —
       `WaterBalance` 와 같은 원칙이다. 그래서 여기서 예외를 삼킨다.
     """
-    오늘 = _kst_today()
+    오늘 = kst_today()
     try:
         points = satellite_observations(
             db,

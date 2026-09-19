@@ -15,12 +15,12 @@ from __future__ import annotations
 import traceback
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
-from zoneinfo import ZoneInfo
 
 from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
 from app.domain.gdd import past_target
+from app.domain.kst import KST, kst_today
 from app.domain.task_rules import (
     DRY_MM,
     RAIN_WINDOW_DAYS,
@@ -57,15 +57,6 @@ from pipeline.open_meteo_client import (
 EXPIRE_AFTER_DAYS = 3
 
 
-def _kst_today() -> date:
-    """한국 날짜. 예보 응답이 KST 라 운영 서버(UTC)에서 date.today() 를 쓰면 어긋난다."""
-    return datetime.now(ZoneInfo("Asia/Seoul")).date()
-
-
-#: 한국 표준시. 서머타임이 없어 고정 오프셋으로 둔다.
-_KST = timezone(timedelta(hours=9))
-
-
 def _expire_cutoff(now: datetime | None = None) -> datetime:
     """이 시각보다 먼저 만들어진 미완료 카드를 닫는다.
 
@@ -73,7 +64,7 @@ def _expire_cutoff(now: datetime | None = None) -> datetime:
     자르는 것이 핵심이다** — "지금부터 72시간 전"으로 하면 배치가 도는 시각이
     몇 분만 밀려도 경계에 걸친 카드가 어떤 날은 닫히고 어떤 날은 안 닫힌다.
     """
-    kst_now = (now or datetime.now(timezone.utc)).astimezone(_KST)
+    kst_now = (now or datetime.now(timezone.utc)).astimezone(KST)
     kst_day_start = kst_now.replace(hour=0, minute=0, second=0, microsecond=0)
     return kst_day_start - timedelta(days=EXPIRE_AFTER_DAYS)
 
@@ -249,7 +240,7 @@ def _fetch_plot_weather(lat: float, lon: float) -> _PlotWeather:
     except Exception:  # noqa: BLE001 — 기상이 없어도 시비 판정은 해야 한다
         return _PlotWeather(WaterBalance())
 
-    today = daily_index_of(daily, _kst_today().isoformat())
+    today = daily_index_of(daily, kst_today().isoformat())
     if today is None:
         return _PlotWeather(WaterBalance())
 
@@ -329,7 +320,7 @@ def generate_tasks_for_plot(
         sow_method=growth.sow_method,
         ndvi=_latest_ndvi(db, plot),
         # 이맘때 이 작물에 자주 나오는 병해충. DB 조회 한 번이라 배치를 안 늦춘다
-        pest_names=pest_names_for(db, growth.crop_name_ko, _kst_today()),
+        pest_names=pest_names_for(db, growth.crop_name_ko, kst_today()),
         # 재해 — 기상청이 판정한 것을 **받아 적기만** 한다(task_rules 주석)
         warnings=_active_warnings(db, plot),
         # 기온 한계 — 작물이 몇 도부터 상하나 × 내일 예보

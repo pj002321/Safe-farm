@@ -20,6 +20,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.domain.pest_names import merge_pest_names
+from app.service.bulletin_sql import CROP_IN_NAMES
 
 #: 쓸 등급. 표에 있는 값은 셋뿐이다 — 예보 827 · 주의보 350 · 경보 20(실측).
 #:
@@ -42,14 +43,11 @@ def pest_names_for(db: Session, crop_name_ko: str, today: date | None = None) ->
     """
     오늘 = today or date.today()
     rows = db.execute(
-        text("""
+        text(f"""
             select distinct pest_name, level
               from pest_bulletins
              where crop_names <> ''
-               -- ⚠ 통째로 맞춘다. `like '%배%'` 로 하면 **'배추' 자료가 '배' 밭에
-               --    딸려 온다**(실측: 배 → 배추 무름병). crop_names 가 쉼표로 이은
-               --    한 칸이라, 양끝에 쉼표를 붙여 토막째 비교한다.
-               and ',' || crop_names || ',' like '%,' || :crop || ',%'
+               and {CROP_IN_NAMES}
                and level = any(:levels)
                and (extract(month from period_from), extract(day from period_from))
                    <= (:m, :d)

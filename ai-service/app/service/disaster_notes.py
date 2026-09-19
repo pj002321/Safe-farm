@@ -23,6 +23,8 @@ import re
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from app.service.bulletin_sql import CROP_IN_NAMES
+
 #: 미리 하는 것만. '발생전' 도 같은 결이다
 _PHASES = ("사전대책", "발생전")
 
@@ -52,12 +54,12 @@ def prevention_notes_for(db: Session, crop_name_ko: str, month: int) -> tuple[st
       부분 일치로 하면 '배' 가 '배추' 에 걸린다(pest_notes 에서 겪은 것과 같다).
     """
     rows = db.execute(
-        text("""
+        text(f"""
             select distinct on (hazard) hazard, body
               from disaster_bulletins
              where issue_month = :m
                and crop_names <> ''
-               and ',' || crop_names || ',' like '%,' || :crop || ',%'
+               and {CROP_IN_NAMES}
                and phase = any(:phases)
              order by hazard, bulletin_id
         """),

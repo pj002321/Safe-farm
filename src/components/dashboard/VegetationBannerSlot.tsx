@@ -139,7 +139,11 @@ export async function VegetationBannerSlot({ userId }: { userId: string }) {
 
   // 급한 것이 없는 날. 위성 대신 이 달에 심는 것을 보인다 —
   // "잎이 빽빽해요" 는 좋은 소식이라 한 줄을 차지할 값어치가 없다.
-  return <SowingBanner month={오늘.getMonth() + 1} />;
+  //
+  // ⚠ `getMonth()` 가 아니라 `getUTCMonth()` 다. 위에서 UTC 자정으로 만든 날짜라,
+  //   로컬이 UTC 보다 뒤인 곳에서는 매달 1일에 **지난달**이 된다. KST 로 맞추려다
+  //   시간대를 하나 더 끼워 넣은 자리다.
+  return <SowingBanner month={오늘.getUTCMonth() + 1} />;
 }
 
 /**
