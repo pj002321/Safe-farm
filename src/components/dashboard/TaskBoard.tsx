@@ -73,9 +73,13 @@ export function TaskBoard({
   emptyReason,
   toggleTaskAction,
 }: TaskBoardProps) {
-  // 밭은 있는데 오늘 할 일이 하나도 없는 경우. 밭별로 "없음"을 늘어놓으면
-  // 화면만 길어지므로 한 장으로 합쳐서 알린다.
-  if (groups.every((group) => group.open.length + group.done.length === 0)) {
+  // 밭이 하나뿐이고 오늘 할 일도 없는 경우에만 한 장으로 합쳐 알린다. 밭이
+  // 둘 이상이면 밭마다 사정(할 일 없음 vs 판정 못 함)이 다를 수 있어, 하나로
+  // 합치면 다른 밭 얘기가 화면에서 통째로 사라진다 — 밭별 섹션을 그대로 둔다.
+  if (
+    groups.length <= 1 &&
+    groups.every((group) => group.open.length + group.done.length === 0)
+  ) {
     return <EmptyTasks reason={emptyReason} />;
   }
 
