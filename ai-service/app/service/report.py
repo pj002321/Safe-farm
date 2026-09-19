@@ -32,6 +32,7 @@ from app.domain.water_balance import (
 )
 from app.knowledge.embedder import get_client
 from app.models.farm import Advice, FarmAdvice, Plot
+from app.service import forecast_cache
 from app.service.disaster_notes import prevention_notes_for
 from app.service.plot_growth import (
     compute_plot_growth,
@@ -44,7 +45,6 @@ from app.service.satellite_cache import observations as satellite_observations
 from app.service.warn_region import plot_warning
 from pipeline.open_meteo_client import (
     daily_index_of,
-    fetch_forecast,
     hourly_value_at,
     normalize_daily_forecast,
 )
@@ -136,9 +136,11 @@ def build_report_input(db: Session, plot: Plot) -> ReportInput | None:
         #   그것이 **사용자 체감에 그대로 닿는다** — build_report_input 은 배치가 아니라
         #   화면 경로이고, advices 캐시보다 **먼저** 불린다(api/reports.py).
         #   실측(2026-09-19): payload 는 커져도 응답 시간은 거의 같다(1,17x ms).
-        # ⚠ `fetch_daily_forecast` 가 아니라 `fetch_forecast` 다. **같은 요청 한 번**
-        #   인데 저 래퍼는 hourly 를 버린다 — 토양수분이 거기 실려 온다.
-        payload = fetch_forecast(
+        # ⚠ `fetch_daily_forecast` 로 바꾸지 말 것. **같은 요청 한 번**인데 저 래퍼는
+        #   hourly 를 버린다 — 토양수분이 거기 실려 온다.
+        # ⚠ 직접 부르지 않고 `forecast_cache` 를 지난다. 이 경로는 리포트 탭을 열
+        #   때마다 도는데 Next 쪽에 `revalidateSec` 이 없어 매번 나가고 있었다.
+        payload = forecast_cache.forecast(
             float(plot.latitude), float(plot.longitude), past_days=WATER_PAST_DAYS
         )
         daily = payload["daily"]

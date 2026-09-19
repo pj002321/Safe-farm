@@ -368,7 +368,8 @@ def _temp_candidate(inputs: PlotTaskInputs) -> TaskCandidate | None:
             title=f"{inputs.crop_name_ko} 추위 대비하기",
             reason=(
                 f"내일 아침 최저가 {최저:.0f}도예요. "
-                f"{inputs.crop_name_ko}는 {inputs.frost_limit_c:.0f}도부터 상합니다. "
+                f"{inputs.crop_name_ko}{조사(inputs.crop_name_ko, '은', '는')} "
+                f"{inputs.frost_limit_c:.0f}도부터 상합니다. "
                 "덮개나 짚을 미리 씌워 두세요."
             ),
             priority="high",
@@ -384,7 +385,8 @@ def _temp_candidate(inputs: PlotTaskInputs) -> TaskCandidate | None:
             title=f"{inputs.crop_name_ko} 더위 대비하기",
             reason=(
                 f"내일 낮 최고가 {최고:.0f}도예요. "
-                f"{inputs.crop_name_ko}는 {inputs.heat_limit_c:.0f}도부터 상합니다. "
+                f"{inputs.crop_name_ko}{조사(inputs.crop_name_ko, '은', '는')} "
+                f"{inputs.heat_limit_c:.0f}도부터 상합니다. "
                 "차광망을 덮고 물은 해 뜨기 전이나 해 진 뒤에 주세요."
             ),
             priority="high",

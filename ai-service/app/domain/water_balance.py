@@ -244,7 +244,7 @@ def dryness_note(b: WaterBalance) -> str | None:
         if 마른편:
             조각.append(f"{머리}비가 {b.rain_past_mm:.1f}mm뿐이었어요.")
         else:
-            조각.append(f"{머리}내린 비가 {b.rain_past_mm:.0f}mm 예요.")
+            조각.append(f"{머리}내린 비가 {b.rain_past_mm:.0f}mm예요.")
     elif b.balance_14d_mm is not None and b.balance_14d_mm < 0:
         # 강수를 따로 못 받은 호출. 수지라도 적되 **뜻을 풀어 쓴다**
         # ⚠ 음수일 때만이다. 비가 넉넉했던 밭에 이 문장을 적으면 거짓말이 된다
