@@ -1,8 +1,9 @@
 import { CalendarIcon, SproutIcon } from "@/components/icons";
 import { SowingStatusOption } from "@/components/plot/CropCards";
 import { Badge } from "@/components/shared/Badge";
-import { Button, ButtonLink } from "@/components/shared/Button";
+import { ButtonLink } from "@/components/shared/Button";
 import { GrowthGauge } from "@/components/shared/GrowthGauge";
+import { SubmitButton } from "@/components/shared/SubmitButton";
 import {
   type CultivationCard,
   type CultivationStatus,
@@ -221,9 +222,9 @@ function CultivationItem({
           <form action={onHarvest}>
             <input name="plotId" type="hidden" value={plotId} />
             <input name="cultivationId" type="hidden" value={card.id} />
-            <Button size="sm" type="submit" variant="outline">
+            <SubmitButton pendingKo="기록하는 중" size="sm" variant="outline">
               수확 완료
-            </Button>
+            </SubmitButton>
           </form>
         )}
 
@@ -277,9 +278,9 @@ function CultivationItem({
               </div>
 
               <div>
-                <Button size="sm" type="submit">
+                <SubmitButton pendingKo="저장하는 중" size="sm">
                   저장
-                </Button>
+                </SubmitButton>
               </div>
             </form>
           </details>
@@ -303,9 +304,9 @@ function CultivationItem({
             <form action={onDelete} className="mt-3">
               <input name="plotId" type="hidden" value={plotId} />
               <input name="cultivationId" type="hidden" value={card.id} />
-              <Button size="sm" type="submit" variant="danger">
+              <SubmitButton pendingKo="지우는 중" size="sm" variant="danger">
                 삭제합니다
-              </Button>
+              </SubmitButton>
             </form>
           </div>
         </details>

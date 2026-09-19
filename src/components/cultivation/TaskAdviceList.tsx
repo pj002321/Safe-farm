@@ -1,5 +1,5 @@
 import { Badge } from "@/components/shared/Badge";
-import { Button } from "@/components/shared/Button";
+import { SubmitButton } from "@/components/shared/SubmitButton";
 import type { TaskAdvice } from "@/shared/growth/taskAdvice";
 
 /**
@@ -70,9 +70,9 @@ export function TaskAdviceList({
               <input name="plotId" type="hidden" value={plotId} />
               <input name="cultivationId" type="hidden" value={cultivationId} />
               <input name="titleKo" type="hidden" value={task.titleKo} />
-              <Button size="sm" type="submit" variant="secondary">
+              <SubmitButton pendingKo="기록하는 중" size="sm" variant="secondary">
                 했음
-              </Button>
+              </SubmitButton>
             </form>
           )}
         </li>

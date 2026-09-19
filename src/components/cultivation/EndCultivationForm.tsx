@@ -1,4 +1,4 @@
-import { Button } from "@/components/shared/Button";
+import { SubmitButton } from "@/components/shared/SubmitButton";
 import { FAILURE_REASONS } from "@/features/cultivations/domain/failureReason";
 
 /**
@@ -34,9 +34,9 @@ export function EndCultivationForm({
       <form action={onHarvest}>
         <input name="plotId" type="hidden" value={plotId} />
         <input name="cultivationId" type="hidden" value={cultivationId} />
-        <Button size="sm" type="submit">
+        <SubmitButton pendingKo="기록하는 중" size="sm">
           수확 완료로 기록
-        </Button>
+        </SubmitButton>
       </form>
 
       <details className="rounded-lg border border-border bg-surface-2 px-4 py-3">
@@ -62,9 +62,9 @@ export function EndCultivationForm({
             </select>
           </label>
 
-          <Button size="sm" type="submit" variant="danger">
+          <SubmitButton pendingKo="기록하는 중" size="sm" variant="danger">
             중단으로 기록
-          </Button>
+          </SubmitButton>
         </form>
       </details>
     </div>
