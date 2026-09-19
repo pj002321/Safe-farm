@@ -70,6 +70,13 @@ class WaterBalance:
 
     #: 최근 14일 Σ(강수 − ET0). 음수면 마른 쪽으로 기울었다는 뜻이다
     balance_14d_mm: float | None = None
+    #: 최근 14일에 **실제로 내린 비**(mm). 판정에는 안 쓰고 **문장에만** 쓴다.
+    #:
+    #: ⚠ balance_14d_mm 과 다른 값이다 — 저건 증발산을 뺀 뒤라 '비가 얼마나 왔나' 가
+    #:   아니다. 사람에게는 "2주 동안 비가 0.1mm" 가 통하고 "-56mm" 는 안 통한다.
+    rain_past_mm: float | None = None
+    #: 위 값이 며칠치인가. "14일간" 을 문장에 적으려면 기간도 알아야 한다
+    rain_past_days: int | None = None
     #: 예보 3일 강수 합
     rain_3d_mm: float | None = None
     #: 예보 7일 강수 합
@@ -137,20 +144,76 @@ def is_soil_dry(b: WaterBalance) -> bool:
     return b.soil_moisture is not None and b.soil_moisture < SOIL_DRY
 
 
+def 기간말(일수: int | None) -> str | None:
+    """며칠을 "14일" 처럼 **숫자로** 적는다. task_rules 도 같은 말을 써서 공개한다.
+
+    ★ 2026-09-19 — '사흘'·'이레'·'두 주' 를 걷어 냈다.
+
+      처음엔 토박이말이 더 사람 말 같아서 썼는데, **사흘과 나흘을 헷갈리는 사람이
+      많다**(사용자 지적). 날짜를 잘못 읽으면 물 주는 날이 어긋난다 — 이 문장은
+      말맛을 내려고 있는 것이 아니라 언제 무엇을 할지 정하라고 있는 것이다.
+      숫자는 누구나 같게 읽는다.
+
+    ⚠ 이레를 넘으면 **주로 센다.** "14일" 보다 "2주" 가 얼마나 긴 동안인지 바로
+      잡힌다. 딱 떨어지지 않는 날수(10일)는 그냥 날로 둔다 — "1주 3일" 은 읽다가
+      한 번 멈추게 된다.
+
+    ⚠ 날수를 모르면 None 이다. 부르는 쪽이 기간을 빼고 적는다 — 옛 코드는 여기서
+      "None일" 을 만들어 화면까지 흘려보낼 수 있었다.
+    """
+    if not 일수:
+        return None
+    주, 나머지 = divmod(일수, 7)
+    if 주 == 0 or 나머지:
+        return f"{일수}일"
+    return "일주일" if 주 == 1 else f"{주}주"
+
+
 def dryness_note(b: WaterBalance) -> str | None:
     """판정의 **근거를 사실로** 적은 한 줄. 카드 문장에 그대로 넣는다.
 
-    ⚠ 여기서 '마릅니다'·'부족합니다' 같은 판단어를 쓰지 않는다. 숫자와 기간만 적고
-      판단은 카드 제목이 한다 — 토양수분이 모델값이라 단정할 근거가 모자란다.
+    ★ 2026-09-19 — **사람 말로 바꿨다.**
+
+        예전   "최근 14일 강수에서 증발산을 뺀 값이 -56mm · 앞으로 3일 예보 강수는 0mm"
+        지금   "2주 동안 비가 0.1mm뿐이었어요. 앞으로 3일도 비 소식이 없어요."
+
+      '증발산' 도 '-56mm' 도 농민이 쓰는 말이 아니다. **계산에서 빼는 것이 아니라
+      문장에서만 감춘다** — 판정은 balance_14d_mm 이 그대로 한다. 근거 추적은
+      `_skip` 로그와 리포트 상세가 맡는다.
+
+    ⚠ '마릅니다'·'부족합니다' 같은 판단어를 쓰지 않는다. 사실만 적고 판단은 카드
+      제목이 한다 — 토양수분·ET0 가 모델값이라 단정할 근거가 모자란다.
     ⚠ '장마' 를 쓰지 않는다. 7일 예보로 2~4주 현상을 말할 수 없다(조사 §5-3).
     """
     조각: list[str] = []
-    if b.balance_14d_mm is not None:
-        조각.append(f"최근 14일 강수에서 증발산을 뺀 값이 {b.balance_14d_mm:.0f}mm")
-    if b.rain_3d_mm is not None:
-        조각.append(f"앞으로 3일 예보 강수는 {b.rain_3d_mm:.0f}mm")
-    if b.rain_7d_mm is not None:
-        조각.append(f"7일은 {b.rain_7d_mm:.0f}mm")
-    if not 조각:
-        return None
-    return " · ".join(조각) + " 입니다."
+    # 앞 문장이 "비가 적었다" 고 말했는가. 뒤 문장의 조사가 여기 걸린다
+    마른편 = False
+
+    # ── 지난 비 ───────────────────────────────────────────────
+    if b.rain_past_mm is not None:
+        # 날수를 모르면 기간을 빼고 적는다 — 기간말 이 None 을 준다
+        기간 = 기간말(b.rain_past_days)
+        머리 = f"{기간} 동안 " if 기간 else ""
+        마른편 = b.rain_past_mm < 1
+        if 마른편:
+            조각.append(f"{머리}비가 {b.rain_past_mm:.1f}mm뿐이었어요.")
+        else:
+            조각.append(f"{머리}내린 비가 {b.rain_past_mm:.0f}mm 예요.")
+    elif b.balance_14d_mm is not None and b.balance_14d_mm < 0:
+        # 강수를 따로 못 받은 호출. 수지라도 적되 **뜻을 풀어 쓴다**
+        # ⚠ 음수일 때만이다. 비가 넉넉했던 밭에 이 문장을 적으면 거짓말이 된다
+        마른편 = True
+        조각.append("2주 동안 비보다 마른 날이 많았어요.")
+
+    # ── 앞으로 ────────────────────────────────────────────────
+    # 3일·7일은 rain_3d_mm·rain_7d_mm 이 보는 창이다. 칸 이름과 문장을 같게 둔다
+    if b.rain_3d_mm is not None and b.rain_3d_mm < 1:
+        # '도' 는 앞 문장이 가물었다고 말했을 때만 이어진다
+        조각.append(f"앞으로 3일{'도' if 마른편 else '은'} 비 소식이 없어요.")
+    elif b.rain_3d_mm is not None:
+        조각.append(f"앞으로 3일 동안 {b.rain_3d_mm:.0f}mm쯤 올 것 같아요.")
+    if b.rain_7d_mm is not None and b.rain_7d_mm >= RAIN_HEAVY_MM:
+        # ⚠ '장마' 가 아니라 기간과 숫자로 말한다
+        조각.append(f"일주일 동안은 {b.rain_7d_mm:.0f}mm 예보예요.")
+
+    return " ".join(조각) if 조각 else None

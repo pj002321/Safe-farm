@@ -191,6 +191,9 @@ def _water_from(rows: list[dict], today_idx: int) -> WaterBalance:
     수지 = None if (비 is None or 증발 is None) else 비 - 증발
     return WaterBalance(
         balance_14d_mm=수지,
+        # 판정에는 안 쓰고 문장에만 쓴다 — water_balance.dryness_note 참고
+        rain_past_mm=비,
+        rain_past_days=len(past) or None,
         rain_3d_mm=합("rainfall_mm", ahead[:3]),
         rain_7d_mm=합("rainfall_mm", ahead[:7]),
     )

@@ -86,9 +86,9 @@ def test_비가_0mm_인_것과_모르는_것은_다르다():
     영 = WaterBalance(balance_14d_mm=마름, rain_3d_mm=0.0, rain_7d_mm=0.0)
     없음 = WaterBalance(balance_14d_mm=마름)
     assert judge_water(영) == judge_water(없음) == "give"
-    # 문장에서는 갈린다 — 0mm 는 근거로 적히고 None 은 안 적힌다
-    assert "0mm" in (dryness_note(영) or "")
-    assert "예보" not in (dryness_note(없음) or "")
+    # 문장에서는 갈린다 — 0mm 예보는 "비 소식이 없어요" 로 적히고 None 은 안 적힌다
+    assert "비 소식이 없어요" in (dryness_note(영) or "")
+    assert "3일" not in (dryness_note(없음) or "")
 
 
 def test_토양수분은_판정을_안_뒤집고_등급만_거든다():
@@ -103,14 +103,100 @@ def test_토양수분을_모르면_마른_것으로_보지_않는다():
     assert is_soil_dry(WaterBalance(soil_moisture=None)) is False
 
 
-def test_근거_문장은_숫자와_기간만_말한다():
-    b = WaterBalance(balance_14d_mm=-52.7, rain_3d_mm=0.0, rain_7d_mm=3.0)
+def test_근거_문장이_사람_말이다():
+    """★ 2026-09-19 — '증발산 -53mm' 를 농민이 읽을 말로 바꿨다."""
+    b = WaterBalance(
+        balance_14d_mm=-52.7,
+        rain_past_mm=0.1,
+        rain_past_days=14,
+        rain_3d_mm=0.0,
+        rain_7d_mm=0.0,
+    )
     note = dryness_note(b)
     assert note is not None
-    assert "-53mm" in note and "14일" in note
-    # 단정하는 말과 못 보는 현상을 쓰지 않는다
-    for 금지 in ("마릅니다", "부족", "장마", "말랐"):
+    # 실제로 내린 비를 말한다. 수지(-52.7)가 아니다
+    assert "0.1mm" in note
+    assert "2주" in note
+    assert "비 소식이 없어요" in note
+
+
+def test_전문어를_문장에_쓰지_않는다():
+    """'증발산'·'수지' 는 농민이 쓰는 말이 아니다. 계산에는 쓰고 문장에서만 감춘다."""
+    b = WaterBalance(
+        balance_14d_mm=-52.7,
+        rain_past_mm=0.1,
+        rain_past_days=14,
+        rain_3d_mm=0.0,
+        rain_7d_mm=0.0,
+    )
+    note = dryness_note(b) or ""
+    for 금지 in ("증발산", "수지", "누적", "GDD", "mm뿐이었습니다"):
         assert 금지 not in note
+
+
+def test_단정하는_말과_못_보는_현상을_쓰지_않는다():
+    for b in (
+        WaterBalance(balance_14d_mm=-52.7, rain_past_mm=0.1, rain_past_days=14, rain_3d_mm=0.0),
+        WaterBalance(balance_14d_mm=-52.7, rain_past_mm=2.0, rain_past_days=14, rain_7d_mm=65.0),
+    ):
+        note = dryness_note(b) or ""
+        for 금지 in ("마릅니다", "부족", "장마", "말랐", "위험"):
+            assert 금지 not in note
+
+
+def test_비가_제법_왔으면_다르게_말한다():
+    """1mm 아래는 '~뿐이었어요', 그 위는 '내린 비가 ~예요'. 0mm 를 '내린 비' 라 하면 어색하다."""
+    적음 = dryness_note(WaterBalance(rain_past_mm=0.1, rain_past_days=14)) or ""
+    많음 = dryness_note(WaterBalance(rain_past_mm=23.0, rain_past_days=14)) or ""
+    assert "뿐이었어요" in 적음
+    assert "뿐이었어요" not in 많음
+    assert "23mm" in 많음
+
+
+def test_기간을_주로_센다():
+    """★ 2026-09-19 — '사흘'·'이레' 를 걷어 냈다. 사흘과 나흘을 헷갈리는 사람이 많다.
+
+    이레를 넘으면 주로 센다 — "14일" 보다 "2주" 가 얼마나 긴지 바로 잡힌다.
+    """
+
+    def 말(일수):
+        return dryness_note(WaterBalance(rain_past_mm=0.1, rain_past_days=일수)) or ""
+
+    assert "3일" in 말(3)
+    assert "일주일" in 말(7)
+    assert "2주" in 말(14)
+    # 딱 떨어지지 않으면 날로 둔다 — "1주 3일" 은 읽다가 멈추게 된다
+    assert "10일" in 말(10)
+    # 옛말이 하나도 안 남아야 한다
+    for 옛말 in ("사흘", "나흘", "이레", "열나흘", "두 주"):
+        assert 옛말 not in 말(3) + 말(7) + 말(14)
+
+
+def test_강수를_못_받았으면_수지를_풀어_말한다():
+    """balance 만 있고 rain_past 가 없는 호출. 숫자 대신 뜻을 적는다."""
+    note = dryness_note(WaterBalance(balance_14d_mm=-52.7)) or ""
+    assert "마른 날이 많았어요" in note
+    assert "-53" not in note
+
+
+def test_날수를_모르면_None일_이_새어_나가지_않는다():
+    """WaterBalance 는 밖에서도 만들 수 있는 자료형이다 — 한 칸만 채워도 말이 돼야 한다."""
+    note = dryness_note(WaterBalance(rain_past_mm=0.1)) or ""
+    assert "None" not in note
+    assert "0.1mm" in note
+
+
+def test_비가_넉넉했는데_마른_날이_많았다고_하지_않는다():
+    """수지가 양수면 비가 증발산보다 많았다는 뜻이다. 거꾸로 적으면 거짓말이 된다."""
+    note = dryness_note(WaterBalance(balance_14d_mm=30.0)) or ""
+    assert "마른 날이 많았어요" not in note
+
+
+def test_비가_왔던_밭에는_앞으로_3일_도_라고_잇지_않는다():
+    """'도' 는 앞 문장이 가물었다고 말했을 때만 이어진다."""
+    note = dryness_note(WaterBalance(rain_past_mm=60.0, rain_past_days=14, rain_3d_mm=0.0)) or ""
+    assert "앞으로 3일은" in note
+    assert "앞으로 3일도" not in note
 
 
 def test_근거가_없으면_문장도_없다():

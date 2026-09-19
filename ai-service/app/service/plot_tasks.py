@@ -198,6 +198,10 @@ def _fetch_water_balance(lat: float, lon: float) -> WaterBalance:
 
     return WaterBalance(
         balance_14d_mm=수지,
+        # ⚠ 판정에는 안 쓰고 **문장에만** 쓴다. 사람에게는 "비가 0.1mm" 가 통하고
+        #   "-56mm"(증발산을 뺀 값)는 안 통한다 — dryness_note 참고
+        rain_past_mm=비,
+        rain_past_days=len(past) or None,
         rain_3d_mm=합("rainfall_mm", ahead[:3]),
         rain_7d_mm=합("rainfall_mm", ahead[:7]),
         soil_moisture=None,  # hourly 에 있다. 지금은 안 쓴다 — is_soil_dry 가 False 로 떨어진다

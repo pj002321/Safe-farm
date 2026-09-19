@@ -37,8 +37,11 @@ def test_normalize_daily_forecast_maps_columns_by_index():
         "rain_chance": 10,
         "wind_max": 9.4,
         "humidity": 55,
-        # et0_fao_evapotranspiration 을 안 받은 응답이라 None 이다 — 없는 것과 0 은 다르다
+        # 안 받은 칸은 None 이다 — 없는 것과 0 은 다르다
         "et0_mm": None,
+        "sunrise": None,
+        "sunset": None,
+        "wind_dir_deg": None,
     }
     assert rows[1]["date"] == "2026-09-18"
     assert rows[1]["wind_max"] == 21.6
@@ -59,6 +62,8 @@ def test_normalize_current_maps_fields():
         "humidityPct": 62,
         "rainfallMm": 0.0,
         "windMs": 3.4,
+        # 풍향을 안 받은 응답이라 None — 0 이면 정북풍이라 뜻이 달라진다
+        "windDirDeg": None,
     }
 
 
@@ -163,3 +168,31 @@ def test_forecast_request_defaults_past_days_to_zero():
     assert sig.parameters["past_days"].default == 0
     sig2 = inspect.signature(open_meteo_client.fetch_daily_forecast)
     assert sig2.parameters["past_days"].default == 0
+
+
+def test_해와_바람방향도_받아_온다():
+    """★ 2026-09-19 — 아침에 밭에 나갈 때 보는 값(해 뜸·짐)과 바람 방향을 붙였다."""
+    rows = normalize_daily_forecast(
+        {
+            **DAILY_RESPONSE,
+            "sunrise": ["2026-09-17T06:17", "2026-09-18T06:18"],
+            "sunset": ["2026-09-17T18:37", "2026-09-18T18:35"],
+            "wind_direction_10m_dominant": [18, 320],
+        }
+    )
+    assert rows[0]["sunrise"] == "2026-09-17T06:17"
+    assert rows[0]["sunset"] == "2026-09-17T18:37"
+    assert rows[1]["wind_dir_deg"] == 320
+
+
+def test_실황_풍향은_0_도_살려_둔다():
+    """0 은 정북풍이다. falsy 로 걸러 None 이 되면 화면이 방향을 못 그린다."""
+    now = normalize_current(
+        {
+            "time": "2026-09-17T09:00",
+            "temperature_2m": 21.3,
+            "wind_speed_10m": 3.4,
+            "wind_direction_10m": 0,
+        }
+    )
+    assert now["windDirDeg"] == 0

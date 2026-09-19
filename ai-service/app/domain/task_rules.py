@@ -28,7 +28,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from app.domain.water_balance import WaterBalance, dryness_note, is_soil_dry, judge_water
+from app.domain.water_balance import (
+    WaterBalance,
+    dryness_note,
+    is_soil_dry,
+    judge_water,
+    기간말,
+)
 
 # 관측 강수 집계 기간(일). ask_context.py 의 RECENT_WEATHER_DAYS 와 같은 값.
 #
@@ -88,18 +94,33 @@ def _needs_water_attention(inputs: PlotTaskInputs) -> bool:
 def _reason(inputs: PlotTaskInputs, 꼬리: str) -> str:
     """근거 문장. **사실을 먼저 적고 판단은 제목이 한다.**
 
-    ⚠ '말랐습니다' 같은 단정을 쓰지 않는다 — 토양수분은 모델값이라 우리 밭의 흙도
-      멀칭도 어제 준 물도 모른다(water_balance 파일 머리).
+    ★ 2026-09-19 — 사람 말로 다듬었다.
+
+        예전   "최근 14일 강수에서 증발산을 뺀 값이 -56mm · … 가까운 관측소의 최근
+               7일 강수량은 0.0mm 입니다. 수확 단계는 물이 중요한 시기입니다."
+        지금   "2주 동안 비가 0.1mm뿐이었어요. 앞으로 3일도 비 소식이 없어요.
+               수확 때라 물이 중요해요."
+
+    ⚠ **관측 강수를 늘 적지 않는다.** 앞 문장이 이미 "2주 동안 비가 0.1mm" 라고
+      말했는데 "관측소의 7일 강수량은 0.0mm" 를 덧붙이면 같은 말을 두 번 한다.
+      **예보와 관측이 어긋날 때만** 적는다 — 그때는 사용자가 "우리 동네는 비 왔는데?"
+      하고 의심할 수 있어 출처를 밝히는 것이 낫다.
+
+    ⚠ '말랐습니다' 같은 단정을 쓰지 않는다 — 토양수분·ET0 는 모델값이라 우리 밭의
+      흙도 멀칭도 어제 준 물도 모른다(water_balance 파일 머리).
     ⚠ '장마' 를 쓰지 않는다. 7일 예보로 2~4주 현상을 말할 수 없다.
     """
     조각 = [dryness_note(inputs.water)]
-    if inputs.recent_rain_mm is not None:
-        조각.append(
-            f"가까운 관측소의 최근 {RAIN_WINDOW_DAYS}일 강수량은 "
-            f"{inputs.recent_rain_mm:.1f}mm 입니다."
-        )
+
+    # 예보(모델)와 관측(실측)이 어긋날 때만 관측을 덧붙인다.
+    # 5mm 는 "한 번 지나간 소나기" 쯤이다 — 그만큼 벌어지면 사용자도 체감한다.
+    예보 = inputs.water.rain_past_mm
+    관측 = inputs.recent_rain_mm
+    if 관측 is not None and (예보 is None or abs(관측 - 예보) >= 5):
+        조각.append(f"가까운 관측소에는 {기간말(RAIN_WINDOW_DAYS)} 동안 {관측:.0f}mm 왔어요.")
+
     if inputs.stage_name:
-        조각.append(f"{inputs.stage_name} {꼬리}")
+        조각.append(f"{inputs.stage_name} 때라 {꼬리}")
     return " ".join(x for x in 조각 if x)
 
 
@@ -115,7 +136,7 @@ def build_task_candidates(inputs: PlotTaskInputs) -> list[TaskCandidate]:
         candidates.append(
             TaskCandidate(
                 title=f"{inputs.crop_name_ko}밭 물 주기",
-                reason=_reason(inputs, "단계는 물이 중요한 시기입니다."),
+                reason=_reason(inputs, "물이 중요해요."),
                 # 토양수분까지 마른 쪽이면 한 단계 올린다. 뒤집지는 않는다 —
                 # 모델값이라 믿을 수 있는 만큼만 쓴다(water_balance.is_soil_dry)
                 priority="high" if is_soil_dry(inputs.water) else "mid",
@@ -125,7 +146,7 @@ def build_task_candidates(inputs: PlotTaskInputs) -> list[TaskCandidate]:
         candidates.append(
             TaskCandidate(
                 title=f"{inputs.crop_name_ko}밭 물 사정 살피기",
-                reason=_reason(inputs, "단계라 비가 지나간 뒤 다시 보는 것이 좋습니다."),
+                reason=_reason(inputs, "비가 지나간 뒤 한 번 더 살펴보세요."),
                 priority="mid",
             )
         )
@@ -135,7 +156,7 @@ def build_task_candidates(inputs: PlotTaskInputs) -> list[TaskCandidate]:
         candidates.append(
             TaskCandidate(
                 title=f"{inputs.crop_name_ko}밭 물 주지 않기",
-                reason=_reason(inputs, "단계는 물이 많으면 피해가 납니다."),
+                reason=_reason(inputs, "물이 많으면 탈이 나요."),
                 priority="mid",
             )
         )
@@ -147,7 +168,7 @@ def build_task_candidates(inputs: PlotTaskInputs) -> list[TaskCandidate]:
         candidates.append(
             TaskCandidate(
                 title=f"{inputs.crop_name_ko} 웃거름 주기",
-                reason=f"현재 {inputs.stage_name} 단계로 시비 시기입니다.",
+                reason=f"{inputs.stage_name} 때라 웃거름 줄 시기예요.",
                 priority="mid",
             )
         )

@@ -107,9 +107,22 @@ def test_토양수분을_모르면_등급을_안_올린다():
 # ── 문장 ──────────────────────────────────────────────────────────
 
 
-def test_근거에_숫자가_들어간다():
-    (카드,) = build_task_candidates(밭(water=마른날, irrigate_needed=True))
-    assert "14일" in 카드.reason and "mm" in 카드.reason
+def test_근거가_사람_말이다():
+    """★ 2026-09-19 — '증발산 -56mm' 를 농민이 읽을 말로 바꿨다."""
+    비온적음 = WaterBalance(
+        balance_14d_mm=BALANCE_DRY_MM - 10,
+        rain_past_mm=0.1,
+        rain_past_days=14,
+        rain_3d_mm=0.0,
+        rain_7d_mm=0.0,
+    )
+    (카드,) = build_task_candidates(밭(water=비온적음, irrigate_needed=True))
+    assert "2주" in 카드.reason
+    assert "0.1mm" in 카드.reason
+    assert "비 소식이 없어요" in 카드.reason
+    # 전문어를 안 쓴다
+    for 금지 in ("증발산", "수지", "단계는", "입니다"):
+        assert 금지 not in 카드.reason
 
 
 def test_단정하는_말과_못_보는_현상을_쓰지_않는다():
@@ -119,9 +132,29 @@ def test_단정하는_말과_못_보는_현상을_쓰지_않는다():
         assert 금지 not in 카드.reason
 
 
-def test_관측_강수가_있으면_근거에_같이_적는다():
-    (카드,) = build_task_candidates(밭(water=마른날, irrigate_needed=True, recent_rain_mm=0.4))
-    assert "0.4mm" in 카드.reason
+def test_예보와_관측이_비슷하면_관측을_또_적지_않는다():
+    """같은 말을 두 번 하지 않는다 — 앞 문장이 이미 비가 얼마 왔는지 말했다."""
+    b = WaterBalance(
+        balance_14d_mm=BALANCE_DRY_MM - 10,
+        rain_past_mm=0.1,
+        rain_past_days=14,
+        rain_3d_mm=0.0,
+    )
+    (카드,) = build_task_candidates(밭(water=b, irrigate_needed=True, recent_rain_mm=0.4))
+    assert "관측소" not in 카드.reason
+
+
+def test_예보와_관측이_어긋나면_출처를_밝힌다():
+    """사용자가 '우리 동네는 비 왔는데?' 하고 의심할 수 있는 자리다."""
+    b = WaterBalance(
+        balance_14d_mm=BALANCE_DRY_MM - 10,
+        rain_past_mm=0.1,
+        rain_past_days=14,
+        rain_3d_mm=0.0,
+    )
+    (카드,) = build_task_candidates(밭(water=b, irrigate_needed=True, recent_rain_mm=18.0))
+    assert "관측소" in 카드.reason
+    assert "18mm" in 카드.reason
 
 
 # ── 시비 (예전 그대로 — 이 규칙은 죽어 있지 않았다) ────────────────
