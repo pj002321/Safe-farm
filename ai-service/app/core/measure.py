@@ -333,23 +333,27 @@ def _patch_requests() -> None:
 
 
 class _CountedStream:
-    """openai `Stream` 을 감싸 usage 청크만 걷어낸다. 나머지는 원본에 위임한다.
+    """openai `Stream` 을 감싸 usage 를 기록한다. 나머지는 원본에 위임한다.
 
     제너레이터로 바꾸지 않는 이유는 모듈 독스트링의 두 번째 ⚠ 참고 — `.close()`
     와 `with` 가 살아 있어야 버려진 스트림이 커넥션을 놓는다.
     """
 
-    def __init__(self, inner: Any) -> None:
+    def __init__(self, inner: Any, *, swallow_usage: bool) -> None:
         self._inner = inner
+        #: usage 청크를 먹을지. **우리가 `include_usage` 를 켰을 때만 먹는다.**
+        #: 부르는 쪽이 직접 켰다면 그 청크를 기다리고 있다는 뜻이라 그대로 흘린다
+        #: — after 브랜치의 generator.py 가 여기서 토큰 수를 로그에 남긴다.
+        self._swallow_usage = swallow_usage
 
     def __iter__(self):
         for chunk in self._inner:
             usage = getattr(chunk, "usage", None)
             if usage is not None:
                 _record_usage(usage)
-            # `include_usage` 를 켜면 마지막에 choices 가 빈 청크가 온다.
-            # 부르는 쪽이 `chunk.choices[0]` 를 까므로 여기서 끊는다.
-            if not getattr(chunk, "choices", None):
+            # `include_usage` 를 켜면 마지막에 choices 가 빈 청크가 온다. 그걸
+            # 모르는 쪽은 `chunk.choices[0]` 에서 죽으므로 우리가 켰으면 끊는다.
+            if self._swallow_usage and not getattr(chunk, "choices", None):
                 continue
             yield chunk
 
@@ -374,14 +378,15 @@ def _patch_openai() -> None:
 
     def chat_counted(self, *args, **kwargs):  # noqa: ANN001
         # usage 를 받으려면 켜야 한다. 부르는 쪽이 이미 켰으면 건드리지 않는다.
-        if kwargs.get("stream") and "stream_options" not in kwargs:
+        injected = bool(kwargs.get("stream")) and "stream_options" not in kwargs
+        if injected:
             kwargs["stream_options"] = {"include_usage": True}
         _bump("llm_calls")
         result = chat_original(self, *args, **kwargs)
         if not kwargs.get("stream"):
             _record_usage(getattr(result, "usage", None))
             return result
-        return _CountedStream(result)
+        return _CountedStream(result, swallow_usage=injected)
 
     completions_module.Completions.create = chat_counted
 
