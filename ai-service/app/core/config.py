@@ -102,10 +102,5 @@ ANSWER_MAX_TOKENS = _env_int("ANSWER_MAX_TOKENS", 800)
 # (vector_store.neighbors 주석). 문서 하나가 길면 그 한 건이 예산을 다 먹는다.
 CONTEXT_CHAR_BUDGET = _env_int("CONTEXT_CHAR_BUDGET", 12000)
 
-# --- 외부 API 캐시 ---
-# Open-Meteo 예보를 좌표별로 들고 있는 시간(초). 화면이 밭마다 부르는데 예보는
-# 시간 단위로만 바뀐다 — 같은 자리를 1분에 열 번 물어도 답은 같다.
-FORECAST_CACHE_TTL = _env_int("FORECAST_CACHE_TTL", 600)
-
 # --- 경로 ---
 DATA_DIR = BASE_DIR / "data"

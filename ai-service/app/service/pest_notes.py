@@ -16,11 +16,10 @@ from __future__ import annotations
 
 from datetime import date
 
-from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.domain.pest_names import merge_pest_names
-from app.service.bulletin_sql import CROP_IN_NAMES
+from app.repo.bulletin import pest_bulletins_for
 
 #: 쓸 등급. 표에 있는 값은 셋뿐이다 — 예보 827 · 주의보 350 · 경보 20(실측).
 #:
@@ -42,26 +41,5 @@ def pest_names_for(db: Session, crop_name_ko: str, today: date | None = None) ->
       배추 병해충이 갔다. 정규화된 연결표가 생기면 그때 조인으로 바꾼다.
     """
     오늘 = today or date.today()
-    rows = db.execute(
-        text(f"""
-            select distinct pest_name, level
-              from pest_bulletins
-             where crop_names <> ''
-               and {CROP_IN_NAMES}
-               and level = any(:levels)
-               and (extract(month from period_from), extract(day from period_from))
-                   <= (:m, :d)
-               and (extract(month from period_to), extract(day from period_to))
-                   >= (:m, :d)
-             order by pest_name
-             limit :lim
-        """),
-        {
-            "crop": crop_name_ko,
-            "levels": list(_LEVELS),
-            "m": 오늘.month,
-            "d": 오늘.day,
-            "lim": _SCAN_LIMIT,
-        },
-    ).all()
+    rows = pest_bulletins_for(db, crop_name_ko, _LEVELS, 오늘, _SCAN_LIMIT)
     return merge_pest_names([r.pest_name for r in rows])

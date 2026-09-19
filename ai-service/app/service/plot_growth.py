@@ -16,15 +16,15 @@ import uuid
 from dataclasses import dataclass
 from datetime import date, timedelta
 
-from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.domain.gdd import daily_gdd
 from app.domain.geo import nearest
-from app.models.farm import CropStage, Cultivation, Plot
+from app.models.farm import Cultivation, Plot
 from app.repo.crop import (
     stage_at_gdd,
     stage_by_order,
+    stage_count_and_last_order,
     usable_crop_of_variant,
     variant_by_id,
 )
@@ -200,11 +200,7 @@ def compute_plot_growth(db: Session, plot: Plot, station: StationRow) -> PlotGro
     # ⚠ 개수도 같이 센다. **단계가 하나뿐이면 이름에 시기 정보가 없다** — 상추가
     #   '수확' 한 칸(GDD 0~573)이라 심은 날부터 '마지막 수확 단계' 가 된다.
     #   그대로 두면 32% 자란 상추가 "익어 가는 중" 으로 읽힌다(vegetation_text 주석).
-    stage_count, last_order = (
-        db.query(func.count(CropStage.stage_order), func.max(CropStage.stage_order))
-        .filter(CropStage.variant_id == cultivation.variant_id)
-        .one()
-    )
+    stage_count, last_order = stage_count_and_last_order(db, cultivation.variant_id)
 
     return PlotGrowth(
         cultivation_id=cultivation.id,

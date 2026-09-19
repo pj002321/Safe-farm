@@ -20,8 +20,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from sqlalchemy import text
 from sqlalchemy.orm import Session
+
+from app.repo.crop import hazard_temp_limits
 
 
 @dataclass(frozen=True)
@@ -41,21 +42,5 @@ def temp_limits_for(db: Session, crop_name_ko: str) -> TempLimits:
       고온은 가장 낮은 값이다. 늦게 알리느니 일찍 알린다. 다만 '동해'(-10도)
       처럼 극단값과 '저온'(15도)이 섞여 있어, 고르지 않으면 영영 안 걸린다.
     """
-    row = db.execute(
-        text("""
-            select
-              max(r.threshold_c) filter (where r.metric = 'ta_min' and r.op = 'lte') as frost,
-              min(r.threshold_c) filter (where r.metric = 'ta_max' and r.op = 'gte') as heat
-              from crop_disaster_rules r
-              join crops c on c.crop_id = r.crop_id
-             where c.name = :crop
-               and coalesce(r.stage_name, '') = ''
-        """),
-        {"crop": crop_name_ko},
-    ).first()
-    if row is None:
-        return TempLimits()
-    return TempLimits(
-        frost_c=float(row.frost) if row.frost is not None else None,
-        heat_c=float(row.heat) if row.heat is not None else None,
-    )
+    frost_c, heat_c = hazard_temp_limits(db, crop_name_ko)
+    return TempLimits(frost_c=frost_c, heat_c=heat_c)

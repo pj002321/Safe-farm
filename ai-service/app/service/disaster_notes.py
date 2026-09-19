@@ -20,11 +20,10 @@ from __future__ import annotations
 
 import re
 
-from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.domain.livestock import is_livestock
-from app.service.bulletin_sql import CROP_IN_NAMES
+from app.repo.bulletin import disaster_hazards_for
 
 #: 미리 하는 것만. '발생전' 도 같은 결이다
 _PHASES = ("사전대책", "발생전")
@@ -63,18 +62,7 @@ def prevention_notes_for(db: Session, crop_name_ko: str, month: int) -> tuple[st
     ⚠ 작물명은 `crop_names` 안에 쉼표로 이어져 있다. **토막째 맞춘다** —
       부분 일치로 하면 '배' 가 '배추' 에 걸린다(pest_notes 에서 겪은 것과 같다).
     """
-    rows = db.execute(
-        text(f"""
-            select distinct on (hazard) hazard, body
-              from disaster_bulletins
-             where issue_month = :m
-               and crop_names <> ''
-               and {CROP_IN_NAMES}
-               and phase = any(:phases)
-             order by hazard, bulletin_id
-        """),
-        {"m": month, "crop": crop_name_ko, "phases": list(_PHASES)},
-    ).all()
+    rows = disaster_hazards_for(db, crop_name_ko, month, _PHASES)
 
     나온것: list[str] = []
     for r in rows:

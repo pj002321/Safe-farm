@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-from sqlalchemy import select
+from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
 from app.core.request_cache import memo
@@ -270,4 +270,64 @@ def stage_by_order(db: Session, variant_id: int, stage_order: int) -> CropStage 
                 CropStage.stage_order == stage_order,
             )
         ).first(),
+    )
+
+
+def stage_count_and_last_order(db: Session, variant_id: int) -> tuple[int, int | None]:
+    """
+    # summary
+    숙기의 단계 개수와 마지막 단계 번호. `service/plot_growth.py` 가 "지금 단계가
+    마지막인가"를 가리는 데 쓴다.
+
+    # params
+    db: 세션<br>
+    variant_id: 숙기 id<br>
+
+    # returns
+    (단계 개수, 마지막 stage_order). 단계표가 없으면 (0, None)
+
+    # examples
+        stage_count_and_last_order(db, 12)  -> (4, 4)
+    """
+    return db.query(func.count(CropStage.stage_order), func.max(CropStage.stage_order)).filter(
+        CropStage.variant_id == variant_id
+    ).one()
+
+
+def hazard_temp_limits(db: Session, crop_name_ko: str) -> tuple[float | None, float | None]:
+    """
+    # summary
+    작물 전체에 걸린 저온·고온 한계값. `crop_disaster_rules` 에서 단계 구분이 없는
+    (`stage_name` 이 빈) 규칙만 본다.
+
+    ⚠ 여러 규칙이 있으면 저온은 가장 높은 값, 고온은 가장 낮은 값을 고른다 —
+      늦게 알리느니 일찍 알린다.
+
+    # params
+    db: 세션<br>
+    crop_name_ko: 작물 한글명<br>
+
+    # returns
+    (frost_c, heat_c). 규칙이 없으면 (None, None)
+
+    # examples
+        hazard_temp_limits(db, "고추")  -> (2.0, 33.0)
+    """
+    row = db.execute(
+        text("""
+            select
+              max(r.threshold_c) filter (where r.metric = 'ta_min' and r.op = 'lte') as frost,
+              min(r.threshold_c) filter (where r.metric = 'ta_max' and r.op = 'gte') as heat
+              from crop_disaster_rules r
+              join crops c on c.crop_id = r.crop_id
+             where c.name = :crop
+               and coalesce(r.stage_name, '') = ''
+        """),
+        {"crop": crop_name_ko},
+    ).first()
+    if row is None:
+        return None, None
+    return (
+        float(row.frost) if row.frost is not None else None,
+        float(row.heat) if row.heat is not None else None,
     )

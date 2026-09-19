@@ -21,12 +21,15 @@ from __future__ import annotations
 import logging
 from datetime import date, datetime, timedelta, timezone
 
-from sqlalchemy import func, select
-from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
 from app.core.config import SH_CLIENT_ID, SH_CLIENT_SECRET
-from app.models.farm import SatelliteFetch, SatelliteObservation
+from app.repo.satellite import (
+    fetch_log,
+    insert_observations,
+    observations_between,
+    upsert_fetch_log,
+)
 from pipeline.sentinelhub_client import fetch_ndvi_ndmi_series
 
 #: 관측을 되돌아보는 창(일). 관측이 평균 18일에 한 번밖에 안 남아서
@@ -75,7 +78,7 @@ def _cache_is_fresh(db: Session, lat: float, lon: float, date_from: date) -> boo
       · 물어본 지 얼마 안 됐다            (그 사이 새 관측이 생겼을 수 있다)
       · 받아 둔 구간이 요청만큼 넓다       (더 옛날을 물으면 모자란다)
     """
-    log = db.get(SatelliteFetch, (_반올림(lat), _반올림(lon)))
+    log = fetch_log(db, _반올림(lat), _반올림(lon))
     if log is None:
         return False
     if log.covered_from > date_from:
@@ -85,16 +88,7 @@ def _cache_is_fresh(db: Session, lat: float, lon: float, date_from: date) -> boo
 
 def _read(db: Session, lat: float, lon: float, date_from: date, date_to: date) -> list[dict]:
     """표에 있는 것만. 날짜 오름차순 — 부르는 쪽이 마지막을 최근으로 읽는다."""
-    rows = db.execute(
-        select(SatelliteObservation)
-        .where(
-            SatelliteObservation.lat == _반올림(lat),
-            SatelliteObservation.lon == _반올림(lon),
-            SatelliteObservation.obs_date >= date_from,
-            SatelliteObservation.obs_date <= date_to,
-        )
-        .order_by(SatelliteObservation.obs_date)
-    ).scalars()
+    rows = observations_between(db, _반올림(lat), _반올림(lon), date_from, date_to)
     return _points_from(rows)
 
 
@@ -121,43 +115,8 @@ def _store(db: Session, lat: float, lon: float, date_from: date, points: list[di
     """
     lat_r, lon_r = _반올림(lat), _반올림(lon)
 
-    if points:
-        db.execute(
-            insert(SatelliteObservation)
-            .values(
-                [
-                    {
-                        "lat": lat_r,
-                        "lon": lon_r,
-                        "obs_date": date.fromisoformat(p["date"]),
-                        "ndvi": p.get("ndvi"),
-                        "ndmi": p.get("ndmi"),
-                    }
-                    for p in points
-                ]
-            )
-            .on_conflict_do_nothing(index_elements=["lat", "lon", "obs_date"])
-        )
-
-    기록 = {
-        "lat": lat_r,
-        "lon": lon_r,
-        "covered_from": date_from,
-        "fetched_at": datetime.now(timezone.utc),
-    }
-    db.execute(
-        insert(SatelliteFetch)
-        .values(**기록)
-        .on_conflict_do_update(
-            index_elements=["lat", "lon"],
-            set_={
-                # 구간은 **넓은 쪽으로** 남긴다 — 이미 90일치를 받아 뒀는데 30일
-                # 요청이 덮어쓰면, 다음 90일 요청이 캐시를 못 쓴다
-                "covered_from": func.least(SatelliteFetch.covered_from, date_from),
-                "fetched_at": 기록["fetched_at"],
-            },
-        )
-    )
+    insert_observations(db, lat_r, lon_r, points)
+    upsert_fetch_log(db, lat_r, lon_r, date_from, datetime.now(timezone.utc))
     db.commit()
 
 
