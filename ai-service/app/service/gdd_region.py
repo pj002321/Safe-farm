@@ -7,12 +7,11 @@ from __future__ import annotations
 
 from datetime import date, timedelta
 
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.domain.gdd import classify_deviation, daily_gdd, station_plot_id
-from app.models.normal import Normal
-from app.models.weather import WeatherDaily
+from app.repo.normal import normals_of
+from app.repo.weather_daily import temps_in_range
 
 def _actual_gdd_by_station(
     db: Session, stations: list[str], start: date, end: date
@@ -21,14 +20,7 @@ def _actual_gdd_by_station(
 
     쿼리 한 번으로 전 관측소를 가져온다.
     """
-    plot_ids = [station_plot_id(s) for s in stations]
-    rows = db.execute(
-        select(WeatherDaily.plot_id, WeatherDaily.tmax, WeatherDaily.tmin).where(
-            WeatherDaily.plot_id.in_(plot_ids),
-            WeatherDaily.date >= start,
-            WeatherDaily.date <= end,
-        )
-    ).all()
+    rows = temps_in_range(db, [station_plot_id(s) for s in stations], start, end)
 
     totals: dict[str, float] = {}
     for plot_id, tmax, tmin in rows:
@@ -56,17 +48,6 @@ def _actual_gdd_by_station(
 NORMAL_SOURCES = ("kma", "kma-1981")
 
 
-def _fetch_normals(db: Session, stations: list[str], source: str):
-    """평년 기간 하나에서 관측소 여럿의 일별 평년값을 한 번에 읽는다."""
-    return db.execute(
-        select(
-            Normal.station, Normal.month, Normal.day, Normal.tmax_normal, Normal.tmin_normal
-        ).where(
-            Normal.station.in_(stations), Normal.source == source
-        )
-    ).all()
-
-
 def _normal_gdd_by_station(
     db: Session, stations: list[str], start: date, end: date
 ) -> dict[str, float]:
@@ -85,7 +66,7 @@ def _normal_gdd_by_station(
         # 빈 목록으로 in_() 을 부르지 않는다 — 돌 이유가 없는 질의다.
         if not remaining:
             break
-        for stn, month, day, tmax, tmin in _fetch_normals(db, remaining, source):
+        for stn, month, day, tmax, tmin in normals_of(db, remaining, source):
             if tmax is not None and tmin is not None:
                 by_station.setdefault(stn, {})[(month, day)] = (tmax, tmin)
         remaining = [stn for stn in remaining if stn not in by_station]

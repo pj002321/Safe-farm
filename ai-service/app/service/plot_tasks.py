@@ -18,7 +18,6 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 
-from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
 from app.domain.gdd import past_target
@@ -31,23 +30,29 @@ from app.domain.task_rules import (
 )
 from app.domain.vegetation_text import Vegetation, summarize_points
 from app.domain.water_balance import WaterBalance, judge_water
+from app.domain.task_rules import RAIN_WINDOW_DAYS, PlotTaskInputs, build_task_candidates
+
 from app.models.farm import Plot, PlotTask, WeatherObsDaily
+
 from app.service import forecast_cache
 from app.service.crop_hazard import temp_limits_for
 from app.service.pest_notes import pest_names_for
-from app.service.plot_growth import (
-    _crop_for_cultivation,
-    _lead_cultivation,
-    compute_plot_growth,
-    nearest_station,
-)
+from app.service.plot_growth import compute_plot_growth, nearest_station
 from app.service.satellite_cache import stored_observations
 from app.service.warn_region import plot_warning
+
 from pipeline.open_meteo_client import (
     daily_index_of,
     hourly_value_at,
     normalize_daily_forecast,
 )
+
+from app.repo.crop import usable_crop_of_variant
+from app.repo.cultivation import lead_growing
+from app.repo.plot import all_live_plots
+from app.repo.plot_task import add_task, expire_open_before, open_titles
+from app.repo.weather_obs import rainfall_since
+
 
 #: 안 하고 넘어간 카드를 닫기까지의 일수.
 #:
@@ -79,17 +84,7 @@ def expire_stale_tasks(db: Session, plot_id, now: datetime | None = None) -> int
     지우지 않는다 — "안 하고 넘어갔다"는 사실이 이력이다. 이미 닫힌 카드는 다시
     건드리지 않는다(expired_at is null 조건).
     """
-    result = db.execute(
-        update(PlotTask)
-        .where(
-            PlotTask.plot_id == plot_id,
-            PlotTask.done.is_(False),
-            PlotTask.expired_at.is_(None),
-            PlotTask.generated_at < _expire_cutoff(now),
-        )
-        .values(expired_at=func.now())
-    )
-    return result.rowcount or 0
+    return expire_open_before(db, plot_id, _expire_cutoff(now))
 
 
 def _skip(plot: Plot, reason: str) -> None:
@@ -103,13 +98,13 @@ def _skip(plot: Plot, reason: str) -> None:
 
 def _why_no_growth(db: Session, plot: Plot) -> str:
     """compute_plot_growth 가 None 인 이유를 좁힌다. 사람이 고칠 수 있는 것부터."""
-    cultivation = _lead_cultivation(db, plot)
+    cultivation = lead_growing(db, plot.id)
     if cultivation is None:
         return "기르는 중인 작물이 없습니다 — 밭에 작물을 등록하세요"
     if cultivation.sowing_date is None:
         return "파종일이 없습니다 — 밭 상세에서 파종일을 입력하세요"
 
-    crop = _crop_for_cultivation(db, cultivation)
+    crop = usable_crop_of_variant(db, cultivation.variant_id)
     if crop is None:
         return (
             "작물 마스터에 기준온도(base_temp)가 없거나 품종이 연결되지 않았습니다 "
@@ -166,17 +161,7 @@ def _active_warnings(db: Session, plot: Plot) -> tuple[str, ...]:
 def _recent_rain_mm(db: Session, station_code: str) -> float | None:
     """최근 RAIN_WINDOW_DAYS 일 누적 강수량. 관측이 하나도 없으면 None(판정 보류)."""
     since = date.today() - timedelta(days=RAIN_WINDOW_DAYS)
-    rows = (
-        db.execute(
-            select(WeatherObsDaily.rainfall_mm).where(
-                WeatherObsDaily.station_code == station_code,
-                WeatherObsDaily.obs_date >= since,
-            )
-        )
-        .scalars()
-        .all()
-    )
-    values = [float(r) for r in rows if r is not None]
+    values = [mm for _, mm in rainfall_since(db, station_code, since) if mm is not None]
     return sum(values) if values else None
 
 
@@ -192,14 +177,14 @@ _COORD_NDIGITS = 2
 
 #: 미리 받을 때 동시에 나가는 갈래 수.
 #:
-#: ★ 2026-09-19 — **호출을 동시에 내보내 배치를 6.6배 줄였다.**
+#:   2026-09-19 — **호출을 동시에 내보내 배치를 6.6배 줄였다.**
 #:   1.2초는 응답 크기가 아니라 왕복 지연이라(past_days 0·14 가 둘 다 1.16초),
 #:   순서대로 기다릴 이유가 없었다. 실측 좌표 15개: 순차 18.0초 → 병렬 2.7초.
 #:   결과값은 동일했다.
 #:
-#:   ⚠ 이 수를 올려도 크게 안 빨라진다. 50초 한도 기준 이미 좌표 275개까지 간다
+#:     이 수를 올려도 크게 안 빨라진다. 50초 한도 기준 이미 좌표 275개까지 간다
 #:     (지금 15개).
-#:   ⚠ **이 수가 곧 속도 제한기다.** 한 갈래가 초당 0.83회(1.2초/회)이므로
+#:    **이 수가 곧 속도 제한기다.** 한 갈래가 초당 0.83회(1.2초/회)이므로
 #:     대략 `갈래 × 50회/분` 이 나간다 — 8이면 분당 400회다. Open-Meteo 무료 한도가
 #:     분당 600회이니 **12를 넘기지 말 것.** 넘기면 그 좌표들이 통째로 빈
 #:     WaterBalance 가 되어 **물 카드가 없어진다.**
@@ -442,29 +427,15 @@ def generate_tasks_for_plot(
 
     # "살아 있는" 카드만 재생성을 막는다 — 닫힌 카드(expired_at)는 세지 않는다.
     # 이 조건을 빠뜨리면 만료 처리 자체가 무의미해진다.
-    existing_open_titles = {
-        title
-        for (title,) in db.execute(
-            select(PlotTask.title).where(
-                PlotTask.plot_id == plot.id,
-                PlotTask.done.is_(False),
-                PlotTask.expired_at.is_(None),
-            )
-        ).all()
-    }
+    existing_open_titles = open_titles(db, plot.id)
 
     created: list[PlotTask] = []
     for candidate in candidates:
         if candidate.title in existing_open_titles:
             continue
-        task = PlotTask(
-            plot_id=plot.id,
-            title=candidate.title,
-            reason=candidate.reason,
-            priority=candidate.priority,
+        created.append(
+            add_task(db, plot.id, candidate.title, candidate.reason, candidate.priority)
         )
-        db.add(task)
-        created.append(task)
 
     # 만료 처리는 새 카드가 하나도 안 나와도 반영돼야 한다 — 조건이 해소돼서
     # 후보가 없는 경우에도 오래된 카드는 닫혀야 한다. 그래서 무조건 커밋한다.
@@ -493,7 +464,7 @@ def generate_daily_tasks(db: Session) -> int:
        rollback 이 필요한 이유: 예외가 난 세션은 다음 질의부터 전부 거부한다.
        걷어내지 않으면 격리해도 나머지 밭이 줄줄이 실패한다.
     """
-    plots = db.query(Plot).filter(Plot.deleted_at.is_(None)).all()
+    plots = all_live_plots(db)
 
     created = 0
     # 같은 마을의 밭들이 같은 예보를 거듭 받아 오지 않게 한다. 이 배치가 끝나면

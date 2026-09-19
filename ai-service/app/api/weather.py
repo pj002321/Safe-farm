@@ -16,6 +16,7 @@ DB 를 보는 것은 **지난 실측과 우리 데이터**뿐이다:
 
 from __future__ import annotations
 
+import logging
 from types import SimpleNamespace
 from uuid import UUID
 
@@ -24,7 +25,7 @@ from sqlalchemy.orm import Session
 
 from app.core.db import get_db
 from app.core.security import require_service_token
-from app.models.farm import Plot
+from app.repo.plot import owned_plot
 from app.service.plot_growth import (
     crop_interpretation,
     daily_gdd_series,
@@ -44,10 +45,25 @@ router = APIRouter(prefix="/v1/weather", tags=["weather"])
 
 @router.get("/plot", dependencies=[Depends(require_service_token)])
 def plot_forecast(
-    lat: float, lon: float, plot_id: UUID | None = None, db: Session = Depends(get_db)
+    lat: float,
+    lon: float,
+    plot_id: UUID | None = None,
+    user_id: UUID | None = None,
+    db: Session = Depends(get_db),
 ) -> dict:
     """해당 좌표의 현재 실황 + 시간별 24시간 + 7일 일별 예보 + 최근접 관측소 기준
-    누적 강수량, 그리고 `plot_id` 가 있으면 그 밭의 하루치 GDD·작물 해석·기상특보."""
+    누적 강수량, 그리고 `plot_id`·`user_id` 가 둘 다 있으면 그 밭의 하루치
+    GDD·작물 해석·기상특보.
+
+    **밭에 딸린 값은 `user_id` 없이 내주지 않는다.** 좌표는 지도에서 찍어도 나오는
+    공개값이지만 작물·생육단계·특보는 그 밭 주인의 것이다. `require_service_token`
+    은 "Next 서버가 보냈는가" 만 보므로 plot_id 가 누구 것인지는 여기서 가린다
+    (`repo/plot.owned_plot` 독스트링과 같은 이유).
+
+    `user_id` 없이 `plot_id` 만 오면 **거절하지 않고 좌표 부분만 돌려준다.**
+    Next 가 아직 안 보내는 동안 예보 카드까지 통째로 죽는 것보다, 밭 값만 비고
+    경고 로그가 남는 쪽이 낫다. 호출부가 다 고쳐지면 `user_id` 를 필수로 올린다.
+    """
     try:
         payload = fetch_forecast(lat, lon)
     except Exception as exc:  # noqa: BLE001 — 외부 API 장애를 그대로 502 로 환원
@@ -81,29 +97,36 @@ def plot_forecast(
     crop_impact = None
     alert = None
     if plot_id is not None:
-        plot = db.get(Plot, plot_id)
-        if plot:
-            # 특보는 관측소가 없어도 낼 수 있다 — 좌표만 있으면 된다.
-            # ⚠️ plot.region_code 를 넘기지 말 것. 법정동 코드라 특보 표의 통계청
-            #    코드와 체계가 다르다(warn_region.plot_warning 주석 참고).
-            status, as_of = plot_warning(db, lat, lon)
-            if status and status.get("warnings"):
-                alert = {
-                    "warnings": status["warnings"],
-                    "label": status.get("label"),
-                    "asOf": as_of.isoformat() if as_of else None,
-                }
-            if station is not None:
-                growth_series = daily_gdd_series(db, plot, station)
-                impact = crop_interpretation(db, plot, station)
-                if impact:
-                    crop_impact = {
-                        "cropNameKo": impact["crop_name_ko"],
-                        "baseTempC": impact["base_temp_c"],
-                        "upperTempC": impact["upper_temp_c"],
-                        "stageName": impact["stage_name"],
-                        "waterNeedMm": impact["water_need_mm"],
+        if user_id is None:
+            # 남의 밭인지 가릴 방법이 없으니 밭 값은 안 낸다. 조용히 비우면 화면이
+            # "작물 정보 없음" 으로 보여 원인을 못 찾으므로 로그로 남긴다.
+            logging.warning("[weather] user_id 없이 plot_id 가 왔다 — 밭 값은 생략한다")
+        else:
+            # 남의 밭·지운 밭은 둘 다 None 이다(owned_plot). 구분해 알리지 않는다 —
+            # 구분하는 순간 "그 id 의 밭이 있다" 가 샌다.
+            plot = owned_plot(db, plot_id, user_id)
+            if plot:
+                # 특보는 관측소가 없어도 낼 수 있다 — 좌표만 있으면 된다.
+                # ⚠️ plot.region_code 를 넘기지 말 것. 법정동 코드라 특보 표의 통계청
+                #    코드와 체계가 다르다(warn_region.plot_warning 주석 참고).
+                status, as_of = plot_warning(db, lat, lon)
+                if status and status.get("warnings"):
+                    alert = {
+                        "warnings": status["warnings"],
+                        "label": status.get("label"),
+                        "asOf": as_of.isoformat() if as_of else None,
                     }
+                if station is not None:
+                    growth_series = daily_gdd_series(db, plot, station)
+                    impact = crop_interpretation(db, plot, station)
+                    if impact:
+                        crop_impact = {
+                            "cropNameKo": impact["crop_name_ko"],
+                            "baseTempC": impact["base_temp_c"],
+                            "upperTempC": impact["upper_temp_c"],
+                            "stageName": impact["stage_name"],
+                            "waterNeedMm": impact["water_need_mm"],
+                        }
 
     return {
         "current": current,

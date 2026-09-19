@@ -1,6 +1,6 @@
 """그래프 조립. 지금 두 벌이 들어 있다.
 
-- `build_graph_default()` — ask-flow(plan → run_tools?/retrieve → generate).
+- `build_graph_default()` — ask-flow(plan ∥ retrieve → run_tools? → generate).
   모듈 끝의 `graph` 가 이것.
 - `build_graph(deps)` / `create_graph(deps)` — 작물 추천. 미컴파일 쪽은 노드를 갈아끼울 때 쓴다.
 
@@ -41,10 +41,25 @@ from app.graph.state import GraphState, RecommendationState
 def build_graph_default() -> CompiledStateGraph:
     """
     # summary
-    ask-flow 그래프. plan 이 밭 조회(get_plot_context)가 필요한지 정하고, 필요하면
-    run_tools 를 거쳐, 필요 없으면 곧장 retrieve 로 간다. retrieve 는 route 와
-    무관하게 항상 돈다 — tool 경로에서도 RAG 근거를 스킵하지 않는다(plan 노드
-    docstring 참고).
+    ask-flow 그래프. **plan 과 retrieve 가 START 에서 같이 출발한다.**
+
+        START ┬─ plan ──(밭 조회 필요?)── run_tools ─┐
+              └─ retrieve ───────────────────────────┴─ generate ─ END
+
+    retrieve 는 plan 의 결과를 하나도 안 쓴다. 그런데 전에는 plan 뒤에 줄을 서서,
+    질문 하나의 첫 글자까지 걸리는 시간에 LLM 왕복이 통째로 얹혀 있었다. 갈라
+    놓으면 임베딩·벡터 검색이 plan 이 LLM 을 기다리는 동안 끝난다.
+
+    ⚠ **`plan` 에서 DB 를 만지지 말 것.** retrieve 와 같은 슈퍼스텝에서 **정말로
+      다른 스레드로** 돈다(LangGraph 가 동기 노드를 스레드 풀에 올린다). `Session`
+      은 스레드 안전하지 않아서, plan 이 db 를 건드리는 순간 커서가 엉킨다.
+      지금 db 를 쓰는 것은 retrieve 와 run_tools 뿐이고 이 둘은 겹치지 않는다.
+
+    ⚠ **`generate` 의 `defer=True` 를 빼지 말 것.** 합류 노드는 들어오는 엣지를
+      전부 기다려 주지 않는다 — 먼저 도착한 쪽만으로 한 번 돌고, 늦게 온 쪽 때문에
+      또 돈다. 빼면 tool 경로에서 **generate 가 두 번 실행되고, 첫 번째는 밭 정보
+      없이 답을 스트리밍한다.** 화면에는 답이 두 번 흐른다.
+      (`tests/test_ask_graph_parallel.py` 가 두 경로의 실행 횟수를 고정한다.)
 
     # params
     없다<br>
@@ -60,13 +75,18 @@ def build_graph_default() -> CompiledStateGraph:
     builder.add_node("plan", plan)
     builder.add_node("run_tools", run_tools)
     builder.add_node("retrieve", retrieve)
-    builder.add_node("generate", generate)
+    """
+    START → plan     → run_tools    ↘  [gen까지 2step]
+          → retrieve [gen까지 1step] →  generate(defer로 올때까지 기다리기) → END
+    """
+    builder.add_node("generate", generate, defer=True)
 
     builder.add_edge(START, "plan")
+    builder.add_edge(START, "retrieve")
     builder.add_conditional_edges(
-        "plan", route_after_plan, {"run_tools": "run_tools", "retrieve": "retrieve"}
+        "plan", route_after_plan, {"run_tools": "run_tools", "generate": "generate"}
     )
-    builder.add_edge("run_tools", "retrieve")
+    builder.add_edge("run_tools", "generate")
     builder.add_edge("retrieve", "generate")
     builder.add_edge("generate", END)
 

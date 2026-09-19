@@ -10,7 +10,6 @@ from __future__ import annotations
 import csv
 from functools import lru_cache
 
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 from sqlalchemy.sql.elements import ColumnElement
 
@@ -48,20 +47,14 @@ def _wind_directions_by_station(stations: list[str]) -> dict[str, float]:
     except Exception:  # noqa: BLE001 — 외부 API 장애는 방향 없음으로 낮춘다
         return {}
     return {stn: deg for stn, deg in zip(known, degrees) if deg is not None}
+from app.repo.weather_daily import obs_values
 
 
 def _latest_value_by_station(
     db: Session, stations: list[str], column: ColumnElement
 ) -> dict[str, float]:
     """관측소별 가장 최근 날짜의 값 하나. 결측(None)인 행은 건너뛴다."""
-    plot_ids = [station_plot_id(s) for s in stations]
-    rows = db.execute(
-        select(WeatherDaily.plot_id, WeatherDaily.date, column).where(
-            WeatherDaily.plot_id.in_(plot_ids),
-            WeatherDaily.kind == "obs",
-            column.is_not(None),
-        )
-    ).all()
+    rows = obs_values(db, [station_plot_id(s) for s in stations], column)
 
     latest: dict[str, tuple] = {}
     for plot_id, d, value in rows:
