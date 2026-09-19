@@ -25,12 +25,12 @@ import {
  *   내보낸다"가 유일하게 말이 되는 자리라 제목 줄 오른쪽에 둔다.
  * - 재배 기간(`cultivationDays`)은 **CSV 에만** 넣는다. 화면 줄에 '62일'까지 넣으면
  *   칸이 넷이 되어 읽는 속도가 떨어진다. 파일에서는 정렬·계산에 쓸모가 있다.
- * - ⚠️ 값은 아직 **고정 데이터**다(`sampleRecords.ts`). 저장소가 붙으면 그 파일만
- *   갈아 끼운다 — 이 컴포넌트는 `CultivationRecord[]` 만 본다.
+ * - 값은 `plotStore.ts` 의 `listCultivationRecords()` 가 조회해 온다. 이
+ *   컴포넌트는 `CultivationRecord[]` 만 본다.
  *
  * [Usage]
  * ```tsx
- * <RecordPanel records={SAMPLE_RECORDS} year={2025} />
+ * <RecordPanel records={records} year={2025} />
  * ```
  * ---------------------------------------------
  */

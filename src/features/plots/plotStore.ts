@@ -2,6 +2,11 @@ import "server-only";
 
 import { cache } from "react";
 import { getSupabaseServer } from "@/shared/supabase/server";
+import {
+  type CultivationRecord,
+  type CultivationRecordRow,
+  toCultivationRecord,
+} from "./domain/cultivationRecord";
 import type { PlotEditInput } from "./domain/editPlot";
 import {
   type PlotCard,
@@ -330,4 +335,34 @@ export async function softDeletePlot(
     .delete()
     .eq("plot_id", plotId);
   if (tasksDeleted.error) throw new Error(tasksDeleted.error.message);
+}
+
+const RECORD_SELECT =
+  "id, sowing_date, harvested_at, plots!inner(name, user_id), crop_variants(crops(name))";
+
+/**
+ * 마이페이지 지난 재배 기록. `status = HARVESTED` 인 것만 담는다 — 진행 중인
+ * 재배는 대시보드가 다룬다.
+ *
+ * `plots!inner` 로 조인해야 `.eq("plots.user_id", ...)` 가 루트 행(cultivations)
+ * 자체를 거른다 — `!inner` 없이 걸면 내 소유가 아닌 밭은 값이 비워질 뿐, 그
+ * 재배 행 자체는 그대로 남는다(PostgREST 임베디드 필터 규칙).
+ */
+export async function listCultivationRecords(
+  userId: string,
+): Promise<CultivationRecord[]> {
+  const supabase = await getSupabaseServer();
+
+  const { data, error } = await supabase
+    .from("cultivations")
+    .select(RECORD_SELECT)
+    .eq("status", "HARVESTED")
+    .eq("plots.user_id", userId)
+    .is("deleted_at", null);
+
+  if (error) throw new Error(error.message);
+
+  return ((data ?? []) as unknown as CultivationRecordRow[])
+    .map(toCultivationRecord)
+    .filter((record): record is CultivationRecord => record !== null);
 }
