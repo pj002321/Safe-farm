@@ -17,6 +17,7 @@
 from __future__ import annotations
 
 from fastapi import FastAPI
+from fastapi.responses import StreamingResponse
 
 from app.api import alerts as alerts_api
 from app.api import ask as ask_api
@@ -28,7 +29,7 @@ from app.api import status as status_api
 from app.api import tasks as tasks_api
 from app.api import variety as variety_api
 from app.api import weather as weather_api
-from app.core import config
+from app.core import config, measure
 
 app = FastAPI(
     title="Safe Farm AI Service",
@@ -51,6 +52,28 @@ app.include_router(tasks_api.router)
 app.include_router(reports_api.router)
 app.include_router(alerts_api.router)
 app.include_router(satellite_api.router)
+
+# before/after 비교용. `MEASURE=1` 이 아니면 아래 둘 다 통과만 한다(`core/measure`).
+measure.install()
+
+
+@app.middleware("http")
+async def _measure_request(request, call_next):  # noqa: ANN001, ANN202
+    """요청 하나를 측정 한 건으로 묶는다.
+
+    ⚠ **스트리밍 응답은 여기서 닫지 않는다.** 미들웨어는 본문이 다 나가기 전에
+    돌아오므로, `/v1/ask` 를 여기서 닫으면 토큰이 하나도 안 세어진다. 그쪽은
+    `api/ask._sse` 가 끝에서 직접 `finish()` 한다.
+    """
+    if not measure.ENABLED:
+        return await call_next(request)
+
+    measure.start(f"{request.method} {request.url.path}")
+    response = await call_next(request)
+    if not isinstance(response, StreamingResponse):
+        measure.finish()
+    return response
+
 
 @app.get("/health")
 def health() -> dict[str, object]:
