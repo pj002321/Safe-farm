@@ -55,7 +55,10 @@ export function AskHistoryPanel({ entries }: AskHistoryPanelProps) {
             <p className="font-medium text-fg text-sm">{entry.question}</p>
             <div className="flex items-center gap-2">
               {entry.rating !== null && (
-                <Badge size="sm" tone={entry.rating === "up" ? "good" : "caution"}>
+                <Badge
+                  size="sm"
+                  tone={entry.rating === "up" ? "good" : "caution"}
+                >
                   {entry.rating === "up" ? "도움됨" : "도움 안 됨"}
                 </Badge>
               )}
