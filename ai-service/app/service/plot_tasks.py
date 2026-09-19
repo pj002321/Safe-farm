@@ -15,17 +15,16 @@ from __future__ import annotations
 import traceback
 from datetime import date, datetime, timedelta, timezone
 
-from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
 from app.domain.task_rules import RAIN_WINDOW_DAYS, PlotTaskInputs, build_task_candidates
-from app.models.farm import Plot, PlotTask, WeatherObsDaily
-from app.service.plot_growth import (
-    _crop_for_cultivation,
-    _lead_cultivation,
-    compute_plot_growth,
-    nearest_station,
-)
+from app.models.farm import Plot, PlotTask
+from app.repo.crop import usable_crop_of_variant
+from app.repo.cultivation import lead_growing
+from app.repo.plot import all_live_plots
+from app.repo.plot_task import add_task, expire_open_before, open_titles
+from app.repo.weather_obs import rainfall_since
+from app.service.plot_growth import compute_plot_growth, nearest_station
 
 #: 안 하고 넘어간 카드를 닫기까지의 일수.
 #:
@@ -60,17 +59,7 @@ def expire_stale_tasks(db: Session, plot_id, now: datetime | None = None) -> int
     지우지 않는다 — "안 하고 넘어갔다"는 사실이 이력이다. 이미 닫힌 카드는 다시
     건드리지 않는다(expired_at is null 조건).
     """
-    result = db.execute(
-        update(PlotTask)
-        .where(
-            PlotTask.plot_id == plot_id,
-            PlotTask.done.is_(False),
-            PlotTask.expired_at.is_(None),
-            PlotTask.generated_at < _expire_cutoff(now),
-        )
-        .values(expired_at=func.now())
-    )
-    return result.rowcount or 0
+    return expire_open_before(db, plot_id, _expire_cutoff(now))
 
 
 def _skip(plot: Plot, reason: str) -> None:
@@ -84,13 +73,13 @@ def _skip(plot: Plot, reason: str) -> None:
 
 def _why_no_growth(db: Session, plot: Plot) -> str:
     """compute_plot_growth 가 None 인 이유를 좁힌다. 사람이 고칠 수 있는 것부터."""
-    cultivation = _lead_cultivation(db, plot)
+    cultivation = lead_growing(db, plot.id)
     if cultivation is None:
         return "기르는 중인 작물이 없습니다 — 밭에 작물을 등록하세요"
     if cultivation.sowing_date is None:
         return "파종일이 없습니다 — 밭 상세에서 파종일을 입력하세요"
 
-    crop = _crop_for_cultivation(db, cultivation)
+    crop = usable_crop_of_variant(db, cultivation.variant_id)
     if crop is None:
         return (
             "작물 마스터에 기준온도(base_temp)가 없거나 품종이 연결되지 않았습니다 "
@@ -102,13 +91,7 @@ def _why_no_growth(db: Session, plot: Plot) -> str:
 def _recent_rain_mm(db: Session, station_code: str) -> float | None:
     """최근 RAIN_WINDOW_DAYS 일 누적 강수량. 관측이 하나도 없으면 None(판정 보류)."""
     since = date.today() - timedelta(days=RAIN_WINDOW_DAYS)
-    rows = db.execute(
-        select(WeatherObsDaily.rainfall_mm).where(
-            WeatherObsDaily.station_code == station_code,
-            WeatherObsDaily.obs_date >= since,
-        )
-    ).scalars().all()
-    values = [float(r) for r in rows if r is not None]
+    values = [mm for _, mm in rainfall_since(db, station_code, since) if mm is not None]
     return sum(values) if values else None
 
 
@@ -161,29 +144,15 @@ def generate_tasks_for_plot(db: Session, plot: Plot) -> list[PlotTask]:
 
     # "살아 있는" 카드만 재생성을 막는다 — 닫힌 카드(expired_at)는 세지 않는다.
     # 이 조건을 빠뜨리면 만료 처리 자체가 무의미해진다.
-    existing_open_titles = {
-        title
-        for (title,) in db.execute(
-            select(PlotTask.title).where(
-                PlotTask.plot_id == plot.id,
-                PlotTask.done.is_(False),
-                PlotTask.expired_at.is_(None),
-            )
-        ).all()
-    }
+    existing_open_titles = open_titles(db, plot.id)
 
     created: list[PlotTask] = []
     for candidate in candidates:
         if candidate.title in existing_open_titles:
             continue
-        task = PlotTask(
-            plot_id=plot.id,
-            title=candidate.title,
-            reason=candidate.reason,
-            priority=candidate.priority,
+        created.append(
+            add_task(db, plot.id, candidate.title, candidate.reason, candidate.priority)
         )
-        db.add(task)
-        created.append(task)
 
     # 만료 처리는 새 카드가 하나도 안 나와도 반영돼야 한다 — 조건이 해소돼서
     # 후보가 없는 경우에도 오래된 카드는 닫혀야 한다. 그래서 무조건 커밋한다.
@@ -212,7 +181,7 @@ def generate_daily_tasks(db: Session) -> int:
        rollback 이 필요한 이유: 예외가 난 세션은 다음 질의부터 전부 거부한다.
        걷어내지 않으면 격리해도 나머지 밭이 줄줄이 실패한다.
     """
-    plots = db.query(Plot).filter(Plot.deleted_at.is_(None)).all()
+    plots = all_live_plots(db)
 
     created = 0
     for plot in plots:

@@ -22,7 +22,9 @@ from sqlalchemy.orm import Session
 from app.core.config import OPENAI_MODEL
 from app.domain.report_payload import ReportPayload, parse_report_json
 from app.knowledge.embedder import get_client
-from app.models.farm import Advice, FarmAdvice, Plot
+from app.models.farm import Plot
+from app.repo.advice import add_advice, add_farm_advice, advice_on, farm_advice_on
+from app.repo.plot import plots_of_user
 from app.service.plot_growth import (
     compute_plot_growth,
     daily_gdd_series,
@@ -201,11 +203,7 @@ def get_cached_or_generate_report(db: Session, report_input: ReportInput) -> Rep
     LLM 호출을 하루에 한 번으로 묶어 토큰을 아끼는 게 목적이다."""
     today = date.today()
     try:
-        cached = (
-            db.query(Advice)
-            .filter(Advice.cultivation_id == report_input.cultivation_id, Advice.advice_date == today)
-            .first()
-        )
+        cached = advice_on(db, report_input.cultivation_id, today)
     except Exception:  # noqa: BLE001 — 조회 실패도 로그에 남긴다
         logging.exception("[report] Advice 캐시 조회 실패")
         return None
@@ -221,15 +219,14 @@ def get_cached_or_generate_report(db: Session, report_input: ReportInput) -> Rep
         logging.warning("[report] generate_report 가 None 반환")
         return None
 
-    db.add(
-        Advice(
-            cultivation_id=report_input.cultivation_id,
-            advice_date=today,
-            summary=payload.summary,
-            todos=payload.todos,
-            warnings=payload.cautions,
-            input_snapshot=json.loads(json.dumps(dataclasses.asdict(report_input), default=str)),
-        )
+    add_advice(
+        db,
+        report_input.cultivation_id,
+        today,
+        payload.summary,
+        payload.todos,
+        payload.cautions,
+        json.loads(json.dumps(dataclasses.asdict(report_input), default=str)),
     )
     db.commit()
     return payload
@@ -248,7 +245,7 @@ FARM_SUMMARY_SYSTEM_PROMPT = (
 
 def build_farm_summary_inputs(db: Session, user_id: uuid.UUID) -> list[ReportInput]:
     """이 사용자의 밭 중 생육 근거를 만들 수 있는 것만 모은다(근거 없는 밭은 조용히 뺀다)."""
-    plots = db.query(Plot).filter(Plot.user_id == user_id, Plot.deleted_at.is_(None)).all()
+    plots = plots_of_user(db, user_id)
     inputs = [build_report_input(db, plot) for plot in plots]
     return [ri for ri in inputs if ri is not None]
 
@@ -295,11 +292,7 @@ def get_cached_or_generate_farm_summary(
     """advices 와 같은 방침 — 사용자당 하루 한 번만 LLM 을 부르고 farm_advices 에 캐시한다."""
     today = date.today()
     try:
-        cached = (
-            db.query(FarmAdvice)
-            .filter(FarmAdvice.user_id == user_id, FarmAdvice.advice_date == today)
-            .first()
-        )
+        cached = farm_advice_on(db, user_id, today)
     except Exception:  # noqa: BLE001 — 조회 실패도 로그에 남긴다
         logging.exception("[report] FarmAdvice 캐시 조회 실패")
         return None
@@ -313,15 +306,12 @@ def get_cached_or_generate_farm_summary(
     if summary is None:
         return None
 
-    db.add(
-        FarmAdvice(
-            user_id=user_id,
-            advice_date=today,
-            summary=summary,
-            input_snapshot=json.loads(
-                json.dumps([dataclasses.asdict(ri) for ri in inputs], default=str)
-            ),
-        )
+    add_farm_advice(
+        db,
+        user_id,
+        today,
+        summary,
+        json.loads(json.dumps([dataclasses.asdict(ri) for ri in inputs], default=str)),
     )
     db.commit()
     return summary
