@@ -185,9 +185,14 @@ def build_plot_context(
     if plot is None:
         return None
 
+    # 질문이 물어본 갈래(비·태풍 …)는 재배 중인 작물과 무관하다 — 아래 growing
+    # 조회 뒤에서 부르면, 작물을 등록 안 한 밭은 이 갈래 질문에도 답을 못 받는다
+    # (ask_extras.extra_context_lines 를 gate 만 옮긴 것과 같은 이유의 버그였다).
+    추가 = extra_context_lines(db, plot, question=question)
+
     growing = _growing(db, plot.id)
     if not growing:
-        return None
+        return " ".join(추가) if 추가 else None
 
     # 심은 것은 전부 말한다. 생육단계는 대표 한 건으로만 낸다 — 작물마다 파종일도
     # 목표 GDD 도 달라서 한 문장으로 합칠 수 없다.
@@ -196,7 +201,7 @@ def build_plot_context(
 
     station = nearest_station(db, plot)
     if station is None:
-        return " ".join(lines)
+        return " ".join(lines + 추가)
 
     cultivation, crop = _lead(growing)
     lines += _growth_stage_lines(db, cultivation, crop, station)
@@ -205,7 +210,5 @@ def build_plot_context(
     if weather_line:
         lines.append(weather_line)
 
-    # 질문이 물어본 갈래만. 아무것도 안 걸리면 빈 목록이라 예전과 같은 문장이 나간다
-    lines += extra_context_lines(db, plot, question=question)
-
+    lines += 추가
     return " ".join(lines)

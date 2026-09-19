@@ -15,6 +15,7 @@ from langgraph.config import get_stream_writer
 from langgraph.graph import END
 
 from app.core.config import OPENAI_MODEL
+from app.domain.ask_topics import topics_in
 from app.domain.suitability import CropProfile, WeatherWindow, rank_crops
 from app.graph.state import GraphState, RecommendationState
 from app.knowledge.embedder import get_client
@@ -219,6 +220,13 @@ def plan(state: GraphState) -> GraphState:
     # 밭을 고르지 않고 묻는 질문(첫 화면·일반 재배법)이 여기 걸린다.
     if state.get("plot_id") is None:
         return {"route": "rag", "tool_calls": []}
+
+    # topics_in 이 갈래를 잡는 질문(비·태풍 …)은 LLM 라우터에 묻지 않고 곧장
+    # 조회한다. "태풍25호는 어디쯤 있어?" 처럼 "이 밭 전제"로 안 읽히는 질문도
+    # extra_context_lines 가 답을 갖고 있는데, PLAN_SYSTEM 의 "이 밭 전제" 기준으로는
+    # rag 로 빠져 그 답이 통째로 버려졌다(2026-09-20 실측).
+    if topics_in(state["question"]):
+        return {"route": "tool", "tool_calls": []}
 
     messages = [{"role": "system", "content": PLAN_SYSTEM}]
     if state.get("history_context"):
