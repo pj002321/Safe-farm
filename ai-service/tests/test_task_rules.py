@@ -276,3 +276,145 @@ def test_수확_카드가_물_카드를_막지_않는다():
     titles = 제목들(밭(**익음, water=마른날, irrigate_needed=True))
     assert "벼 거둘 때 살펴보기" in titles
     assert "벼밭 물 주기" in titles
+
+
+# ── 농작업·병해충 (2026-09-19) ───────────────────────────────────
+#
+# stage_tasks 는 520행 중 260행이 차 있는데 **한 번도 안 읽혔다.**
+# 홈에 물 카드 하나만 나가던 이유가 여기 있었다.
+
+
+def test_이_단계에_하는_농사일이_카드가_된다():
+    titles = 제목들(밭(stage_tasks=("지주", "피복")))
+    assert "배추 지주 세우기" in titles
+    assert "배추 덮어 주기" in titles
+
+
+def test_농작업_카드는_등급이_낮다():
+    """'지금 해야 한다' 가 아니라 '이 시기에 하는 일' 이다 — 급한 카드가 묻히면 안 된다."""
+    (카드,) = build_task_candidates(밭(stage_tasks=("김매기",)))
+    assert 카드.priority == "low"
+
+
+def test_웃거름과_물주기는_농작업_카드로_안_낸다():
+    """이미 시비 카드·물 카드가 판정한다. 또 내면 같은 말이 두 장 간다."""
+    assert 제목들(밭(stage_tasks=("웃거름", "물주기"))) == []
+
+
+def test_모르는_갈래는_조용히_넘어간다():
+    """자료에 새 낱말이 생겨도 카드가 깨지지 않는다."""
+    assert 제목들(밭(stage_tasks=("난생처음보는작업",))) == []
+
+
+def test_병해충은_한_장으로_묶는다():
+    """고추 9월 중순 자료가 여섯 줄이다 — 쪼개면 물 카드가 밀린다."""
+    titles = 제목들(밭(crop_name_ko="고추", pest_names=("담배나방", "역병", "탄저병")))
+    assert titles == ["고추 병해충 살펴보기"]
+
+
+def test_병해충_문구가_지금_발생_중이라고_하지_않는다():
+    """2023~2026 발생정보의 이맘때 자료다. 단정하면 거짓이 된다."""
+    (카드,) = build_task_candidates(밭(crop_name_ko="고추", pest_names=("담배나방",)))
+    assert "이맘때" in 카드.reason
+    assert "살펴보세요" in 카드.reason
+    for 금지 in ("발생했", "발생 중", "뿌리세요", "약제"):
+        assert 금지 not in 카드.reason
+
+
+def test_방제_시기면_병해충이_없어도_살펴보라고_한다():
+    (카드,) = build_task_candidates(밭(stage_tasks=("방제",)))
+    assert 카드.title == "배추 병해충 살펴보기"
+    assert "방제 때" in 카드.reason
+
+
+def test_방제는_농작업_카드로_따로_안_낸다():
+    """병해충 카드가 이름까지 달아 대신 낸다 — 두 장이 되면 같은 일이 겹친다."""
+    titles = 제목들(밭(stage_tasks=("방제",), pest_names=("담배나방",)))
+    assert titles == ["배추 병해충 살펴보기"]
+
+
+def test_병해충도_농작업도_없으면_조용하다():
+    assert 제목들(밭(stage_tasks=(), pest_names=())) == []
+
+
+def test_급한_것이_먼저_나온다():
+    """홈이 위에서부터 읽힌다 — 수확·물·병해충이 농사일보다 앞이어야 한다."""
+    titles = 제목들(
+        밭(
+            water=마른날,
+            irrigate_needed=True,
+            stage_tasks=("김매기",),
+            pest_names=("담배나방",),
+        )
+    )
+    assert titles.index("배추밭 물 주기") < titles.index("배추 병해충 살펴보기")
+    assert titles.index("배추 병해충 살펴보기") < titles.index("배추 김매기")
+
+
+# ── 재해: 기상청 특보를 할 일과 안전으로 ─────────────────────────
+#
+# ★ 안전 당부가 이 카드의 본론이다. 태풍에 물꼬를 보러 나갔다가, 폭염에 참고
+#   일하다가 해마다 사람이 죽는다. 대비 작업은 거들 뿐이다.
+
+
+def test_특보가_뜨면_미리_할_일과_안전을_말한다():
+    (카드,) = build_task_candidates(밭(warnings=("호우",)))
+    assert "호우 특보" in 카드.title
+    assert "배수로" in 카드.reason
+    assert "⚠" in 카드.reason
+    assert 카드.priority == "high"
+
+
+def test_재해_카드가_맨_앞이다():
+    """태풍이 오는 날 물 주기 카드가 위에 있으면 안 된다."""
+    titles = 제목들(밭(warnings=("태풍",), water=마른날, irrigate_needed=True))
+    assert titles[0].startswith("태풍 특보")
+
+
+def test_특보가_겹쳐도_한_장이다():
+    """태풍 오는 날 카드 네 장을 주면 아무것도 안 읽는다."""
+    titles = 제목들(밭(warnings=("태풍", "호우", "강풍")))
+    assert len(titles) == 1
+    assert "태풍·호우·강풍" in titles[0]
+
+
+def test_바다_특보는_거른다():
+    """풍랑은 밭일과 무관하다. 상관없는 카드가 뜨면 다음 경보도 안 읽는다."""
+    assert 제목들(밭(warnings=("풍랑", "폭풍해일"))) == []
+
+
+def test_모르는_특보에도_안전은_말한다():
+    """무엇을 대비할지는 몰라도 말리는 건 할 수 있다."""
+    (카드,) = build_task_candidates(밭(warnings=("황사",)))
+    assert "무리하지 마세요" in 카드.reason
+
+
+def test_폭염은_열사병을_경고한다():
+    (카드,) = build_task_candidates(밭(warnings=("폭염",)))
+    assert "한낮" in 카드.reason
+    assert "그늘" in 카드.reason
+
+
+def test_특보가_없으면_조용하다():
+    assert 제목들(밭(warnings=())) == []
+
+
+def test_받침에_따라_조사를_고른다():
+    """ "바이러스이 자주 나와요" 가 나가면 나머지 내용도 못 믿는다."""
+    (앞,) = build_task_candidates(밭(pest_names=("바이러스",)))
+    assert "바이러스가 자주" in 앞.reason
+    (뒤,) = build_task_candidates(밭(pest_names=("담배나방",)))
+    assert "담배나방이 자주" in 뒤.reason
+
+
+def test_특보가_겹치면_가장_위험한_쪽의_안전을_남긴다():
+    """★ 들어온 순서는 위험과 상관이 없다.
+
+    앞의 것을 그냥 쓰면 태풍+폭염 때 **열사병 경고가 조용히 빠진다.** 폭염은
+    논밭에서 해마다 가장 많이 죽는 특보다.
+    """
+    (카드,) = build_task_candidates(밭(warnings=("태풍", "폭염")))
+    assert "그늘" in 카드.reason  # 폭염 쪽 안전이 남았다
+    # 대비 작업은 둘 다 적는다 — 빠지는 건 안전 문구뿐이다
+    assert "비닐과 지주" in 카드.reason
+    assert "차광망" in 카드.reason

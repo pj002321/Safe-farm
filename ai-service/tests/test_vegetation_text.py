@@ -259,3 +259,23 @@ def test_묶어_낸_문장에도_숫자를_안_넣는다():
     for 줄 in vegetation_lines(v, "생육기"):
         assert "NDVI" not in 줄
         assert "0." not in 줄
+
+
+def test_NDVI_가_음수면_위성_말을_통째로_안_한다():
+    """★ 음수는 물·건물·아스팔트다 — 그 좌표에 작물이 없다는 뜻이다.
+
+    화면에는 "밭 위치가 맞는지 확인해 주세요" 를 그대로 둔다(거기선 쓸모 있다).
+    프롬프트에 넣으면 LLM 이 작물 조언 대신 좌표 얘기를 하고 **그 호출이 통째로
+    버려진다.** NDMI 추세도 같이 뺀다 — 아스팔트에 대고 "물기가 늘었어요" 는
+    말이 안 된다.
+    """
+    밭아님 = Vegetation(ndvi=-0.151, ndmi_now=-0.353, ndmi_before=-0.41, gap_days=10)
+    assert vegetation_lines(밭아님, "생육기") == []
+    # 화면 쪽 한 줄짜리 함수는 그대로 경고한다
+    assert "밭 위치" in describe_ndvi(-0.151)
+
+
+def test_맨땅은_말한다():
+    """음수만 뺀다. 0.0~0.2 는 갓 심어 아직 성긴 밭일 수 있어 사실대로 적는다."""
+    갓심음 = Vegetation(ndvi=0.05, ndmi_now=0.1, ndmi_before=0.1, gap_days=10)
+    assert vegetation_lines(갓심음, "씨뿌림") != []

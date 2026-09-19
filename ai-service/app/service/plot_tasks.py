@@ -28,6 +28,7 @@ from app.domain.task_rules import (
 )
 from app.domain.water_balance import WaterBalance, judge_water
 from app.models.farm import Plot, PlotTask, WeatherObsDaily
+from app.service.pest_notes import pest_names_for
 from app.service.plot_growth import (
     _crop_for_cultivation,
     _lead_cultivation,
@@ -35,6 +36,7 @@ from app.service.plot_growth import (
     nearest_station,
 )
 from app.service.satellite_cache import stored_observations
+from app.service.warn_region import plot_warning
 from pipeline.open_meteo_client import (
     daily_index_of,
     fetch_forecast,
@@ -144,6 +146,24 @@ def _latest_ndvi(db: Session, plot: Plot) -> float | None:
     """
     points = stored_observations(db, float(plot.latitude), float(plot.longitude), NDVI_STALE_DAYS)
     return points[-1]["ndvi"] if points else None
+
+
+def _active_warnings(db: Session, plot: Plot) -> tuple[str, ...]:
+    """이 밭에 지금 걸려 있는 기상특보 종류. 못 읽으면 빈 튜플이다.
+
+    ⚠ `warn_region.plot_warning` 을 **부르기만** 한다 — 리포트(report.py)도 같은
+      함수를 쓴다. 특보 판정은 거기 한 곳이고 여기서 다시 하지 않는다.
+
+    ⚠ 실패해도 배치를 막지 않는다. 특보를 못 읽으면 대비 카드가 안 나갈 뿐이고,
+      물·시비 카드는 그대로 나가야 한다(_water_balance 와 같은 판단).
+    """
+    try:
+        warning, _ = plot_warning(db, float(plot.latitude), float(plot.longitude))
+    except Exception:  # noqa: BLE001 — 특보 조회 실패가 나머지 카드를 막지 않는다
+        return ()
+    if not warning:
+        return ()
+    return tuple(warning.get("warnings") or ())
 
 
 def _recent_rain_mm(db: Session, station_code: str) -> float | None:
@@ -287,6 +307,10 @@ def generate_tasks_for_plot(
         gdd_target_passed=past_target(growth.accumulated_gdd, growth.gdd_target),
         sow_method=growth.sow_method,
         ndvi=_latest_ndvi(db, plot),
+        # 이맘때 이 작물에 자주 나오는 병해충. DB 조회 한 번이라 배치를 안 늦춘다
+        pest_names=pest_names_for(db, growth.crop_name_ko, _kst_today()),
+        # 재해 — 기상청이 판정한 것을 **받아 적기만** 한다(task_rules 주석)
+        warnings=_active_warnings(db, plot),
     )
     candidates = build_task_candidates(inputs)
     if not candidates:
