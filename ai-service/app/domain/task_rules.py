@@ -49,6 +49,18 @@ RAIN_WINDOW_DAYS = 7
 _DROUGHT = "가뭄"
 _WET = "과습"
 
+#: 관측 강수 {RAIN_WINDOW_DAYS}일 합계가 이보다 적거나 같으면 마른 것으로 본다(mm).
+#:
+#: 화면 쪽 `src/shared/growth/taskAdvice.ts` 의 DRY_MM 과 **같은 값**이다. 출처도
+#: 같다 — 농촌진흥청 "가을가뭄" 대책의 관행 기준(`features/report/domain/hazard.ts`
+#: 주석). 두 값이 어긋나면 같은 밭을 두고 홈 카드와 재배 상세가 다른 말을 한다.
+#:
+#: ★ 2026-09-19 머지 — **평소에는 이 기준이 안 돈다.** 물수지(judge_water)가
+#:   ET0 와 예보까지 보고 판정하기 때문이다. 이 값은 **Open-Meteo 를 못 받았을 때의
+#:   안전망**으로 남는다. 관측소 강수는 DB 에 이미 있어서, 외부 API 가 죽어도
+#:   물 카드가 통째로 사라지지는 않는다(_fallback_verdict).
+DRY_MM = 5.0
+
 
 @dataclass
 class TaskCandidate:
@@ -63,6 +75,11 @@ class PlotTaskInputs:
 
     crop_name_ko: str
     stage_name: str | None
+
+    # ⚠ `water_need_mm` 은 이 자료형에 없다. **DB 칸과 CSV 계약은 그대로 둔다** —
+    #   crop_stages 의 열도, crop-data 쪽 헤더도 건드리지 않았다(마이그레이션
+    #   20260919060000 주석). 다만 영영 비는 칸이라 판정에 넘길 이유가 없어,
+    #   여기서는 받지 않는다. 자료를 찾으면 되살릴 자리는 DB 쪽에 그대로 있다.
 
     # ── 시기: crop_stages 에서 온다 ───────────────────────────────
     #: 이 단계에 물주기·배수 작업이 있는가
@@ -89,6 +106,27 @@ def _needs_water_attention(inputs: PlotTaskInputs) -> bool:
       물 카드를 낼 값어치가 있어 `or` 로 묶는다.
     """
     return inputs.irrigate_needed or _DROUGHT in inputs.stage_hazards
+
+
+def _fallback_verdict(inputs: PlotTaskInputs) -> str | None:
+    """물수지를 못 만들었을 때의 **안전망**. 관측 강수만으로 '마름'을 본다.
+
+    ★ 2026-09-19 머지 — development 의 `DRY_MM` 규칙을 여기 남겼다.
+
+      평소에는 `judge_water` 가 ET0 와 3·7일 예보까지 보고 판정하므로 이 함수는
+      돌지 않는다. 도는 때는 **Open-Meteo 를 못 받았을 때**다(외부 API 장애·좌표
+      이상). 그때 관측소 강수는 DB 에 이미 있으므로, 물 카드가 통째로 사라지는
+      대신 얇은 근거로라도 남는다.
+
+    ⚠ 그래서 등급을 올리지 않는다(`give` 를 내되 호출 쪽이 mid 로 매긴다).
+      ET0 도 예보도 못 본 판정이라 물수지로 낸 것과 같은 무게로 두면 안 된다.
+    ⚠ `hold`·`watch` 는 만들지 않는다. 둘 다 **예보**가 있어야 할 수 있는 말이고,
+      여기는 지난 비만 안다. 모르는 것을 아는 척하지 않는다.
+    """
+    if inputs.recent_rain_mm is None:
+        # 관측이 없으면 판정하지 않는다. 없는 날을 0mm 로 치면 비 온 날을 가뭄으로 만든다
+        return None
+    return "give" if inputs.recent_rain_mm <= DRY_MM else None
 
 
 def _reason(inputs: PlotTaskInputs, 꼬리: str) -> str:
@@ -130,7 +168,7 @@ def build_task_candidates(inputs: PlotTaskInputs) -> list[TaskCandidate]:
 
     # ── 물 ────────────────────────────────────────────────────────
     # judge_water 가 None 이면 근거가 없다는 뜻이다. "괜찮습니다" 라고 말하지 않는다.
-    verdict = judge_water(inputs.water)
+    verdict = judge_water(inputs.water) or _fallback_verdict(inputs)
 
     if verdict == "give" and _needs_water_attention(inputs):
         candidates.append(

@@ -44,12 +44,16 @@ class PlotGrowth:
     stage_name: str | None
     guide_text: str | None
     # 아래 넷은 stage_name 이 None 이면 같이 비어 있다 — 작업카드 판정(task_rules.py)이 씀
-    # ⚠ water_need_mm 은 **영영 빈 칸이다**(원천 없음. crop_stage.py 주석 참고).
-    #   지우지 않고 남겨 두되 판정에 쓰지 않는다 — 아래 셋이 그 자리를 이어받았다.
+    #
+    # ⚠️ water_need_mm 은 **영영 빈 칸이다**(2026-09-19 마이그레이션 주석). 원천이
+    #    없어 채우지 않기로 했고, 그 자리를 irrigate_needed 와 stage_hazards 가
+    #    대신한다. 필요량(mm)이 아니라 **시기**다 — "이 단계에 물이 중요한가".
+    #    "지금 마른가"는 기상이 댄다. 필드를 지우지 않는 이유는 CSV 계약 헤더에
+    #    남아 있어서다(같은 주석).
     water_need_mm: float | None
-    fertilize_needed: bool
     #: 이 단계에 물주기·배수 작업이 있는가 (crop_stages.irrigate_needed)
-    irrigate_needed: bool = False
+    irrigate_needed: bool
+    fertilize_needed: bool
     #: 조심할 재해 갈래 — ('가뭄','과습','저온' …). CSV 가 쉼표로 이어 준 것을 쪼갠다
     stage_hazards: tuple[str, ...] = ()
     #: 농작업 갈래 — ('웃거름','물주기','배수' …)

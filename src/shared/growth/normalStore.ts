@@ -98,7 +98,9 @@ export async function listMonthlyNormals(
 ): Promise<MonthlyNormal[]> {
   for (const code of stationCodes) {
     for (const source of NORMAL_SOURCES) {
-      const monthly = foldMonthlyNormals(await listStationNormals(code, source));
+      const monthly = foldMonthlyNormals(
+        await listStationNormals(code, source),
+      );
       if (monthly.length > 0) return monthly;
     }
   }

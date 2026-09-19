@@ -19,7 +19,12 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
-from app.domain.task_rules import RAIN_WINDOW_DAYS, PlotTaskInputs, build_task_candidates
+from app.domain.task_rules import (
+    DRY_MM,
+    RAIN_WINDOW_DAYS,
+    PlotTaskInputs,
+    build_task_candidates,
+)
 from app.domain.water_balance import WaterBalance, judge_water
 from app.models.farm import Plot, PlotTask, WeatherObsDaily
 from app.service.plot_growth import (
@@ -262,7 +267,8 @@ def generate_tasks_for_plot(
             f" · 7일비 {inputs.water.rain_7d_mm}mm)"
             f" · 관수시기 {inputs.irrigate_needed} · 재해 {inputs.stage_hazards or '없음'}"
             f" · 시비 {inputs.fertilize_needed}"
-            f" · 관측 {RAIN_WINDOW_DAYS}일 강수 {inputs.recent_rain_mm}mm",
+            f" · 관측 {RAIN_WINDOW_DAYS}일 강수 {inputs.recent_rain_mm}mm"
+            f"(안전망 마름 기준 {DRY_MM}mm 이하)",
         )
         return []
 

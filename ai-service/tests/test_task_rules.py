@@ -7,7 +7,7 @@
 ⚠ 임계값 숫자를 여기 베끼지 않는다. water_balance 에서 가져와 그 언저리로 만든다.
 """
 
-from app.domain.task_rules import PlotTaskInputs, build_task_candidates
+from app.domain.task_rules import DRY_MM, PlotTaskInputs, build_task_candidates
 from app.domain.water_balance import BALANCE_DRY_MM, RAIN_HEAVY_MM, SOIL_DRY, WaterBalance
 
 마른날 = WaterBalance(balance_14d_mm=BALANCE_DRY_MM - 10, rain_3d_mm=0.0, rain_7d_mm=0.0)
@@ -167,3 +167,50 @@ def test_시비는_단계_이름이_있어야_낸다():
 def test_시비와_물이_같이_나올_수_있다():
     titles = 제목들(밭(water=마른날, irrigate_needed=True, fertilize_needed=True))
     assert titles == ["배추밭 물 주기", "배추 웃거름 주기"]
+
+
+# ── 안전망: 기상을 못 받았을 때 ──────────────────────────────────
+#
+# ★ 2026-09-19 머지 — development 의 DRY_MM 규칙이 여기로 왔다.
+#   평소에는 judge_water 가 판정하므로 이 경로가 돌지 않는다. 도는 때는
+#   Open-Meteo 를 못 받았을 때다 — 그때도 관측소 강수는 DB 에 있다.
+#   `water` 를 안 주면 빈 WaterBalance 라 judge_water 가 None 이고, 그 자리를
+#   이 규칙이 받는다.
+
+
+def test_기상을_못_받아도_관측이_마르면_카드가_나온다():
+    assert "배추밭 물 주기" in 제목들(밭(irrigate_needed=True, recent_rain_mm=0.1))
+
+
+def test_안전망_카드는_등급을_올리지_않는다():
+    """ET0 도 예보도 못 본 판정이다. 물수지로 낸 것과 같은 무게로 두면 안 된다."""
+    (카드,) = build_task_candidates(밭(irrigate_needed=True, recent_rain_mm=0.1))
+    assert 카드.priority == "mid"
+
+
+def test_안전망도_시기를_본다():
+    """물이 중요하지 않은 시기에는 말라도 카드를 만들지 않는다."""
+    assert 제목들(밭(irrigate_needed=False, recent_rain_mm=0.1)) == []
+
+
+def test_안전망은_비가_왔으면_침묵한다():
+    assert 제목들(밭(irrigate_needed=True, recent_rain_mm=30.0)) == []
+
+
+def test_안전망_경계는_DRY_MM_이하다():
+    assert "배추밭 물 주기" in 제목들(밭(irrigate_needed=True, recent_rain_mm=DRY_MM))
+    assert 제목들(밭(irrigate_needed=True, recent_rain_mm=DRY_MM + 0.1)) == []
+
+
+def test_안전망도_관측이_없으면_판정하지_않는다():
+    """0mm 로 치면 비 온 날을 가뭄으로 만든다."""
+    assert 제목들(밭(irrigate_needed=True, recent_rain_mm=None)) == []
+
+
+def test_물수지가_있으면_안전망이_안_돈다():
+    """관측이 말랐다고 해도 물수지가 '젖음'이면 카드를 내지 않는다.
+
+    안전망이 주 판정을 이기면 예보를 본 의미가 사라진다.
+    """
+    젖은날 = WaterBalance(balance_14d_mm=BALANCE_DRY_MM + 50, rain_3d_mm=0.0, rain_7d_mm=0.0)
+    assert 제목들(밭(water=젖은날, irrigate_needed=True, recent_rain_mm=0.1)) == []
