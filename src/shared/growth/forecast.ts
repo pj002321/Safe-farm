@@ -111,7 +111,9 @@ function walk(
   for (let step = 0; step < input.horizonDays; step += 1) {
     date = nextDay(date);
 
+    
     const forecasted = byDate.get(date);
+    // fill은 평년 값, 예측이 없다면 평년 값으로 쓰자
     const row = forecasted ?? fill(date);
     if (row === null) break;
     if (forecasted) forecastDays += 1;
@@ -167,8 +169,9 @@ export const forecastArrival_1: ArrivalRule = (input) => {
  * 예보 밖은 그 날짜가 속한 달의 평년 기온으로 채운다. 계절 변화를 따라가므로
  * 한 달 넘게 내다볼 때 변형 1보다 맞는다.
  *
- * ⚠️ **평년값 데이터가 아직 없다.** `normals` 가 비면 예보 끝에서 멈춰
- * `arrivalDate: null` 이 나온다 — 틀린 날짜를 내놓느니 모른다고 하는 쪽이다.
+ * 평년값은 `shared/growth/normalStore.ts` 가 `normals` 에서 읽어 월별로 접어
+ * 넘긴다. 그 달 값이 없으면 예보 끝에서 멈춰 `arrivalDate: null` 이 나온다 —
+ * 틀린 날짜를 내놓느니 모른다고 하는 쪽이다.
  */
 export const forecastArrival_2: ArrivalRule = (input) => {
   const byMonth = new Map(input.normals.map((row) => [row.month, row]));

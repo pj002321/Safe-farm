@@ -6,7 +6,7 @@
 
 from dataclasses import dataclass
 
-from sqlalchemy import Select, func, select
+from sqlalchemy import Select, case, func, select
 from sqlalchemy.orm import Session
 
 from app.models.farm.crop import Crop
@@ -38,7 +38,14 @@ class DbEmbedSource:
 _CROP_STAGE_QUERY = (
     select(
         Crop.name.label("작물"),
-        CropVariant.maturity_type.label("숙기"),
+        # maturity_type 은 EARLY/MID/LATE 코드값이다(ck_crop_variants_maturity). 본문에
+        # 그대로 넣으면 LLM 이 "MID" 를 그대로 답에 옮긴다 — 사람이 읽는 라벨로 바꿔서 넣는다
+        case(
+            (CropVariant.maturity_type == "EARLY", "조생"),
+            (CropVariant.maturity_type == "MID", "중생"),
+            (CropVariant.maturity_type == "LATE", "만생"),
+            else_=CropVariant.maturity_type,
+        ).label("숙기"),
         CropStage.stage_name.label("생육단계"),
         CropStage.guide_text.label("관리요령"),
         CropVariant.variant_id.label("variant_id"),

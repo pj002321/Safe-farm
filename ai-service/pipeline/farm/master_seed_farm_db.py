@@ -32,7 +32,7 @@ from app.models.farm import (
 )
 from pipeline.prep import check
 from pipeline.prep.seeding import count_rows, read_all, report, require_tables
-from pipeline.prep.table import key_dict, upsert
+from pipeline.prep.table import key_dict, prune, upsert
 
 # 마스터는 실측값이다. 더미(런타임 대체용 가짜)와 섞으면 어느 쪽이 버려도 되는
 # 값인지 구분이 사라진다 — data/dummy/README.md 가 "전부 가짜"라고 선언한다
@@ -197,6 +197,12 @@ def load(db, data: dict[str, list[dict]]) -> dict[str, int]:
             "sow_method": r["sow_method"],
             "sow_from": r["sow_from"],
             "sow_to": r["sow_to"],
+            # 씨앗/모종 창을 따로. 한쪽이 비는 것이 정상이다 — 직파는 plant_* 가,
+            # 씨로 안 심는 작물은 seed_* 가 빈다(crop_variant.py 주석)
+            "seed_from": r["seed_from"],
+            "seed_to": r["seed_to"],
+            "plant_from": r["plant_from"],
+            "plant_to": r["plant_to"],
         }
         for r in data["crop_variants"]
     ]
@@ -217,13 +223,36 @@ def load(db, data: dict[str, list[dict]]) -> dict[str, int]:
             "stage_name": r["stage_name"],
             "gdd_from": r["gdd_from"],
             "gdd_to": r["gdd_to"],
+            # ⚠ 언제나 빈 칸이다. 채우려 하지 말 것 — crop_stage.py 의 주석 참고
             "water_need_mm": r["water_need_mm"],
             "fertilize_needed": r["fertilize_needed"] == "true",
+            # ★ 2026-09-19 — water_need_mm 의 대체 셋.
+            #   ⚠ stage_tasks·stage_hazards 는 칸 **안에** 쉼표를 품는다('가뭄,과습').
+            #     csv 모듈이 따옴표를 풀어 주므로 통째로 넣는다. 여기서 split 하지 말 것 —
+            #     쪼개는 것은 읽는 쪽(domain)의 일이다.
+            "irrigate_needed": r["irrigate_needed"] == "true",
+            "stage_tasks": r["stage_tasks"] or None,
+            "stage_hazards": r["stage_hazards"] or None,
             "guide_text": r["guide_text"],
         }
         for r in data["crop_stages"]
     ]
     done["crop_stages"] = upsert(db, CropStage, rows, ["variant_id", "stage_order"])
+    # ⚠ **upsert 는 지우지 않는다.** 작형 규칙이 바뀌어 단계가 통째로 사라진 숙기가 있으면
+    #   DB 에 옛 단계가 남아, 그 밭이 사라진 단계로 판정된다. 2026-09-19 대조에서
+    #   옥수수·수수,수단그라스 교잡종·컬리플라워·파슬리 네 작물 18행이 그랬다.
+    #   prune 은 rows 가 비면 아무것도 안 지우므로(table.py) CSV 를 빠뜨린 사고와는 구분된다.
+    #   ⚠ cultivations 가 crop_stages 를 FK 로 참조한다 — 지울 단계를 쓰는 재배가 있으면
+    #     여기서 막힌다. 그건 데이터가 어긋났다는 뜻이니 조용히 넘기지 말고 봐야 한다.
+    #   ⚠⚠ **열쇠 자료형을 DB 에 맞춰 넘긴다.** prune 은 CSV 값과 DB 값을 그대로
+    #     견주는데, stage_order 가 CSV 에서는 문자열("1")이고 DB 에서는 정수(1)다.
+    #     그대로 넘기면 **한 행도 안 맞아 520행 전부가 지울 대상**이 된다 —
+    #     2026-09-19 에 실제로 그 일이 났고, cultivations 의 FK 가 막아 줘서
+    #     트랜잭션이 통째로 되돌아갔다. 막아 주지 않았으면 마스터가 비었을 것이다.
+    지울열쇠 = [{**r, "stage_order": int(r["stage_order"])} for r in rows]
+    지움 = prune(db, CropStage, 지울열쇠, ["variant_id", "stage_order"])
+    if 지움:
+        print(f"  crop_stages: CSV 에서 사라진 {지움}행을 지웠습니다")
 
     # ── varieties ─────────────────────────────────────────────────
     # 작물 → 그 작물의 숙기 행들. "숙기가 비었으면 유일한 행" 규칙을 여기서 푼다

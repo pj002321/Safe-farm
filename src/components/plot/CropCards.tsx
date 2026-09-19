@@ -9,7 +9,11 @@ import {
   SearchIcon,
   SproutIcon,
 } from "@/components/icons";
-import type { CropOption } from "@/features/crops/domain/cropOption";
+import type {
+  CropOption,
+  MaturityOption,
+} from "@/features/crops/domain/cropOption";
+import { DEFAULT_MATURITY } from "@/shared/growth/maturity";
 
 /**
  * ---------------------------------------------
@@ -90,6 +94,18 @@ interface CropCardsProps {
    * 여기서 `new Date()` 를 읽으면 서버가 그린 마크업과 달라 하이드레이션이 어긋난다.
    */
   maxSowingDate?: string;
+  /**
+   * 검색창 오른쪽에 붙일 제출 버튼. 주면 검색줄이 **화면 위에 붙어 따라온다.**
+   *
+   * ⚠️ 왜 여기로 올렸나 — 밭 상세의 '작물 추가' 는 버튼이 카드 79장 **아래**에 있어서
+   *   두 장만 고르고도 끝까지 스크롤해야 눌렀다. 카드 수가 자료에 따라 늘기 때문에
+   *   버튼을 아래 두면 화면이 길어질수록 나빠진다.
+   * ⚠️ 등록 마법사(`plots/new`)는 주지 않는다. 거기는 하단 독(`PlotWizardDock`)이
+   *   제출을 맡고 있어서, 주면 제출 버튼이 한 화면에 둘이 된다.
+   * ⚠️ `CropCards` 는 폼 **안**에 있으므로 여기 버튼에 `form` 속성이 필요 없다.
+   *   폼 밖에 두는 독과 다른 점이다.
+   */
+  action?: ReactNode;
 }
 
 export function CropCards({
@@ -97,6 +113,7 @@ export function CropCards({
   name = "cropIds",
   defaultSelected = [],
   maxSowingDate,
+  action,
 }: CropCardsProps) {
   const [query, setQuery] = useState("");
   // 검색으로 걸러져도 **이미 고른 작물은 계속 보인다.** 안 그러면 체크한 채로
@@ -110,21 +127,34 @@ export function CropCards({
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="relative">
-        <span
-          aria-hidden="true"
-          className="-translate-y-1/2 pointer-events-none absolute top-1/2 left-3 text-fg-subtle"
-        >
-          <SearchIcon className="size-4" />
-        </span>
-        <input
-          aria-label="작물 검색"
-          className="w-full rounded-md border border-border bg-surface py-2 pr-3 pl-10 text-fg text-sm transition-colors hover:border-accent focus:border-accent"
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="작물 이름으로 검색"
-          type="search"
-          value={query}
-        />
+      {/* action 이 있을 때만 붙어 따라온다. `top-[4.5rem]` 은 앱 헤더(sticky top-0) 아래다 —
+          `MeRail` 이 같은 값으로 헤더 밑에 붙는다. 데스크톱 헤더가 약 61px 라 `top-14`(56px)
+          로 두면 검색창 윗부분이 헤더 밑에 숨는다. 배경을 칠하는 이유는 카드가 이 줄
+          **뒤로** 흘러가기 때문이다. 음수 여백은 폼의 p-4 를 상쇄해 줄 전체를 덮는다. */}
+      <div
+        className={
+          action
+            ? "-mx-4 -mt-4 sticky top-[4.5rem] z-10 flex items-center gap-2 border-border border-b bg-surface-2 px-4 py-3"
+            : "relative"
+        }
+      >
+        <div className="relative flex-1">
+          <span
+            aria-hidden="true"
+            className="-translate-y-1/2 pointer-events-none absolute top-1/2 left-3 text-fg-subtle"
+          >
+            <SearchIcon className="size-4" />
+          </span>
+          <input
+            aria-label="작물 검색"
+            className="w-full rounded-md border border-border bg-surface py-2 pr-3 pl-10 text-fg text-sm transition-colors hover:border-accent focus:border-accent"
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="작물 이름으로 검색"
+            type="search"
+            value={query}
+          />
+        </div>
+        {action}
       </div>
 
       {!anyVisible && (
@@ -169,6 +199,14 @@ export function CropCards({
                   <CheckIcon className="size-3" strokeWidth={3} />
                 </span>
 
+                {/* 체크 표시와 같은 구석이다. 체크되면 왼쪽으로 비켜선다 — 겹치면 글자가 가린다.
+                    이것도 input 의 형제라야 peer-checked 가 닿는다. */}
+                {crop.sowingNow && (
+                  <span className="absolute top-3 right-3 rounded-full bg-accent-subtle px-2 py-0.5 text-[0.65rem] text-accent leading-4 peer-checked:right-10">
+                    지금 심기 좋음
+                  </span>
+                )}
+
                 <span className="grid size-10 place-items-center rounded-full bg-surface-2 text-xl text-fg-muted">
                   {ICONS[crop.nameKo] ?? <LeafIcon />}
                 </span>
@@ -195,8 +233,11 @@ export function CropCards({
               <div className="hidden flex-col gap-3 border-border border-t bg-surface-2/60 p-4 group-has-[>label>input:checked]/crop:flex">
                 <CropSowingFields
                   cropId={crop.cropId}
+                  maturities={crop.maturities}
                   maxDate={maxSowingDate}
+                  plantWindowKo={crop.plantWindowKo}
                   required={selected.has(crop.cropId)}
+                  seedWindowKo={crop.seedWindowKo}
                 />
               </div>
             </div>
@@ -231,10 +272,21 @@ function CropSowingFields({
   cropId,
   required,
   maxDate,
+  seedWindowKo,
+  plantWindowKo,
+  maturities,
 }: {
   cropId: number;
   required: boolean;
   maxDate?: string;
+  /**
+   * 씨앗/모종 라디오에 따라 갈아 끼우는 문구("3.1~3.20에 씨를 뿌립니다").
+   * 마스터에 그쪽 창이 없는 작물은 null 이고 문구를 생략한다 — 한쪽만 있는 것이 정상이다.
+   */
+  seedWindowKo: string | null;
+  plantWindowKo: string | null;
+  /** 고를 수 있는 숙기. 조·중·만 차례다. 둘 이상일 때만 라디오를 띄운다. */
+  maturities: readonly MaturityOption[];
 }) {
   return (
     <div className="group/sowing flex flex-col gap-3">
@@ -277,7 +329,63 @@ function CropSowingFields({
             type="date"
           />
         </div>
+        {/* ⚠️ 이 칸이 **무엇을 묻는지** 말해 준다. 라벨이 "날짜 선택" 뿐이라 아래 씨앗/모종을
+            무엇으로 골랐든 같은 말이었고, 벼처럼 못자리와 모내기가 한 달쯤 떨어진 작물에서
+            어느 날짜를 넣을지 알 수 없었다 — 실제로 한 사용자가 두 번 다르게 넣었다.
+            한 문장에 둘을 같이 적어 라디오와 짝이 맞게 뒀다. 작물마다 다른 말(벼 "모내기한
+            날")로 바꾸려면 마스터에 옮 쪽 작업명이 따로 있어야 한다 — `crop_variants` 의
+            `sow_method` 는 대표 하나뿐이라 벼가 '모기르기' 로 온다(cropOption.toPlantMethod). */}
+        <p className="text-fg-subtle text-xs">
+          씨앗은 씨 뿌린 날, 모종은 옮겨 심은 날을 넣어 주세요.
+        </p>
       </div>
+
+      {/* "아직 안 심었어요" + 아래 씨앗/모종 라디오, **둘 다** 맞을 때만 보인다. 날짜를
+          아는 사람에게 권장 시기는 참견이고, 씨앗을 고른 사람에게 모종 날짜는 틀린 안내다.
+          ⚠️ group-has 를 두 번 겹쳤다. 조상이 둘 필요한 것처럼 보이지만 아니다 — Tailwind 가
+             `:is(…:has(A) *):is(…:has(B) *)` 로 **한 요소에 조건 둘**을 붙이므로, 같은
+             group/sowing 하나가 둘을 다 만족한다. 실제 생성 CSS 로 확인했다(2026-09-18).
+          ⚠️ 한쪽 창이 없는 작물이 있다(감자·시금치는 직파라 plant_*, 딸기는 seed_* 가 빈다).
+             그때 그 라디오를 고르면 문구가 아예 안 뜬다 — "정보 없음" 을 띄우지 않는다.
+          ⚠️ 작물 기준 창이지 지역 기준이 아니다(마스터에 지역이 없다) — 그래서 안내만 하고
+             창 밖이라고 막지 않는다. 틀릴 수 있는 정보로 막으면 안 된다. */}
+      {seedWindowKo && (
+        <p className="hidden text-fg-subtle text-xs group-has-[input[value=unknown]:checked]/sowing:group-has-[input[value=seed]:checked]/sowing:block">
+          이 작물은 보통 <span className="text-fg">{seedWindowKo}</span>.
+        </p>
+      )}
+      {plantWindowKo && (
+        <p className="hidden text-fg-subtle text-xs group-has-[input[value=unknown]:checked]/sowing:group-has-[input[value=seedling]:checked]/sowing:block">
+          이 작물은 보통 <span className="text-fg">{plantWindowKo}</span>.
+        </p>
+      )}
+
+      {/* 숙기가 하나뿐인 56작물(2026-09-18)에는 안 띄운다 — 고를 것도 없는 칸이
+          카드의 3분의 1을 채운다. 기본값은 서버(resolveVariantIds)의 대체 순서와 **같은 파일**
+          (shared/growth/maturity.ts)에서 온다 — 따로 적으면 화면과 서버가 다른 것을 고른다.
+          ⚠️ required 를 걸지 않는다. 안 고르면 서버가 중생으로 떨어뜨리므로 막을 이유가 없고,
+             hidden 인 카드에 required 를 걸면 등록 버튼이 조용히 죽는다(위 docstring). */}
+      {maturities.length >= 2 && (
+        <fieldset className="flex flex-col gap-1.5">
+          <legend className="font-medium text-fg text-xs">품종 숙기</legend>
+          <div className="flex gap-2">
+            {maturities.map((m) => (
+              <CropMaturityOption
+                cropId={cropId}
+                defaultChecked={m.type === DEFAULT_MATURITY}
+                key={m.type}
+                // 조·중·만이라는 말이 초보자에게 안 통할 수 있다. 일수를 같이 적으면 고를 수 있다
+                labelKo={
+                  m.daysToHarvest
+                    ? `${m.labelKo} ${m.daysToHarvest}일`
+                    : m.labelKo
+                }
+                value={m.type}
+              />
+            ))}
+          </div>
+        </fieldset>
+      )}
 
       <fieldset className="flex gap-2">
         <legend className="sr-only">재배 방식</legend>
@@ -331,6 +439,37 @@ export function SowingStatusOption({
       <span className="select-none text-fg-muted text-xs leading-relaxed">
         {labelKo}
       </span>
+    </label>
+  );
+}
+
+/**
+ * 숙기 라디오 한 칸. `CropSowingMethod` 와 같은 모양이되 이름만 다르다.
+ *
+ * 숙기가 바뀌면 재배 일수와 목표 GDD 가 같이 바뀐다 — 배추 45~55일, 밀 216~264일.
+ * 조생종은 셋 중 가장 짧아 잘못 고르면 **늘 이르게** 틀린다(수확 시기를 지났다고 뜬다).
+ */
+function CropMaturityOption({
+  cropId,
+  value,
+  labelKo,
+  defaultChecked,
+}: {
+  cropId: number;
+  value: string;
+  labelKo: string;
+  defaultChecked?: boolean;
+}) {
+  return (
+    <label className="flex-1 cursor-pointer rounded-md border border-border bg-surface px-2.5 py-1.5 text-center text-xs transition-colors duration-200 ease-out-expo has-[:checked]:border-accent has-[:checked]:bg-accent-subtle has-[:checked]:text-accent has-[:focus-visible]:outline has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-ring has-[:focus-visible]:outline-offset-2">
+      <input
+        className="sr-only"
+        defaultChecked={defaultChecked}
+        name={`maturity.${cropId}`}
+        type="radio"
+        value={value}
+      />
+      {labelKo}
     </label>
   );
 }

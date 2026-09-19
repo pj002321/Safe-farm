@@ -76,13 +76,19 @@ export default async function Page({
       className="mt-3 flex flex-col gap-4 rounded-lg bg-surface-2 p-4"
     >
       <input name="plotId" type="hidden" value={plot.id} />
-      <CropCards crops={crops} maxSowingDate={today} />
-      <div>
-        {/* 연타하면 같은 작물이 그만큼 더 생긴다 — `SubmitButton` 참고. */}
-        <SubmitButton pendingKo="추가하는 중" size="sm">
-          추가
-        </SubmitButton>
-      </div>
+      {/* 제출 버튼을 검색창 옆으로 올린다. 아래에 두면 작물 카드 79장(2026-09-18)을
+          끝까지 스크롤해야 눌렀다 — 카드 수는 마스터가 늘면 같이 는다.
+          `CropCards` 가 action 을 받으면 그 줄이 화면 위에 붙어 따라온다.
+          연타하면 같은 작물이 그만큼 더 생긴다 — `SubmitButton` 참고. */}
+      <CropCards
+        action={
+          <SubmitButton pendingKo="추가하는 중" size="sm">
+            추가
+          </SubmitButton>
+        }
+        crops={crops}
+        maxSowingDate={today}
+      />
     </form>
   );
 

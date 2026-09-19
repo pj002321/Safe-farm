@@ -63,6 +63,13 @@ export const ME_SECTIONS: readonly MeSection[] = [
     rail: "group-has-[#me-records:checked]/me:border-accent group-has-[#me-records:checked]/me:bg-accent-subtle group-has-[#me-records:checked]/me:text-accent group-has-[#me-records:focus-visible]/me:outline group-has-[#me-records:focus-visible]/me:outline-2 group-has-[#me-records:focus-visible]/me:outline-ring group-has-[#me-records:focus-visible]/me:outline-offset-2",
     panel: "block lg:hidden lg:group-has-[#me-records:checked]/me:block",
   },
+  {
+    id: "me-ask",
+    labelKo: "질문 기록",
+    titleKo: "지난 질문 기록",
+    rail: "group-has-[#me-ask:checked]/me:border-accent group-has-[#me-ask:checked]/me:bg-accent-subtle group-has-[#me-ask:checked]/me:text-accent group-has-[#me-ask:focus-visible]/me:outline group-has-[#me-ask:focus-visible]/me:outline-2 group-has-[#me-ask:focus-visible]/me:outline-ring group-has-[#me-ask:focus-visible]/me:outline-offset-2",
+    panel: "block lg:hidden lg:group-has-[#me-ask:checked]/me:block",
+  },
 ];
 
 /**

@@ -110,6 +110,11 @@ export interface AskInput {
   plotId?: string | null;
 }
 
+/** 사진 진단 결과. 저장하지 않는 일회성 호출이라 history_id 가 없다. */
+export interface DiagnoseImageResult {
+  diagnosis: string;
+}
+
 /** 시군구 경계 + 가장 최근 관측된 일 강수량·색상. `/map` 강수 레이어가 그대로 그린다. */
 export interface SigunguRainFeatureCollection {
   type: "FeatureCollection";
@@ -210,6 +215,58 @@ export interface PlotForecast {
 /** 좌표 하나의 NDVI·NDMI 일별 평균. Sentinel-2 재방문 주기(5일)+구름 때문에 구간의 모든 날이 오지 않는다. */
 export interface SatelliteObservations {
   points: Array<{ date: string; ndvi: number; ndmi: number }>;
+}
+
+/**
+ * 밭 하나의 AI 생육 리포트. `available` 이 false 면 `reason` 만 있고 나머지는 없다 —
+ * 남의 밭·존재하지 않는 밭(PLOT_NOT_FOUND), 기르는 작물이 없거나 관측소가 없음
+ * (NO_GROWTH_DATA), LLM 응답이 계약과 다름(GENERATION_FAILED) 세 경우를 화면이
+ * 구분해 문구를 고를 수 있게 한다.
+ */
+export interface PlotReport {
+  available: boolean;
+  reason?: "PLOT_NOT_FOUND" | "NO_GROWTH_DATA" | "GENERATION_FAILED";
+  cropNameKo?: string;
+  stageName?: string | null;
+  daysSincePlanting?: number;
+  accumulatedGdd?: number;
+  /** 역산이 안 끝난 숙기는 null — 진행 게이지는 이때 숨긴다. */
+  gddTarget?: number | null;
+  stageGddTo?: number | null;
+  waterNeedMm?: number | null;
+  rainfall7dMm?: number | null;
+  tomorrowTempMin?: number | null;
+  tomorrowTempMax?: number | null;
+  tomorrowRainChance?: number | null;
+  warnings?: string[];
+  /** 최근 14일 하루치 GDD. 기르는 중인 작물이 없으면 null. */
+  gddTrend?: Array<{ date: string; gdd: number }> | null;
+  /** 최근 실측 속도로 목표 GDD 까지 남은 날짜. 속도가 0 이하이거나 목표를 모르면 null. */
+  daysToTarget?: number | null;
+  /** 내일부터 최대 6일치 예보. */
+  forecastWeek?: Array<{
+    date: string;
+    temp_max: number | null;
+    temp_min: number | null;
+    rainfall_mm: number | null;
+    rain_chance: number | null;
+    wind_max: number | null;
+    humidity: number | null;
+  }> | null;
+  summary?: string;
+  todos?: string[];
+  cautions?: string[];
+}
+
+/**
+ * 사용자의 밭 전체를 아우르는 AI 종합 요약. `available` 이 false 면 밭이
+ * 하나도 없거나(NO_PLOTS) 어느 밭에서도 생육 데이터를 못 만든 것이다(NO_GROWTH_DATA).
+ */
+export interface FarmSummary {
+  available: boolean;
+  reason?: "NO_PLOTS" | "NO_GROWTH_DATA" | "GENERATION_FAILED";
+  summary?: string;
+  plotCount?: number;
 }
 
 export type AiResult<T> =
@@ -423,6 +480,12 @@ async function stream(
 /** 질문 한 건의 한계. 검색 + LLM 생성 + 토큰 스트리밍을 모두 덮어야 한다. */
 const ASK_TIMEOUT_MS = 60_000;
 
+/** 리포트 한 건의 한계. 안에서 GDD 계산 + Open-Meteo 조회 + 비스트리밍 LLM 호출이 순차로 돈다. */
+const REPORT_TIMEOUT_MS = 30_000;
+
+/** 사진 진단 한 건의 한계. vision 호출은 텍스트만 보낼 때보다 오래 걸린다. */
+const DIAGNOSE_TIMEOUT_MS = 30_000;
+
 export const aiService = {
   /** 서비스가 살아 있는지, 무엇을 할 수 있는지. */
   status: () => call<AiServiceStatus>("/v1/status"),
@@ -471,6 +534,17 @@ export const aiService = {
         user_id: userId,
         plot_id: input.plotId ?? null,
       }),
+    }),
+
+  /**
+   * 작물 사진 한 장을 즉석에서 진단한다. 저장하지 않는 일회성 호출이라
+   * `userId` 를 넘기지 않는다 — 이력도, 일일 한도도 없다(ai-service `api/diagnose.py`).
+   */
+  diagnoseImage: (imageDataUrl: string, question: string | null) =>
+    call<DiagnoseImageResult>("/v1/diagnose/image", {
+      method: "POST",
+      body: JSON.stringify({ image_data_url: imageDataUrl, question }),
+      timeoutMs: DIAGNOSE_TIMEOUT_MS,
     }),
 
   /** 답변 하나에 up/down 평가와 사유를 남긴다. */
@@ -564,4 +638,19 @@ export const aiService = {
       method: "POST",
       timeoutMs: BATCH_TIMEOUT_MS,
     }),
+  /**
+   * 밭 하나의 AI 생육 리포트. 숫자(GDD·강수·예보)는 부를 때마다 새로 계산하지만
+   * LLM 요약은 하루 한 번만 만들고 캐시한다(ai-service `advices` 테이블).
+   */
+  plotReport: (userId: string, plotId: string) =>
+    call<PlotReport>(
+      `/v1/reports/${encodeURIComponent(plotId)}?user_id=${encodeURIComponent(userId)}`,
+      { timeoutMs: REPORT_TIMEOUT_MS },
+    ),
+  /** 사용자의 밭 전체를 아우르는 하루 한 번짜리 AI 종합 요약. */
+  farmSummary: (userId: string) =>
+    call<FarmSummary>(
+      `/v1/reports/farm-summary?user_id=${encodeURIComponent(userId)}`,
+      { timeoutMs: REPORT_TIMEOUT_MS },
+    ),
 };
