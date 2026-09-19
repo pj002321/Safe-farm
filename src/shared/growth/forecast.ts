@@ -111,7 +111,6 @@ function walk(
   for (let step = 0; step < input.horizonDays; step += 1) {
     date = nextDay(date);
 
-    
     const forecasted = byDate.get(date);
     // fill은 평년 값, 예측이 없다면 평년 값으로 쓰자
     const row = forecasted ?? fill(date);

@@ -4,7 +4,9 @@ import { hideCitations } from "./askAnswerText";
 describe("hideCitations", () => {
   it("문장 끝의 인라인 각주를 앞 공백째 지운다", () => {
     expect(
-      hideCitations("감자는 서늘한 기후를 좋아한다. [주간농사정보 · 2024 9 감자 재배]"),
+      hideCitations(
+        "감자는 서늘한 기후를 좋아한다. [주간농사정보 · 2024 9 감자 재배]",
+      ),
     ).toBe("감자는 서늘한 기후를 좋아한다.");
   });
 
@@ -21,6 +23,8 @@ describe("hideCitations", () => {
   });
 
   it("각주가 없으면 그대로 돌려준다", () => {
-    expect(hideCitations("각주 없는 평범한 답변")).toBe("각주 없는 평범한 답변");
+    expect(hideCitations("각주 없는 평범한 답변")).toBe(
+      "각주 없는 평범한 답변",
+    );
   });
 });

@@ -57,10 +57,12 @@ export default async function Page({
   // 조회가 실패해도 마이페이지 전체가 500이 되면 안 된다 — 계정·텃밭 구역은
   // 멀쩡한데 질문 기록 하나 때문에 화면이 통째로 죽을 이유가 없다(dashboard/history
   // 와 같은 방침).
-  const askHistory = await listAskHistory(profile.id).catch((error: unknown) => {
-    console.error("[me] 질문 기록 조회 실패", error);
-    return [];
-  });
+  const askHistory = await listAskHistory(profile.id).catch(
+    (error: unknown) => {
+      console.error("[me] 질문 기록 조회 실패", error);
+      return [];
+    },
+  );
 
   const savedKey = Array.isArray(params.saved) ? params.saved[0] : params.saved;
   const errorKey = Array.isArray(params.error) ? params.error[0] : params.error;
