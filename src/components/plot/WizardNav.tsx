@@ -1,4 +1,5 @@
 import { ArrowRightIcon } from "@/components/icons";
+import { WizardSubmitButton } from "./WizardSubmitButton";
 
 /**
  * ---------------------------------------------
@@ -116,13 +117,7 @@ function NavRow({
       </span>
 
       {submit ? (
-        <button
-          className="inline-flex items-center gap-2 rounded-md bg-accent px-6 py-3 font-medium text-accent-on text-base transition-colors duration-200 ease-out-expo hover:bg-accent-hover"
-          type="submit"
-        >
-          텃밭 등록하기
-          <ArrowRightIcon />
-        </button>
+        <WizardSubmitButton />
       ) : (
         nextId && (
           <label

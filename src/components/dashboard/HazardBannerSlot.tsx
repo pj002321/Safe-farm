@@ -55,7 +55,7 @@ export async function HazardBannerSlot({
   const result = await aiService.plotForecast(
     selected.latitude,
     selected.longitude,
-    selected.id,
+    { id: selected.id, userId },
   );
 
   if (!result.ok) {

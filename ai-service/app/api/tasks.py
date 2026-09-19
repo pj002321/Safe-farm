@@ -23,7 +23,7 @@ from sqlalchemy.orm import Session
 
 from app.core.db import get_db
 from app.core.security import require_service_token
-from app.models.farm import Plot
+from app.repo.plot import live_plot
 from app.service.plot_tasks import generate_daily_tasks, generate_tasks_for_plot
 
 router = APIRouter(prefix="/v1/tasks", tags=["tasks"])
@@ -37,7 +37,7 @@ def generate_for_plot(plot_id: UUID, db: Session = Depends(get_db)) -> dict:
     행이 그대로 남아 `db.get()` 으로는 그대로 잡힌다 — 그대로 두면
     숨긴 밭에 `plot_tasks` 가 쌓이고, 그 카드는 지우는 화면이 없다.
     """
-    plot = db.query(Plot).filter(Plot.id == plot_id, Plot.deleted_at.is_(None)).first()
+    plot = live_plot(db, plot_id)
     if plot is None:
         raise HTTPException(status_code=404, detail="PLOT_NOT_FOUND")
 

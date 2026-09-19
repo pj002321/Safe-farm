@@ -8,7 +8,10 @@ import {
   WindIcon,
 } from "@/components/icons";
 import { Badge } from "@/components/shared/Badge";
-import type { SigunguWarnFeatureCollection } from "@/shared/aiService/client";
+import type {
+  SigunguWarnFeatureCollection,
+  TyphoonTrack,
+} from "@/shared/aiService/client";
 import {
   GDD_DEFAULT_COLOR,
   type GddProperties,
@@ -90,6 +93,26 @@ export function WarnSummary({ data }: { data: SigunguWarnFeatureCollection }) {
           </Badge>
         );
       })}
+    </div>
+  );
+}
+
+/**
+ * 진행 중인 태풍이 있을 때만 보이는 줄. 없는 날(대부분)이 기본값이라, `WarnSummary`
+ * 처럼 "없다"를 굳이 말하지 않는다 — 지도 위 선·원이 이미 그 뜻이다.
+ */
+export function TyphoonBanner({ track }: { track: TyphoonTrack }) {
+  if (track.analysis.length === 0 && track.forecast.length === 0) return null;
+
+  const latest = track.forecast.at(-1) ?? track.analysis.at(-1);
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <Badge icon={<TyphoonIcon className="size-3.5" />} tone="unsuitable">
+        제{track.typhoonNo}호 태풍 진행 중
+      </Badge>
+      {latest && (
+        <span className="text-fg-muted text-sm">{latest.locationKo}</span>
+      )}
     </div>
   );
 }
@@ -211,5 +234,18 @@ function detail(
     return `${r.rainMm != null ? `${r.rainMm}mm` : "데이터 없음"} · ${r.label}`;
   }
   const w = p as WindProperties;
-  return `${w.windMax != null ? `${w.windMax}m/s` : "데이터 없음"} · ${w.label}`;
+  const speed = w.windMax != null ? `${w.windMax}m/s` : "데이터 없음";
+  const dir = w.windDeg != null ? ` (${compassLabel(w.windDeg)})` : "";
+  return `${speed}${dir} · ${w.label}`;
+}
+
+/** 0~360° → 16방위 "OO풍"(바람이 불어오는 방향, 기상청 표기 관례). */
+function compassLabel(deg: number): string {
+  const names = [
+    "북풍", "북북동풍", "북동풍", "동북동풍",
+    "동풍", "동남동풍", "남동풍", "남남동풍",
+    "남풍", "남남서풍", "남서풍", "서남서풍",
+    "서풍", "서북서풍", "북서풍", "북북서풍",
+  ];
+  return names[Math.round(deg / 22.5) % 16];
 }

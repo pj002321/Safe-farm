@@ -7,6 +7,16 @@ pipeline/region/map_stations_to_sigungu.py 에 같은 공식이 있지만 그건
 from __future__ import annotations
 
 import math
+from collections.abc import Sequence
+from typing import Protocol, TypeVar
+
+
+class _LatLon(Protocol):
+    latitude: float
+    longitude: float
+
+
+_HasLatLon = TypeVar("_HasLatLon", bound=_LatLon)
 
 EARTH_RADIUS_KM = 6371.0
 
@@ -18,6 +28,19 @@ def haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     dl = math.radians(lon2 - lon1)
     a = math.sin(dp / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dl / 2) ** 2
     return 2 * EARTH_RADIUS_KM * math.asin(math.sqrt(a))
+
+
+def nearest(lat: float, lon: float, points: Sequence[_HasLatLon]) -> _HasLatLon | None:
+    """좌표에서 가장 가까운 것 하나. 후보가 비면 None.
+
+    후보는 `latitude` · `longitude` 를 가진 무엇이든 된다(관측소·밭·격자점).
+    거리 비교만 하므로 정렬하지 않는다 — 전국 100여 개짜리 목록에서 최솟값
+    하나를 찾는 데 O(n log n) 을 쓸 이유가 없다.
+    """
+    if not points:
+        return None
+    return min(points, key=lambda p: haversine_km(lat, lon, p.latitude, p.longitude))
+
 
 def point_in_ring(lon: float, lat: float, ring: list) -> bool:
     """고리(닫힌 선) 안에 점이 있는가. ray casting.

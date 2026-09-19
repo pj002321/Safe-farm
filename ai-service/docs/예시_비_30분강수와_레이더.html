@@ -1,0 +1,618 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>비 — 30분 강수값과 레이더 영상</title>
+<style>
+  :root{
+    --slate-0:#fff; --slate-50:#f8f8fb; --slate-100:#f0f0f6; --slate-200:#e4e4ee; --slate-300:#cdcdde;
+    --slate-400:#9998b3; --slate-500:#6a6986; --slate-700:#383749; --slate-800:#24232f; --slate-850:#2b2a38;
+    --slate-900:#16161e; --slate-950:#0b0a12;
+    --orbit-50:#f0efff; --orbit-300:#a79dff; --orbit-500:#6b55f5; --orbit-600:#5a41e0; --orbit-950:#1c1840;
+    --bg:var(--slate-50); --surface:var(--slate-0); --surface-2:var(--slate-100);
+    --border-c:var(--slate-200); --border-strong:var(--slate-300);
+    --fg:var(--slate-900); --fg-muted:var(--slate-500); --fg-subtle:var(--slate-400);
+    --accent:var(--orbit-600); --accent-subtle:var(--orbit-50); --accent-on:#fff;
+    --sea:#eef2fb; --land:#e8e8f1; --analysis:#5a41e0; --forecast:#d9480f; --cone:#f08c00; --plot:#2f9e44;
+    --mono:ui-monospace,SFMono-Regular,"Cascadia Mono",Consolas,"D2Coding",monospace;
+  }
+  :root:not([data-theme="light"]){ @media (prefers-color-scheme: dark){
+    --bg:var(--slate-950); --surface:var(--slate-900); --surface-2:var(--slate-800);
+    --border-c:var(--slate-850); --border-strong:var(--slate-700);
+    --fg:var(--slate-100); --fg-muted:var(--slate-400); --fg-subtle:var(--slate-500);
+    --accent:var(--orbit-300); --accent-subtle:var(--orbit-950); --accent-on:var(--slate-950);
+    --sea:#141828; --land:#252436; --analysis:#a79dff; --forecast:#ff922b; --cone:#ffc078; --plot:#69db7c;
+  }}
+  @media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+    --bg:var(--slate-950); --surface:var(--slate-900); --surface-2:var(--slate-800);
+    --border-c:var(--slate-850); --border-strong:var(--slate-700);
+    --fg:var(--slate-100); --fg-muted:var(--slate-400); --fg-subtle:var(--slate-500);
+    --accent:var(--orbit-300); --accent-subtle:var(--orbit-950); --accent-on:var(--slate-950);
+    --sea:#141828; --land:#252436; --analysis:#a79dff; --forecast:#ff922b; --cone:#ffc078; --plot:#69db7c;
+  }}
+  *{box-sizing:border-box}
+  body{background:var(--bg);color:var(--fg);font:15px/1.7 -apple-system,BlinkMacSystemFont,"Pretendard","Malgun Gothic",sans-serif;margin:0}
+  .wrap{max-width:1080px;margin:0 auto;padding:40px 22px 80px}
+  h1{font-size:30px;line-height:1.3;margin:0 0 10px;letter-spacing:-.02em}
+  h2{font-size:21px;margin:56px 0 14px;padding-top:18px;border-top:1px solid var(--border-c);letter-spacing:-.01em}
+  h3{font-size:16px;margin:26px 0 8px;color:var(--fg)}
+  p{margin:10px 0}
+  .lede{color:var(--fg-muted);font-size:15px;margin:0 0 6px}
+  .oneline{background:var(--accent-subtle);border:1px solid var(--border-c);border-left:3px solid var(--accent);
+           border-radius:10px;padding:14px 18px;margin:22px 0}
+  .oneline b{color:var(--accent)}
+  code{font-family:var(--mono);font-size:.88em;background:var(--surface-2);padding:1px 5px;border-radius:4px}
+  table{width:100%;border-collapse:collapse;margin:14px 0;font-size:13.5px;display:block;overflow-x:auto}
+  th,td{border:1px solid var(--border-c);padding:7px 10px;text-align:left;vertical-align:top}
+  th{background:var(--surface-2);font-weight:600;white-space:nowrap}
+  td code{background:transparent;padding:0;color:var(--accent)}
+  tr.hl td{background:var(--accent-subtle)}
+  .muted{color:var(--fg-muted)}
+  .card{background:var(--surface);border:1px solid var(--border-c);border-radius:14px;padding:18px;margin:18px 0}
+  /* 지도 */
+  .mapbox{background:var(--surface);border:1px solid var(--border-c);border-radius:14px;overflow:hidden;margin:18px 0}
+  .controls{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:12px 14px;border-bottom:1px solid var(--border-c);background:var(--surface-2)}
+  .chip{border:1px solid var(--border-strong);background:var(--surface);color:var(--fg);border-radius:999px;
+        padding:5px 13px;font-size:13px;cursor:pointer;font-family:inherit}
+  .chip[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--accent-on)}
+  .sep{width:1px;height:20px;background:var(--border-strong);margin:0 4px}
+  .maparea{position:relative;background:var(--sea)}
+  svg.map{display:block;width:100%;height:auto}
+  .legend{display:flex;flex-wrap:wrap;gap:16px;padding:11px 14px;border-top:1px solid var(--border-c);
+          background:var(--surface-2);font-size:12.5px;color:var(--fg-muted)}
+  .legend i{display:inline-block;width:22px;height:0;border-top-width:3px;vertical-align:middle;margin-right:6px}
+  .tip{position:absolute;pointer-events:none;background:var(--surface);border:1px solid var(--border-strong);
+       border-radius:9px;padding:9px 11px;font-size:12.5px;line-height:1.55;box-shadow:0 6px 20px rgba(0,0,0,.14);
+       opacity:0;transition:opacity .12s;max-width:250px;z-index:5}
+  .tip b{color:var(--accent)}
+  .tip .k{color:var(--fg-subtle);display:inline-block;min-width:62px}
+  /* 탭 */
+  .tabs{display:flex;flex-wrap:wrap;gap:6px;margin:18px 0 0}
+  .tab{border:1px solid var(--border-c);border-bottom:none;background:var(--surface-2);color:var(--fg-muted);
+       border-radius:9px 9px 0 0;padding:8px 14px;font-size:13.5px;cursor:pointer;font-family:inherit}
+  .tab[aria-selected="true"]{background:var(--surface);color:var(--fg);font-weight:600;box-shadow:inset 0 2px 0 var(--accent)}
+  .panel{border:1px solid var(--border-c);border-radius:0 10px 10px 10px;background:var(--surface);overflow:hidden}
+  .panel[hidden]{display:none!important}
+  .panel .file{font-family:var(--mono);font-size:12px;color:var(--fg-muted);padding:9px 14px;
+               border-bottom:1px solid var(--border-c);background:var(--surface-2)}
+  pre{margin:0;padding:16px;overflow-x:auto;font-family:var(--mono);font-size:12.5px;line-height:1.65;color:var(--fg)}
+  .note{border-left:3px solid var(--cone);background:var(--surface);border:1px solid var(--border-c);
+        border-left:3px solid var(--cone);border-radius:9px;padding:12px 15px;margin:14px 0;font-size:14px}
+  .note b{color:var(--forecast)}
+  ol.steps{padding-left:20px} ol.steps li{margin:7px 0}
+  .foot{margin-top:56px;padding-top:18px;border-top:1px solid var(--border-c);color:var(--fg-subtle);font-size:12.5px}
+</style>
+
+</head>
+<body>
+<div class="wrap">
+
+<h1>비 — 30분 강수값(<code>varn=RR</code>)과 레이더 합성영상(8.3.1)</h1>
+<p class="lede">2026-09-19 · 기상청 API허브 · <b>아래 숫자와 그림은 전부 실제 응답이다.</b> 우리 키(<code>KMA_API_KEY</code>)로 그대로 받았다.</p>
+
+<div class="oneline">
+  <b>둘은 다른 물건이다.</b> <code>varn=RR</code> 은 <b>좌표 하나의 30분 강수값(숫자)</b> — 판정에 쓴다.
+  8.3.1 레이더 합성영상은 <b>투명 배경 에코 그림(PNG)</b> — 지도에 깔아 보여주는 용도다.
+  <b>RR 은 지금 바로 되고</b>(우리는 같은 엔드포인트의 <code>LST</code> 만 쓰고 있다),
+  <b>레이더는 문서의 예시 시각만 나온다</b> — 최근 시각은 막혀 있어 활용신청이 필요하다.
+</div>
+
+<h2>1. 두 갈래</h2>
+<table>
+<thead><tr><th></th><th><code>varn=RR</code> (농업기상 위성·레이더 추정)</th><th>8.3.1 레이더 합성영상</th></tr></thead>
+<tbody>
+<tr><th>엔드포인트</th><td><code>typ01/cgi-bin/url/nph-arcltr_sat_txt</code></td><td><code>typ07/afsiwa/iwa/api/iwaImgUrlApi/retObsImgUrl.kfrm</code></td></tr>
+<tr><th>돌려주는 것</th><td>JSON 숫자 (mm)</td><td>PNG 이미지 (투명 배경, 에코만)</td></tr>
+<tr><th>공간</th><td><b>좌표 하나</b> — 밭 단위</td><td>격자 그림 — 전국/광역</td></tr>
+<tr><th>시간</th><td>30분 간격(조절 가능)</td><td>10분 간격 (문서 기준)</td></tr>
+<tr><th>우리 구조에</th><td><b>✔ 판정에 쓸 수 있다</b> — 조언·카드</td><td>화면에만. OCR 없이는 판정 불가</td></tr>
+<tr><th>지금 되나</th><td><b>✔ 됨</b> (같은 키로 <code>LST</code> 를 이미 쓰는 중)</td><td>예시 시각만. 최근 시각은 HTML 오류</td></tr>
+</tbody>
+</table>
+
+<h2>2. <code>varn=RR</code> — 좌표 하나의 30분 강수</h2>
+<p>우리가 <b>이미 쓰고 있는</b> 엔드포인트다. <code>kma_client.py:62</code> 가 서리 판정을 위해 <code>varn=LST</code>(지표온도)로 부르고 있고,
+같은 창구가 <b><code>RR</code>(강수) · <code>CA</code>(운량) · <code>ASR</code>(일사)</b> 도 준다. 그 넷이 전부다 — 식생지수 같은 건 없다(확인함).</p>
+
+<div class="panel"><div class="file">요청 — 기존 _get 을 그대로 쓴다</div><pre>GET https://apihub.kma.go.kr/api/typ01/cgi-bin/url/nph-arcltr_sat_txt
+    ?authKey={KMA_API_KEY}
+    &amp;tm1=202608301500&amp;tm2=202608301800   # UTC. KST 아님
+    &amp;int=30                              # 분 간격
+    &amp;lat=35.9976&amp;lon=126.7614            # 좌표 하나 — 밭 좌표를 그대로
+    &amp;varn=RR                             # RR 강수 · CA 운량 · LST 지표온도 · ASR 일사
+    &amp;disp=2                              # JSON
+
+→ [{"TM1":"202608301500","TM2":"202608301800","VAR":"RR",
+    "TM_INT0":"7.1","TM_INT1":"6.5","TM_INT2":"13.4", ... ,"LAT":"35.9976","LON":"126.7614"}]</pre></div>
+
+<h3>실측 — 2026-08-31 호우일, 관측소 세 곳의 하루</h3>
+<p>KST 하루(48칸)를 30분 간격으로 받았다. 막대는 30분 강수, 선은 누적이다.</p>
+<div class="mapbox">
+  <div class="controls">
+    <button class="chip" data-st="140" aria-pressed="true">군산 (ASOS 154.0mm)</button>
+    <button class="chip" data-st="133" aria-pressed="false">대전 (94.3mm)</button>
+    <button class="chip" data-st="235" aria-pressed="false">보령 (122.0mm)</button>
+    <span class="sep"></span>
+    <button class="chip" data-layer="cum" aria-pressed="true">누적선</button>
+    <button class="chip" data-layer="asos" aria-pressed="true">ASOS 일강수</button>
+  </div>
+  <div class="maparea" style="background:var(--surface)">
+    <svg class="map" id="chart" viewBox="0 0 940 380" role="img" aria-label="30분 강수 그래프"></svg>
+    <div class="tip" id="tip"></div>
+  </div>
+  <div class="legend">
+    <span><i style="border-top:10px solid var(--analysis)"></i>30분 강수 (RR)</span>
+    <span><i style="border-top:3px solid var(--forecast)"></i>누적</span>
+    <span><i style="border-top:3px dashed var(--cone)"></i>ASOS 일강수(실제 관측)</span>
+    <span id="meta" class="muted"></span>
+  </div>
+</div>
+
+<h3>★ 믿어도 되나 — ASOS 실측과 대조</h3>
+<p>같은 날, 같은 지점의 <b>지상 관측(ASOS) 일강수</b>와 RR 48칸의 합을 견줬다.</p>
+<table>
+<thead><tr><th>관측소</th><th>RR 합 (30분 × 48)</th><th>ASOS 일강수</th><th>비율</th><th>30분 최대</th><th>결측</th></tr></thead>
+<tbody>
+<tr><td>군산 (140)</td><td>120.6 mm</td><td>154.0 mm</td><td><b>78%</b></td><td>14.2 mm</td><td>1칸</td></tr>
+<tr><td>대전 (133)</td><td>61.8 mm</td><td>94.3 mm</td><td><b>66%</b></td><td>9.1 mm</td><td>1칸</td></tr>
+<tr><td>보령 (235)</td><td>52.9 mm</td><td>122.0 mm</td><td><b>43%</b></td><td>4.2 mm</td><td>1칸</td></tr>
+</tbody>
+</table>
+
+<div class="note">
+  <b>결론: 양(量)으로 쓰면 안 된다.</b> RR 은 실제보다 <b>일관되게 적게</b> 나온다(43~78%, 이 표본에선 항상 과소).
+  강수량 판단(“필요 30mm 인데 20mm 왔다”)에 쓰면 늘 “물이 모자라다”로 기울어 오경보가 난다.<br>
+  <b>쓸 자리는 “언제”다.</b> 비가 <b>온 시각과 분포</b>는 잘 잡는다 — 군산의 새벽 집중호우 구간이 그래프에 그대로 보인다.
+  “오늘 새벽에 비가 왔다 / 지금은 그쳤다 / 6시간째 안 온다” 같은 <b>타이밍 판정</b>에 쓰고,
+  양이 필요하면 지금처럼 <b>ASOS(<code>weather_daily</code>)와 Open-Meteo</b> 를 쓴다.
+</div>
+
+<h3>함정 다섯 — 전부 밟아 봤다</h3>
+<table>
+<thead><tr><th>#</th><th>함정</th><th>증상</th><th>대응</th></tr></thead>
+<tbody>
+<tr><td>①</td><td><b>한 번에 24칸</b>이 상한</td><td>넘기면 잘린다</td><td><code>LST_MAX_ITEMS = 24</code> · <code>_utc_windows()</code> 가 이미 끊어 준다</td></tr>
+<tr><td>②</td><td>창이 넓으면 <b>504</b></td><td>24시간을 한 번에 달라면 게이트웨이 타임아웃</td><td>3시간(7칸)씩 끊고 실패 시 1회 재시도. 실제로 이렇게 해서 다 받았다</td></tr>
+<tr><td>③</td><td><code>tm1/tm2</code> 는 <b>UTC</b></td><td>KST 를 넣으면 9시간 어긋난 하루</td><td><code>_kst_day_utc_range()</code> — 이미 있는 함수</td></tr>
+<tr><td>④</td><td><code>-999</code>·<code>nan</code> 은 결측</td><td>합계가 음수로 터진다</td><td><code>clean(v, missing_below=-900)</code> · <code>nan</code> 문자열도 걸러야 함</td></tr>
+<tr><td>⑤</td><td>창 경계가 <b>겹친다</b></td><td>tm1·tm2 양끝 포함이라 같은 시각이 두 번</td><td>시각을 키로 묶어 뒤엣것을 남긴다(49칸 → 48칸)</td></tr>
+</tbody>
+</table>
+<h2>3. 8.3.1 레이더 합성영상 — 사용 예시</h2>
+<p>문서의 예시 URL 을 우리 키로 그대로 불렀다. <b>돌아온 것은 PNG 한 장</b>이다.</p>
+
+<div class="panel"><div class="file">요청 (문서 예시 그대로 · analTime 만 바꾸면 된다)</div><pre>GET https://apihub.kma.go.kr/api/typ07/afsiwa/iwa/api/iwaImgUrlApi/retObsImgUrl.kfrm
+    ?obs=CPSTRDR          # 합성레이더
+    &amp;varGrp=RDR_QCD        # 레이더 품질관리 자료
+    &amp;var=HSR               # Hybrid Surface Rainfall — 지표 부근 최대반사도
+    &amp;lev=-999999
+    &amp;analTime=202307071500  # 분석 시각(UTC) — 10분 단위
+    &amp;PROJ=LCC               # 람베르트 정각원추. 한반도/동아시아/태풍영역
+    &amp;ZOOMLVL=7
+    &amp;stLon=48.197&amp;stLat=36.054&amp;edLon=162.351&amp;edLat=3.372   # 좌상/우하 경위도
+    &amp;basicSmtLvl=3&amp;basicTotSmtLvl=5&amp;meta=0
+    &amp;authKey={KMA_API_KEY}
+
+→ HTTP 200 · Content-Type: image/png · 19,881 바이트</pre></div>
+
+<h3>받은 그림 (실제 응답)</h3>
+<p><b>배경이 투명하고 에코만 들어 있다.</b> 해안선도 격자도 없다 — 지도는 우리가 깔고 이 그림을 위에 얹으라는 뜻이다.
+아래는 그 PNG 를 우리 시군구 폴리곤 위에 올려 본 것이다(위치 정합은 데모용 근사).</p>
+
+<div class="mapbox">
+  <div class="controls">
+    <button class="chip" data-radar="raw" aria-pressed="true">받은 그대로</button>
+    <button class="chip" data-radar="over" aria-pressed="false">우리 지도에 얹기</button>
+    <span class="sep"></span>
+    <span class="muted" style="font-size:12.5px">analTime 202307071500Z · CPSTRDR/HSR</span>
+  </div>
+  <div class="maparea" id="radarbox" style="background:var(--surface-2);padding:0">
+    <svg class="map" id="radar" viewBox="0 0 940 529" role="img" aria-label="레이더 합성영상"></svg>
+  </div>
+  <div class="legend"><span class="muted">에코 색은 반사도(dBZ) — 파랑 약한 비 → 초록 → 노랑 → 빨강 강한 비. 범례는 응답에 안 들어 있다.</span></div>
+</div>
+
+<h3>실측으로 드러난 제약 셋</h3>
+<table>
+<thead><tr><th>#</th><th>확인한 것</th><th>뜻</th></tr></thead>
+<tbody>
+<tr><td>①</td><td><b>문서 예시 시각(2023-07-07 15:00Z)만 PNG 가 온다.</b> 최근 시각(어제·오늘)과 2026-08-31 호우일은 모두 <b>HTML 안내 페이지</b>가 온다</td><td>이 카테고리는 <b>활용신청·승인 전</b>이다(화면에도 “API 활용신청” 버튼이 붙어 있다). 태풍 탭은 이미 승인돼 있어 실시간이 나오는 것과 대비된다</td></tr>
+<tr><td>②</td><td><code>mapRange=KOR</code> 로 바꾸면 <b>같은 시각도 실패</b>한다</td><td><code>mapRange</code> 와 <code>stLon/stLat/edLon/edLat</code> 은 같이 못 쓴다. 예시의 <b>경위도 4개를 쓰는 쪽</b>이 확실하다</td></tr>
+<tr><td>③</td><td><code>meta=0</code> 과 <code>meta=1</code> 이 <b>같은 PNG</b> 를 돌려준다</td><td>메타(좌표 정합 정보)를 따로 못 받는다는 뜻 — 오버레이 위치는 <b>우리가 요청에 넣은 bbox</b> 로 맞춰야 한다</td></tr>
+</tbody>
+</table>
+
+<div class="note">
+  <b>그래서 레이더는 “보여주기” 까지다.</b> 승인을 받아 실시간이 열려도 돌아오는 건 그림이라,
+  “비구름이 40분 뒤 도착” 같은 <b>판정</b>은 못 만든다. 판정이 필요하면 <code>varn=RR</code>(숫자)이고,
+  화면에 깔 장식·상황 인지용이면 이 PNG 다. 둘을 같이 쓰는 게 맞다.
+</div>
+<h2>4. 코드</h2>
+<div class="tabs" role="tablist">
+  <button class="tab" role="tab" aria-selected="true"  data-panel="r1">① 수집 · kma_client.py</button>
+  <button class="tab" role="tab" aria-selected="false" data-panel="r2">② 판정 · domain/rainfall.py</button>
+  <button class="tab" role="tab" aria-selected="false" data-panel="r3">③ 레이더 오버레이 · Next</button>
+</div>
+<div class="panel" id="r1"><div class="file">ai-service/pipeline/kma_client.py</div><pre># pipeline/kma_client.py — 이미 있는 _fetch_lst_chunk 옆에 붙인다. 새 파일이 필요 없다.
+
+# 이 창구가 주는 변수는 넷뿐이다 — RR(강수) CA(운량) LST(지표온도) ASR(일사).
+# 다른 이름을 주면 서버가 &lt;Error&gt; [정의되지 않은 옵션] varn= : RR, CA, LST, ASR 을 돌려준다.
+SAT_VARS = (&quot;RR&quot;, &quot;CA&quot;, &quot;LST&quot;, &quot;ASR&quot;)
+
+
+def fetch_point_series(api_key, lat, lon, varn, kst_day, interval=30):
+    &quot;&quot;&quot;
+    # summary
+    좌표 하나의 KST 하루치를 interval 분 간격으로 받는다. RR 이면 30분 강수(mm) 다.
+
+    ⚠ 한 번에 24칸이 상한이다(LST_MAX_ITEMS). _utc_windows 가 그 규칙으로 끊어 준다.
+    ⚠ 24시간을 한 창으로 달라면 **504** 가 온다. 3시간(7칸)씩 끊고 실패하면 한 번 더 친다 —
+      2026-08-31 하루(48칸)를 이 방식으로 전부 받았다.
+    ⚠ tm1/tm2 는 UTC 다. KST 를 넣으면 9시간 어긋난 하루를 받는다.
+    ⚠ 창 경계가 양끝 포함이라 같은 시각이 두 번 온다. 시각을 키로 접어 49칸을 48칸으로 만든다.
+
+    # params
+    api_key: KMA_API_KEY&lt;br&gt;
+    lat, lon: 밭 좌표&lt;br&gt;
+    varn: SAT_VARS 중 하나&lt;br&gt;
+    kst_day: 받을 날(KST)&lt;br&gt;
+    interval: 분 간격. 30 이 기본&lt;br&gt;
+
+    # returns
+    {UTC &#x27;yyyymmddHHMM&#x27;: 값 or None}. 시각 오름차순으로 읽으면 시계열이다
+    &quot;&quot;&quot;
+    if varn not in SAT_VARS:
+        raise ValueError(f&quot;varn 은 {SAT_VARS} 중 하나여야 한다: {varn}&quot;)
+
+    start, end = _kst_day_utc_range(kst_day)
+    out: dict[str, float | None] = {}
+    # 3시간 = 7칸. 24칸 상한 안이고 504 가 안 나는 크기다(실측)
+    for w_start, w_end in _utc_windows(start, end, interval, max_items=7):
+        chunk = _sat_chunk(api_key, lat, lon, w_start, w_end, varn, interval)
+        for i, key in enumerate(sorted(chunk, key=lambda k: int(k[6:]))):
+            at = w_start + timedelta(minutes=interval * i)
+            out[at.strftime(&quot;%Y%m%d%H%M&quot;)] = clean(chunk[key])
+    return out
+
+
+def _sat_chunk(api_key, lat, lon, w_start, w_end, varn, interval, tries=2):
+    &quot;&quot;&quot;단일 호출 + 재시도. 504 와 비JSON 응답을 같은 실패로 본다.&quot;&quot;&quot;
+    for _ in range(tries):
+        resp = _get(
+            f&quot;{CGI_URL}/nph-arcltr_sat_txt&quot;,
+            {
+                &quot;authKey&quot;: api_key,
+                &quot;tm1&quot;: w_start.strftime(&quot;%Y%m%d%H%M&quot;),
+                &quot;tm2&quot;: w_end.strftime(&quot;%Y%m%d%H%M&quot;),
+                &quot;int&quot;: interval,
+                &quot;lat&quot;: lat,
+                &quot;lon&quot;: lon,
+                &quot;varn&quot;: varn,
+                &quot;disp&quot;: 2,
+            },
+        )
+        if resp:
+            row = resp[0]
+            return {k: v for k, v in row.items() if k.startswith(&quot;TM_INT&quot;)}
+        time.sleep(1)
+    # 한 창이 비어도 하루 전체를 버리지 않는다 — 그 시각만 결측으로 남는다
+    return {}
+</pre></div><div class="panel" id="r2" hidden><div class="file">ai-service/app/domain/rainfall.py  (신규)</div><pre># app/domain/rainfall.py — 새 파일. 순수 함수만.
+
+&quot;&quot;&quot;30분 강수 시계열에서 &#x27;언제 왔나&#x27; 를 읽는다.
+
+⚠ **양(量)으로 쓰지 않는다.** RR 은 ASOS 실측 대비 43~78% 로 일관되게 적게 나온다
+  (2026-08-31 군산 120.6/154.0 · 대전 61.8/94.3 · 보령 52.9/122.0 실측).
+  &quot;필요 30mm 인데 20mm 왔다&quot; 같은 판정에 쓰면 늘 물이 모자란 쪽으로 기운다.
+  양이 필요하면 weather_daily(ASOS) 와 Open-Meteo 를 쓴다.
+⚠ 이 모듈이 내는 것은 **시각**이다 — 마지막으로 비가 온 때, 지금 오고 있나, 몇 시간째 마른가.
+&quot;&quot;&quot;
+
+# 이보다 적으면 &quot;안 온 것&quot; 으로 본다. 레이더 추정의 바닥 잡음이 0.1~0.2mm 로 깔린다
+TRACE_MM = 0.3
+# 이 시간 이상 비가 없으면 &quot;그쳤다&quot; 로 본다. 소나기 사이 공백을 한 번의 비로 묶는 창
+GAP_HOURS = 3
+
+
+def last_rain_at(series):
+    &quot;&quot;&quot;
+    # summary
+    마지막으로 유의미한 비가 온 시각. 하루 종일 안 왔으면 None.
+
+    # params
+    series: fetch_point_series 결과 {UTC: mm}&lt;br&gt;
+
+    # returns
+    UTC 문자열 또는 None
+    &quot;&quot;&quot;
+    wet = [t for t, v in series.items() if v is not None and v &gt;= TRACE_MM]
+    return max(wet) if wet else None
+
+
+def raining_now(series, now_utc):
+    &quot;&quot;&quot;지금(가장 가까운 칸)에 비가 오고 있나. 결측이면 False 가 아니라 None 이다 —
+    &#x27;안 온다&#x27; 와 &#x27;모른다&#x27; 를 섞으면 조언이 거짓말을 한다.&quot;&quot;&quot;
+    if not series:
+        return None
+    nearest = min(series, key=lambda t: abs(int(t) - int(now_utc)))
+    v = series[nearest]
+    return None if v is None else v &gt;= TRACE_MM
+
+
+def dry_hours(series, now_utc):
+    &quot;&quot;&quot;마지막 비로부터 몇 시간이 지났나. 자료 안에 비가 없으면 None(자료가 짧아서일 수 있다).&quot;&quot;&quot;
+    last = last_rain_at(series)
+    if last is None:
+        return None
+    return round((_to_dt(now_utc) - _to_dt(last)).total_seconds() / 3600, 1)
+
+
+def rain_episodes(series):
+    &quot;&quot;&quot;비가 온 구간을 (시작, 끝, 합계mm) 로 묶는다. GAP_HOURS 이상 비면 다른 구간이다.
+
+    화면의 &#x27;오늘 새벽 3시~6시에 22mm&#x27; 같은 문장이 여기서 나온다.
+    &quot;&quot;&quot;
+    episodes, cur = [], None
+    for t in sorted(series):
+        v = series[t]
+        wet = v is not None and v &gt;= TRACE_MM
+        if wet and cur is None:
+            cur = {&quot;from&quot;: t, &quot;to&quot;: t, &quot;mm&quot;: v}
+        elif wet:
+            cur[&quot;to&quot;], cur[&quot;mm&quot;] = t, cur[&quot;mm&quot;] + v
+        elif cur and _gap_hours(cur[&quot;to&quot;], t) &gt;= GAP_HOURS:
+            episodes.append(cur); cur = None
+    if cur:
+        episodes.append(cur)
+    return episodes
+</pre></div><div class="panel" id="r3" hidden><div class="file">src/components/map/useRadarOverlay.ts · src/app/api/weather/radar/route.ts  (신규)</div><pre>/**
+ * ---------------------------------------------
+ * [Feature]: 레이더 에코 오버레이 (카카오)
+ *
+ * [Description]
+ * - 기상청이 주는 것은 **투명 배경 PNG 한 장**이다. 해안선도 격자도 없다 —
+ *   우리 지도를 깔고 그 위에 얹으라는 뜻이라 GroundOverlay 가 맞다.
+ * - ⚠ 위치 정합은 **우리가 요청에 넣은 bbox 로만** 맞출 수 있다. meta=1 을 줘도
+ *   같은 PNG 가 오고 좌표 메타가 따로 오지 않는다(실측). 그래서 요청의
+ *   stLon/stLat/edLon/edLat 을 그대로 LatLngBounds 로 재사용한다 — 한쪽만 바꾸면 어긋난다.
+ * - ⚠ 이미지 URL 에 authKey 가 들어간다. **브라우저로 직접 부르지 않는다** —
+ *   Next 라우트가 대신 받아 전달한다(ai-service 토큰과 같은 이유: 키가 새면 우리 쿼터가 샌다).
+ *
+ * [Usage]
+ * ```tsx
+ * useRadarOverlay(map, &quot;202307071500&quot;, true);
+ * ```
+ * ---------------------------------------------
+ */
+
+// 요청 bbox 와 오버레이 bounds 는 **한 곳에서** 만든다. 두 군데에 적으면 반드시 어긋난다
+export const RADAR_BBOX = {
+  stLon: 48.19729473179383, stLat: 36.05394599513232,
+  edLon: 162.3512886531648, edLat: 3.3720585707135684,
+};
+
+export function useRadarOverlay(
+  map: kakao.maps.Map | null,
+  analTimeUtc: string | null,
+  show: boolean,
+) {
+  useEffect(() =&gt; {
+    if (!map || !analTimeUtc || !show) return;
+    const sdk = window.kakao;
+
+    // 키는 서버에만 있다. 라우트가 기상청에서 받아 image/png 로 그대로 흘려준다
+    const src = `/api/weather/radar?analTime=${analTimeUtc}`;
+
+    const bounds = new sdk.maps.LatLngBounds(
+      new sdk.maps.LatLng(RADAR_BBOX.edLat, RADAR_BBOX.stLon), // 남서
+      new sdk.maps.LatLng(RADAR_BBOX.stLat, RADAR_BBOX.edLon), // 북동
+    );
+    const overlay = new sdk.maps.GroundOverlay(src, bounds, { opacity: 0.6 });
+    overlay.setMap(map);
+
+    // 시각을 바꾸면 이전 장을 반드시 걷는다 — 안 걷으면 10분치가 계속 쌓여
+    // 화면이 점점 붉어진다(에코가 겹쳐 보인다)
+    return () =&gt; overlay.setMap(null);
+  }, [map, analTimeUtc, show]);
+}
+
+
+// ─── src/app/api/weather/radar/route.ts ────────────────────────────────────
+// 브라우저에 authKey 를 내보내지 않으려고 한 겹 세운다. 이미지를 그대로 흘린다.
+
+export async function GET(request: Request) {
+  const analTime = new URL(request.url).searchParams.get(&quot;analTime&quot;);
+  if (!analTime || !/^\d{12}$/.test(analTime)) {
+    return new Response(&quot;analTime 은 yyyymmddHHMM(UTC) 이어야 합니다&quot;, { status: 400 });
+  }
+  const upstream = await fetch(radarUrl(analTime), { next: { revalidate: 300 } });
+  // 자료가 없는 시각이면 기상청이 **200 에 HTML 안내 페이지**를 준다. 그걸 그대로
+  // 흘리면 지도에 깨진 이미지가 뜬다 — content-type 을 보고 204 로 바꿔 화면이 조용히 넘어가게 한다
+  const type = upstream.headers.get(&quot;content-type&quot;) ?? &quot;&quot;;
+  if (!type.startsWith(&quot;image/&quot;)) return new Response(null, { status: 204 });
+
+  return new Response(upstream.body, {
+    headers: { &quot;content-type&quot;: type, &quot;cache-control&quot;: &quot;public, max-age=300&quot; },
+  });
+}
+</pre></div><h2>5. 어디에 쓰나 — 물 조언과 잇기</h2>
+<p><code>조사_물조언_데이터선택.md</code> 가 세운 설계에 이 값이 <b>한 칸</b>으로 들어간다.</p>
+<table>
+<thead><tr><th>신호</th><th>출처</th><th>말하는 것</th></tr></thead>
+<tbody>
+<tr><td>마름의 누적</td><td>Open-Meteo Σ(강수 − ET0) 14일</td><td>얼마나 말라 왔나</td></tr>
+<tr><td>현재 토양수분</td><td>Open-Meteo 9~27cm</td><td>지금 남은 물</td></tr>
+<tr class="hl"><td><b>마지막 비 시각</b></td><td><b><code>varn=RR</code> 30분 시계열</b></td><td><b>“6시간째 안 왔다 / 새벽에 왔다”</b> — 양이 아니라 타이밍</td></tr>
+<tr><td>앞으로</td><td>Open-Meteo 예보 3·7일</td><td>기다리면 되나</td></tr>
+</tbody>
+</table>
+
+<div class="note">
+  <b>문장이 이렇게 바뀐다.</b><br>
+  지금: “최근 7일 강수 0mm 입니다.” — 관측소 기준 하루 단위라 새벽 소나기를 못 본다.<br>
+  이후: “<b>어제 새벽 3시~5시에 잠깐 온 뒤 28시간째 비가 없습니다.</b> 앞으로 3일 예보도 0mm 라 물이 필요합니다.”
+  — 밭 좌표 기준 30분 해상도라 “언제”가 들어간다.
+</div>
+
+<h2>6. 정리</h2>
+<table>
+<thead><tr><th>하고 싶은 것</th><th>되나</th><th>재료</th></tr></thead>
+<tbody>
+<tr><td>며칠 뒤 비 오나</td><td>✅ 이미 함</td><td>Open-Meteo 일별 예보</td></tr>
+<tr class="hl"><td>지금·최근 내 밭에 비가 왔나 (타이밍)</td><td>✅ <b>가능. 안 쓰고 있을 뿐</b></td><td><code>varn=RR</code> 30분 — 코드 한 함수</td></tr>
+<tr><td>비가 얼마나 왔나 (양)</td><td>✅ 이미 함</td><td>ASOS <code>weather_daily</code> · Open-Meteo. <b>RR 로 대체하지 말 것</b>(43~78%)</td></tr>
+<tr><td>비구름이 어디서 오나 (흐름)</td><td>🟡 그림만</td><td>8.3.1 레이더 PNG — <b>활용신청 필요</b>. 판정엔 못 씀</td></tr>
+</tbody>
+</table>
+
+<p class="foot">
+  이 문서의 숫자는 2026-09-19 에 <code>KMA_API_KEY</code> 로 직접 받은 것이다.
+  RR 시계열은 2026-08-31 KST 하루(30분 × 48칸)를 3시간씩 8번에 나눠 받았고, ASOS 일강수는
+  <code>weather_daily</code>(kind='obs')에서 같은 날·같은 관측소 값을 읽었다. 어느 값도 손대지 않았다.<br>
+  레이더 PNG 는 문서 예시 시각(<code>analTime=202307071500</code>)의 실제 응답 19,881바이트를 그대로 넣었다.
+  인증키는 이 파일에 들어 있지 않다.
+</p>
+</div>
+<script>window.__RAIN__={"stations":{"140":{"name":"군산","lat":35.9976,"lon":126.7614,"asos":154.0,"rows":[{"utc":"202608301500","kst":"00:00","v":7.1},{"utc":"202608301530","kst":"00:30","v":6.5},{"utc":"202608301600","kst":"01:00","v":13.4},{"utc":"202608301630","kst":"01:30","v":6.5},{"utc":"202608301700","kst":"02:00","v":14.2},{"utc":"202608301730","kst":"02:30","v":10.2},{"utc":"202608301800","kst":"03:00","v":4.3},{"utc":"202608301830","kst":"03:30","v":2.0},{"utc":"202608301900","kst":"04:00","v":1.3},{"utc":"202608301930","kst":"04:30","v":1.5},{"utc":"202608302000","kst":"05:00","v":4.1},{"utc":"202608302030","kst":"05:30","v":1.1},{"utc":"202608302100","kst":"06:00","v":0.8},{"utc":"202608302130","kst":"06:30","v":0.0},{"utc":"202608302200","kst":"07:00","v":0.7},{"utc":"202608302230","kst":"07:30","v":2.7},{"utc":"202608302300","kst":"08:00","v":6.1},{"utc":"202608302330","kst":"08:30","v":0.9},{"utc":"202608310000","kst":"09:00","v":0.0},{"utc":"202608310030","kst":"09:30","v":1.0},{"utc":"202608310100","kst":"10:00","v":2.1},{"utc":"202608310130","kst":"10:30","v":3.0},{"utc":"202608310200","kst":"11:00","v":8.9},{"utc":"202608310230","kst":"11:30","v":3.9},{"utc":"202608310300","kst":"12:00","v":0.0},{"utc":"202608310330","kst":"12:30","v":0.0},{"utc":"202608310400","kst":"13:00","v":10.0},{"utc":"202608310430","kst":"13:30","v":1.3},{"utc":"202608310500","kst":"14:00","v":0.0},{"utc":"202608310530","kst":"14:30","v":0.0},{"utc":"202608310600","kst":"15:00","v":null},{"utc":"202608310630","kst":"15:30","v":0.0},{"utc":"202608310700","kst":"16:00","v":0.0},{"utc":"202608310730","kst":"16:30","v":0.0},{"utc":"202608310800","kst":"17:00","v":0.6},{"utc":"202608310830","kst":"17:30","v":0.0},{"utc":"202608310900","kst":"18:00","v":0.0},{"utc":"202608310930","kst":"18:30","v":0.0},{"utc":"202608311000","kst":"19:00","v":0.0},{"utc":"202608311030","kst":"19:30","v":0.6},{"utc":"202608311100","kst":"20:00","v":3.2},{"utc":"202608311130","kst":"20:30","v":0.9},{"utc":"202608311200","kst":"21:00","v":0.8},{"utc":"202608311230","kst":"21:30","v":0.0},{"utc":"202608311300","kst":"22:00","v":0.0},{"utc":"202608311330","kst":"22:30","v":0.0},{"utc":"202608311400","kst":"23:00","v":0.0},{"utc":"202608311430","kst":"23:30","v":0.0},{"utc":"202608311500","kst":"00:00","v":0.9}],"sum":120.6,"peak":14.2,"missing":1,"ratio":78},"133":{"name":"대전","lat":36.37199,"lon":127.3721,"asos":94.3,"rows":[{"utc":"202608301500","kst":"00:00","v":0.0},{"utc":"202608301530","kst":"00:30","v":1.7},{"utc":"202608301600","kst":"01:00","v":1.1},{"utc":"202608301630","kst":"01:30","v":0.0},{"utc":"202608301700","kst":"02:00","v":0.6},{"utc":"202608301730","kst":"02:30","v":0.0},{"utc":"202608301800","kst":"03:00","v":2.8},{"utc":"202608301830","kst":"03:30","v":1.1},{"utc":"202608301900","kst":"04:00","v":1.7},{"utc":"202608301930","kst":"04:30","v":2.2},{"utc":"202608302000","kst":"05:00","v":0.8},{"utc":"202608302030","kst":"05:30","v":0.9},{"utc":"202608302100","kst":"06:00","v":2.0},{"utc":"202608302130","kst":"06:30","v":0.0},{"utc":"202608302200","kst":"07:00","v":0.0},{"utc":"202608302230","kst":"07:30","v":0.0},{"utc":"202608302300","kst":"08:00","v":0.0},{"utc":"202608302330","kst":"08:30","v":1.5},{"utc":"202608310000","kst":"09:00","v":1.7},{"utc":"202608310030","kst":"09:30","v":0.0},{"utc":"202608310100","kst":"10:00","v":0.9},{"utc":"202608310130","kst":"10:30","v":1.6},{"utc":"202608310200","kst":"11:00","v":9.1},{"utc":"202608310230","kst":"11:30","v":2.0},{"utc":"202608310300","kst":"12:00","v":7.8},{"utc":"202608310330","kst":"12:30","v":7.7},{"utc":"202608310400","kst":"13:00","v":0.0},{"utc":"202608310430","kst":"13:30","v":0.7},{"utc":"202608310500","kst":"14:00","v":8.3},{"utc":"202608310530","kst":"14:30","v":0.0},{"utc":"202608310600","kst":"15:00","v":null},{"utc":"202608310630","kst":"15:30","v":0.0},{"utc":"202608310700","kst":"16:00","v":3.2},{"utc":"202608310730","kst":"16:30","v":0.0},{"utc":"202608310800","kst":"17:00","v":0.6},{"utc":"202608310830","kst":"17:30","v":0.0},{"utc":"202608310900","kst":"18:00","v":0.0},{"utc":"202608310930","kst":"18:30","v":0.0},{"utc":"202608311000","kst":"19:00","v":0.0},{"utc":"202608311030","kst":"19:30","v":0.0},{"utc":"202608311100","kst":"20:00","v":0.0},{"utc":"202608311130","kst":"20:30","v":0.5},{"utc":"202608311200","kst":"21:00","v":0.7},{"utc":"202608311230","kst":"21:30","v":0.0},{"utc":"202608311300","kst":"22:00","v":0.0},{"utc":"202608311330","kst":"22:30","v":0.0},{"utc":"202608311400","kst":"23:00","v":0.0},{"utc":"202608311430","kst":"23:30","v":0.0},{"utc":"202608311500","kst":"00:00","v":0.6}],"sum":61.8,"peak":9.1,"missing":1,"ratio":66},"235":{"name":"보령","lat":36.32724,"lon":126.55744,"asos":122.0,"rows":[{"utc":"202608301500","kst":"00:00","v":2.9},{"utc":"202608301530","kst":"00:30","v":2.0},{"utc":"202608301600","kst":"01:00","v":0.0},{"utc":"202608301630","kst":"01:30","v":3.5},{"utc":"202608301700","kst":"02:00","v":0.0},{"utc":"202608301730","kst":"02:30","v":0.8},{"utc":"202608301800","kst":"03:00","v":1.9},{"utc":"202608301830","kst":"03:30","v":0.9},{"utc":"202608301900","kst":"04:00","v":0.0},{"utc":"202608301930","kst":"04:30","v":0.0},{"utc":"202608302000","kst":"05:00","v":1.6},{"utc":"202608302030","kst":"05:30","v":0.0},{"utc":"202608302100","kst":"06:00","v":0.0},{"utc":"202608302130","kst":"06:30","v":0.0},{"utc":"202608302200","kst":"07:00","v":1.0},{"utc":"202608302230","kst":"07:30","v":1.0},{"utc":"202608302300","kst":"08:00","v":1.2},{"utc":"202608302330","kst":"08:30","v":1.1},{"utc":"202608310000","kst":"09:00","v":1.9},{"utc":"202608310030","kst":"09:30","v":3.0},{"utc":"202608310100","kst":"10:00","v":2.4},{"utc":"202608310130","kst":"10:30","v":2.5},{"utc":"202608310200","kst":"11:00","v":3.8},{"utc":"202608310230","kst":"11:30","v":1.2},{"utc":"202608310300","kst":"12:00","v":4.2},{"utc":"202608310330","kst":"12:30","v":2.8},{"utc":"202608310400","kst":"13:00","v":3.1},{"utc":"202608310430","kst":"13:30","v":0.6},{"utc":"202608310500","kst":"14:00","v":1.5},{"utc":"202608310530","kst":"14:30","v":2.4},{"utc":"202608310600","kst":"15:00","v":null},{"utc":"202608310630","kst":"15:30","v":0.0},{"utc":"202608310700","kst":"16:00","v":0.0},{"utc":"202608310730","kst":"16:30","v":0.0},{"utc":"202608310800","kst":"17:00","v":0.0},{"utc":"202608310830","kst":"17:30","v":0.0},{"utc":"202608310900","kst":"18:00","v":0.0},{"utc":"202608310930","kst":"18:30","v":0.0},{"utc":"202608311000","kst":"19:00","v":0.0},{"utc":"202608311030","kst":"19:30","v":0.0},{"utc":"202608311100","kst":"20:00","v":2.6},{"utc":"202608311130","kst":"20:30","v":1.5},{"utc":"202608311200","kst":"21:00","v":0.7},{"utc":"202608311230","kst":"21:30","v":0.0},{"utc":"202608311300","kst":"22:00","v":0.0},{"utc":"202608311330","kst":"22:30","v":0.0},{"utc":"202608311400","kst":"23:00","v":0.8},{"utc":"202608311430","kst":"23:30","v":0.0},{"utc":"202608311500","kst":"00:00","v":0.0}],"sum":52.9,"peak":4.2,"missing":1,"ratio":43}},"radar_png":"iVBORw0KGgoAAAANSUhEUgAAB1sAAAQOCAYAAACdAVFNAABNcElEQVR4nOzdv2pc6R2A4U8QthnCNmkCJrsQQqo0RjfgMqAbSJVGhfoQlRlP62V7FepzA4aUYnvhJjewC76BENSkUYqZI82M/lj7Wmtbo+cBMUdndD6d/uX3fWMAAAAAAAAA8LP96nO/AAAAAAAAAMBTJLYCAAAAAAAABGIrAAAAAAAAQCC2AgAAAAAAAARiKwAAAAAAAEAgtgIAAAAAAAAEYisAAAAAAABAILYCAAAAAAAABGIrAAAAAAAAQCC2AgAAAAAAAARiKwAAAAAAAEAgtgIAAAAAAAAEYisAAAAAAABAILYCAAAAAAAABGIrAAAAAAAAQCC2AgAAAAAAAARiKwAAAAAAAEAgtgIAAAAAAAAEYisAAAAAAABAILYCAAAAAAAABGIrAAAAAAAAQCC2AgAAAAAAAARiKwAAAAAAAEAgtgIAAAAAAAAEYisAAAAAAABAILYCAAAAAAAABGIrAAAAAAAAQCC2AgAAAAAAAARiKwAAAAAAAEAgtgIAAAAAAAAEYisAAAAAAABAILYCAAAAAAAABGIrAAAAAAAAQCC2AgAAAAAAAARiKwAAAAAAAEAgtgIAAAAAAAAEYisAAAAAAABAILYCAAAAAAAABGIrAAAAAAAAQCC2AgAAAAAAAARiKwAAAAAAAEAgtgIAAAAAAAAEYisAAAAAAABAILYCAAAAAAAABGIrAAAAAAAAQCC2AgAAAAAAAARiKwAAAAAAAEAgtgIAAAAAAAAEYisAAAAAAABAILYCAAAAAAAABGIrAAAAAAAAQCC2AgAAAAAAAARiKwAAAAAAAEAgtgIAAAAAAAAEYisAAAAAAABAILYCAAAAAAAABGIrAAAAAAAAQCC2AgAAAAAAAARiKwAAAAAAAEAgtgIAAAAAAAAEYisAAAAAAABAILYCAAAAAAAABGIrAAAAAAAAQCC2AgAAAAAAAARiKwAAAAAAAEAgtgIAAAAAAAAEYisAAAAAAABAILYCAAAAAAAABGIrAAAAAAAAQCC2AgAAAAAAAARiKwAAAAAAAEAgtgIAAAAAAAAEYisAAAAAAABAILYCAAAAAAAABGIrAAAAAAAAQCC2AgAAAAAAAARiKwAAAAAAAEAgtgIAAAAAAAAEYisAAAAAAABAILYCAAAAAAAABGIrAAAAAAAAQCC2AgAAAAAAAARiKwAAAAAAAEAgtgIAAAAAAAAEYisAAAAAAABAILYCAAAAAAAABGIrAAAAAAAAQCC2AgAAAAAAAARiKwAAAAAAAEAgtgIAAAAAAAAEYisAAAAAAABAILYCAAAAAAAABGIrAAAAAAAAQCC2AgAAAAAAAARiKwAAAAAAAEAgtgIAAAAAAAAEYisAAAAAAABAILYCAAAAAAAABGIrAAAAAAAAQCC2AgAAAAAAAARiKwAAAAAAAEAgtgIAAAAAAAAEYisAAAAAAABAILYCAAAAAAAABGIrAAAAAAAAQCC2AgAAAAAAAARiKwAAAAAAAEAgtgIAAAAAAAAEYisAAAAAAABAILYCAAAAAAAABGIrAAAAAAAAQCC2AgAAAAAAAARiKwAAAAAAAEAgtgIAAAAAAAAEYisAAAAAAABAILYCAAAAAAAABGIrAAAAAAAAQCC2AgAAAAAAAARiKwAAAAAAAEAgtgIAAAAAAAAEYisAAAAAAABAILYCAAAAAAAABGIrAAAAAAAAQCC2AgAAAAAAAARiKwAAAAAAAEAgtgIAAAAAAAAEYisAAAAAAABAILYCAAAAAAAABGIrAAAAAAAAQCC2AgAAAAAAAARiKwAAAAAAAEAgtgIAAAAAAAAEYisAAAAAAABAILYCAAAAAAAABGIrAAAAAAAAQCC2AgAAAAAAAARiKwAAAAAAAEAgtgIAAAAAAAAEYisAAAAAAABAILYCAAAAAAAABGIrAAAAAAAAQCC2AgAAAAAAAARiKwAAAAAAAEAgtgIAAAAAAAAEYisAAAAAAABAILYCAAAAAAAABGIrAAAAAAAAQCC2AgAAAAAAAARiKwAAAAAAAEAgtgIAAAAAAAAEYisAAAAAAABAILYCAAAAAAAABGIrAAAAAAAAQCC2AgAAAAAAAARiKwAAAAAAAEAgtgIAAAAAAAAEYisAAAAAAABAILYCAAAAAAAABGIrAAAAAAAAQCC2AgAAAAAAAARiKwAAAAAAAEAgtgIAAAAAAAAEYisAAAAAAABAILYCAAAAAAAABGIrAAAAAAAAQCC2AgAAAAAAAARiKwAAAAAAAEAgtgIAAAAAAAAEYisAAAAAAABAILYCAAAAAAAABGIrAAAAAAAAQCC2AgAAAAAAAARiKwAAAAAAAEAgtgIAAAAAAAAEYisAAAAAAABAILYCAAAAAAAABGIrAAAAAAAAQCC2AgAAAAAAAARiKwAAAAAAAEAgtgIAAAAAAAAEYisAAAAAAABAILYCAAAAAAAABGIrAAAAAAAAQCC2AgAAAAAAAARiKwAAAAAAAEAgtgIAAAAAAAAEYisAAAAAAABAILYCAAAAAAAABGIrAAAAAAAAQCC2AgAAAAAAAARiKwAAAAAAAEAgtgIAAAAAAAAEYisAAAAAAABAILYCAAAAAAAABGIrAAAAAAAAQCC2AgAAAAAAAARiKwAAAAAAAEAgtgIAAAAAAAAEYisAAAAAAABAILYCAAAAAAAABGIrAAAAAAAAQCC2AgAAAAAAAARiKwAAAAAAAEAgtgIAAAAAAAAEYisAAAAAAABAILYCAAAAAAAABGIrAAAAAAAAQCC2AgAAAAAAAARiKwAAAAAAAEAgtgIAAAAAAAAEYisAAAAAAABAILYCAAAAAAAABGIrAAAAAAAAQCC2AgAAAAAAAARiKwAAAAAAAEAgtgIAAAAAAAAEYisAAAAAAABAILYCAAAAAAAABGIrAAAAAAAAQCC2AgAAAAAAAARiKwAAAAAAAEAgtgIAAAAAAAAEYisAAAAAAABAILYCAAAAAAAABGIrAAAAAAAAQCC2AgAAAAAAAARiKwAAAAAAAEAgtgIAAAAAAAAEYisAAAAAAABAILYCAAAAAAAABGIrAAAAAAAAQCC2AgAAAAAAAARiKwAAAAAAAEAgtgIAAAAAAAAEYisAAAAAAABAILYCAAAAAAAABGIrAAAAAAAAQCC2AgAAAAAAAARiKwAAAAAAAEAgtgIAAAAAAAAEYisAAAAAAABAILYCAAAAAAAABGIrAAAAAAAAQCC2AgAAAAAAAARiKwAAAAAAAEAgtgIAAAAAAAAEYisAAAAAAABAILYCAAAAAAAABGIrAAAAAAAAQCC2AgAAAAAAAARiKwAAAAAAAEAgtgIAAAAAAAAEYisAAAAAAABAILYCAAAAAAAABGIrAAAAAAAAQCC2AgAAAAAAAARiKwAAAAAAAEAgtgIAAAAAAAAEYisAAAAAAABAILYCAAAAAAAABGIrAAAAAAAAQCC2AgAAAAAAAARiKwAAAAAAAEAgtgIAAAAAAAAEYisAAAAAAABAILYCAAAAAAAABGIrAAAAAAAAQCC2AgAAAAAAAARiKwAAAAAAAEAgtgIAAAAAAAAEYisAAAAAAABAILYCAAAAAAAABGIrAAAAAAAAQCC2AgAAAAAAAARiKwAAAAAAAEAgtgIAAAAAAAAEYisAAAAAAABAILYCAAAAAAAABGIrAAAAAAAAQCC2AgAAAAAAAARiKwAAAAAAAEAgtgIAAAAAAAAEYisAAAAAAABAILYCAAAAAAAABGIrAAAAAAAAQCC2AgAAAAAAAARiKwAAAAAAAEAgtgIAAAAAAAAEYisAAAAAAABAILYCAAAAAAAABGIrAAAAAAAAQCC2AgAAAAAAAARiKwAAAAAAAEAgtgIAAAAAAAAEYisAAAAAAABAILYCAAAAAAAABGIrAAAAAAAAQCC2AgAAAAAAAARiKwAAAAAAAEAgtgIAAAAAAAAEYisAAAAAAABAILYCAAAAAAAABGIrAAAAAAAAQCC2AgAAAAAAAARiKwAAAAAAAEAgtgIAAAAAAAAEYisAAAAAAABAILYCAAAAAAAABGIrAAAAAAAAQCC2AgAAAAAAAARiKwAAAAAAAEAgtgIAAAAAAAAEYisAAAAAAABAILYCAAAAAAAABGIrAAAAAAAAQCC2AgAAAAAAAARiKwAAAAAAAEAgtgIAAAAAAAAEYisAAAAAAABAILYCAAAAAAAABGIrAAAAAAAAQCC2AgAAAAAAAARiKwAAAAAAAEAgtgIAAAAAAAAEYisAAAAAAABAILYCAAAAAAAABGIrAAAAAAAAQCC2AgAAAAAAAARiKwAAAAAAAEAgtgIAAAAAAAAEYisAAAAAAABAILYCAAAAAAAABGIrAAAAAAAAQCC2AgAAAAAAAARiKwAAAAAAAEAgtgIAAAAAAAAEYisAAAAAAABAILYCAAAAAAAABGIrAAAAAAAAQCC2AgAAAAAAAARiKwAAAAAAAEAgtgIAAAAAAAAEYisAAAAAAABAILYCAAAAAAAABGIrAAAAAAAAQCC2AgAAAAAAAARiKwAAAAAAAEAgtgIAAAAAAAAEYisAAAAAAABAILYCAAAAAAAABGIrAAAAAAAAQCC2AgAAAAAAAARiKwAAAAAAAEAgtgIAAAAAAAAEYisAAAAAAABAILYCAAAAAAAABGIrAAAAAAAAQCC2AgAAAAAAAARiKwAAAAAAAEAgtgIAAAAAAAAEYisAAAAAAABAILYCAAAAAAAABGIrAAAAAAAAQCC2AgAAAAAAAARiKwAAAAAAAEAgtgIAAAAAAAAEYisAAAAAAABAILYCAAAAAAAABGIrAAAAAAAAQCC2AgAAAAAAAARiKwAAAAAAAEAgtgIAAAAAAAAEYisAAAAAAABAILYCAAAAAAAABGIrAAAAAAAAQCC2AgAAAAAAAARiKwAAAAAAAEAgtgIAAAAAAAAEYisAAAAAAABAILYCAAAAAAAABGIrAAAAAAAAQCC2AgAAAAAAAARiKwAAAAAAAEAgtgIAAAAAAAAEYisAAAAAAABAILYCAAAAAAAABGIrAAAAAAAAQCC2AgAAAAAAAARiKwAAAAAAAEAgtgIAAAAAAAAEYisAAAAAAABAILYCAAAAAAAABGIrAAAAAAAAQCC2AgAAAAAAAARiKwAAAAAAAEAgtgIAAAAAAAAEYisAAAAAAABAILYCAAAAAAAABGIrAAAAAAAAQCC2AgAAAAAAAARiKwAAAAAAAEAgtgIAAAAAAAAEYisAAAAAAABAILYCAAAAAAAABGIrAAAAAAAAQCC2AgAAAAAAAARiKwAAAAAAAEAgtgIAAAAAAAAEYisAAAAAAABAILYCAAAAAAAABGIrAAAAAAAAQCC2AgAAAAAAAARiKwAAAAAAAEAgtgIAAAAAAAAEYisAAAAAAABAILYCAAAAAAAABGIrAAAAAAAAQCC2AgAAAAAAAARiKwAAAAAAAEAgtgIAAAAAAAAEYisAAAAAAABAILYCAAAAAAAABGIrAAAAAAAAQCC2AgAAAAAAAARiKwAAAAAAAEAgtgIAAAAAAAAEYisAAAAAAABAILYCAAAAAAAABGIrAAAAAAAAQCC2AgAAAAAAAARiKwAAAAAAAEAgtgIAAAAAAAAEYisAAAAAAABAILYCAAAAAAAABGIrAAAAAAAAQCC2AgAAAAAAAARiKwAAAAAAAEAgtgIAAAAAAAAEYisAAAAAAABAILYCAAAAAAAABGIrAAAAAAAAQCC2AgAAAAAAAARiKwAAAAAAAEAgtgIAAAAAAAAEYisAAAAAAABAILYCAAAAAAAABGIrAAAAAAAAQCC2AgAAAAAAAARiKwAAAAAAAEAgtgIAAAAAAAAEYisAAAAAAABAILYCAAAAAAAABGIrAAAAAAAAQCC2AgAAAAAAAARiKwAAAAAAAEAgtgIAAAAAAAAEYisAAAAAAABAILYCAAAAAAAABGIrAAAAAAAA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QA9iKwAAAAAAAEAPYisAAAAAAABAD2IrAAAAAAAAQA9iKwAAAAAAAEAPYisAAAAAAABAD2IrAAAAAAAAQA9iKwAAAAAAAEAPYisAAAAAAABAD2IrAAAAAAAAQA9iKwAAAAAAAEAPYisAAAAAAABAD2IrAAAAAAAAQA9iKwAAAAAAAEAPYisAAAAAAABAD2IrAAAAAAAAQA9iKwAAAAAAAEAPYisAAAAAAABAD2IrAAAAAAAAQA9iKwAAAAAAAEAPYisAAAAAAABAD2IrAAAAAAAAQA9iKwAAAAAAAEAPYisAAAAAAABAD2IrAAAAAAAAQA9iKwAAAAAAAEAPYisAAAAAAABAD2IrAAAAAAAAQA9iKwAAAAAAAEAPYisAAAAAAABAD2IrAAAAAAAAQA9iKwAAAAAAAEAPYisAAAAAAABAD2IrAAAAAAAAQA9iKwAAAAAAAEAPYisAAAAAAABAD2IrAAAAAAAAQA9iKwAAAAAAAEAPYisAAAAAAABAD2IrAAAAAAAAQA9iKwAAAAAAAEAPYisAAAAAAABAD2IrAAAAAAAAQA9iKwAAAAAAAEAPYisAAAAAAABAD2IrAAAAAAAAQA9iKwAAAAAAAEAPYisAAAAAAABAD2IrAAAAAAAAQA9iKwAAAAAAAEAPYisAAAAAAABAD2IrAAAAAAAAQA9iKwAAAAAAAEAPYisAAAAAAABAD2IrAAAAAAAAQA9iKwAAAAAAAEAPYisAAAAAAABAD2IrAAAAAAAAQA9iKwAAAAAAAEAPYisAAAAAAABAD2IrAAAAAAAAQA9iKwAAAAAAAEAPYisAAAAAAABAD2IrAAAAAAAAQA9iKwAAAAAAAEAPYisAAAAAAABAD2IrAAAAAAAAQA9iKwAAAAAAAEAPYisAAAAAAABAD2IrAAAAAAAAQA9iKwAAAAAAAEAPYisAAAAAAABAD2IrAAAAAAAAQA9iKwAAAAAAAEAPYisAAAAAAABAD2IrAAAAAAAAQA9iKwAAAAAAAEAPYisAAAAAAABAD2IrAAAAAAAAQA9iKwAAAAAAAEAPYisAAAAAAABAD2IrAAAAAAAAQA9iKwAAAAAAAEAPYisAAAAAAABAD2IrAAAAAAAAQA9iKwAAAAAAAEAPYisAAAAAAABAD2IrAAAAAAAAQA9iKwAAAAAAAEAPYisAAAAAAABAD2IrAAAAAAAAQA9iKwAAAAAAAEAPYisAAAAAAABAD2IrAAAAAAAAQA9iKwAAAAAAAEAPYisAAAAAAABAD2IrAAAAAAAAQA9iKwAAAAAAAEAPYisAAAAAAABAD2IrAAAAAAAAQA9iKwAAAAAAAEAPYisAAAAAAABAD2IrAAAAAAAAQA9iKwAAAAAAAEAPYisAAAAAAABAD2IrAAAAAAAAQA9iKwAAAAAAAEAPYisAAAAAAABAD2IrAAAAAAAAQA9iKwAAAAAAAEAPYisAAAAAAABAD2IrAAAAAAAAQA9iKwAAAAAAAEAPYisAAAAAAABAD2IrAAAAAAAAQA9iKwAAAAAAAEAPYisAAAAAAABAD2IrAAAAAAAAQA9iKwAAAAAAAEAPYisAAAAAAABAD2IrAAAAAAAAQA9iKwAAAAAAAEAPYisAAAAAAABAD2IrAAAAAAAAQA9iKwAAAAAAAEAPYisAAAAAAABAD2IrAAAAAAAAQA9iKwAAAAAAAEAPYisAAAAAAABAD2IrAAAAAAAAQA9iKwAAAAAAAEAPYisAAAAAAABAD2IrAAAAAAAAQA9iKwAAAAAAAEAPYisAAAAAAABAD2IrAAAAAAAAQA9iKwAAAAAAAEAPYisAAAAAAABAD2IrAAAAAAAAQA9iKwAAAAAAAEAPYisAAAAAAABAD2IrAAAAAAAAQA9iKwAAAAAAAEAPYisAAAAAAABAD2IrAAAAAAAAQA9iKwAAAAAAAEAPYisAAAAAAABAD2IrAAAAAAAAQA9iKwAAAAAAAEAPYisAAAAAAABAD2IrAAAAAAAAQA9iKwAAAAAAAEAPYisAAAAAAABAD2IrAAAAAAAAQA9iKwAAAAAAAEAPYisAAAAAAABAD2IrAAAAAAAAQA9iKwAAAAAAAEAPYisAAAAAAABAD2IrAAAAAAAAQA9iKwAAAAAAAEAPYisAAAAAAABAD2IrAAAAAAAAQA9iKwAAAAAAAEAPYisAAAAAAABAD2IrAAAAAAAAQA9iKwAAAAAAAEAPYisAAAAAAABAD2IrAAAAAAAAQA9iKwAAAAAAAEAPYisAAAAAAABAD2IrAAAAAAAAQA9iKwAAAAAAAEAPYisAAAAAAABAD2IrAAAAAAAAQA9iKwAAAAAAAEAPYisAAAAAAABAD2IrAAAAAAAAQA9iKwAAAAAAAEAPYisAAAAAAABAD2IrAAAAAAAAQA9iKwAAAAAAAEAPYisAAAAAAABAD2IrAAAAAAAAQA9iKwAAAAAAAEAPYisAAAAAAABAD2IrAAAAAAAAQA9iKwAAAAAAAEAPYisAAAAAAABAD2IrAAAAAAAAQA9iKwAAAAAAAEAPYisAAAAAAABAD2IrAAAAAAAAQA9iKwAAAAAAAEAPYisAAAAAAABAD2IrAAAAAAAAQA9iKwAAAAAAAEAPYisAAAAAAABAD2IrAAAAAAAAQA9iKwAAAAAAAEAPYisAAAAAAABAD2IrAAAAAAAAQA9iKwAAAP+lPTsWAAAAABjkbz2H3aURAAAAMMhWAAAAAAAAgEG2AgAAAAAAAAyyFQAAAAAAAGCQrQAAAAAAAACDbAUAAAAAAAAYZCsAAAAAAADAIFsBAAAAAAAABtkKAAAAAAAAMMhWAAAAAAAAgEG2AgAAAAAAAAyyFQAAAAAAAGCQrQAAAAAAAACDbAUAAAAAAAAYZCsAAAAAAADAIFsBAAAAAAAABtkKAAAAAAAAMMhWAAAAAAAAgEG2AgAAAAAAAAyyFQAAAAAAAGCQrQAAAAAAAACDbAUAAAAAAAAYZCsAAAAAAADAIFsBAAAAAAAABtkKAAAAAAAAMMhWAAAAAAAAgEG2AgAAAAAAAAyyFQAAAAAAAGCQrQAAAAAAAACDbAUAAAAAAAAYZCsAAAAAAADAIFsBAAAAAAAABtkKAAAAAAAAMMhWAAAAAAAAgEG2AgAAAAAAAAyyFQAAAAAAAGCQrQAAAAAAAACDbAUAAAAAAAAYZCsAAAAAAADAIFsBAAAAAAAABtkKAAAAAAAAMMhWAAAAAAAAgEG2AgAAAAAAAAyyFQAAAAAAAGCQrQAAAAAAAACDbAUAAAAAAAAYZCsAAAAAAADAIFsBAAAAAAAABtkKAAAAAAAAMMhWAAAAAAAAgEG2AgAAAAAAAAyyFQAAAAAAAGCQrQAAAAAAAACDbAUAAAAAAAAYZCsAAAAAAADAIFsBAAAAAAAABtkKAAAAAAAAMMhWAAAAAAAAgEG2AgAAAAAAAAyyFQAAAAAAAGCQrQAAAAAAAACDbAUAAAAAAAAYZCsAAAAAAADAIFsBAAAAAAAABtkKAAAAAAAAMMhWAAAAAAAAgEG2AgAAAAAAAAyyFQAAAAAAAGCQrQAAAAAAAACDbAUAAAAAAAAYZCsAAAAAAADAIFsBAAAAAAAABtkKAAAAAAAAMMhWAAAAAAAAgEG2AgAAAAAAAAyyFQAAAAAAAGCQrQAAAAAAAACDbAUAAAAAAAAYZCsAAAAAAADAIFsBAAAAAAAABtkKAAAAAAAAMMhWAAAAAAAAgEG2AgAAAAAAAAyyFQAAAAAAAGCQrQAAAAAAAACDbAUAAAAAAAAYZCsAAAAAAADAIFsBAAAAAAAABtkKAAAAAAAAMMhWAAAAAAAAgEG2AgAAAAAAAAyyFQAAAAAAAGCQrQAAAAAAAACDbAUAAAAAAAAYZCsAAAAAAADAIFsBAAAAAAAABtkKAAAAAAAAMMhWAAAAAAAAgEG2AgAAAAAAAAyyFQAAAAAAAGCQrQAAAAAAAACDbAUAAAAAAAAYZCsAAAAAAADAIFsBAAAAAAAABtkKAAAAAAAAMMhWAAAAAAAAgEG2AgAAAAAAAAyyFQAAAAAAAGCQrQAAAAAAAACDbAUAAAAAAAAYZCsAAAAAAADAIFsBAAAAAAAABtkKAAAAAAAAMMhWAAAAAAAAgEG2AgAAAAAAAAyyFQAAAAAAAGCQrQAAAAAAAACDbAUAAAAAAAAYZCsAAAAAAADAIFsBAAAAAAAABtkKAAAAAAAAMMhWAAAAAAAAgEG2AgAAAAAAAAyyFQAAAAAAAGCQrQAAAAAAAACDbAUAAAAAAAAYZCsAAAAAAADAIFsBAAAAAAAABtkKAAAAAAAAMMhWAAAAAAAAgEG2AgAAAAAAAAyyFQAAAAAAAGCQrQAAAAAAAACDbAUAAAAAAAAYZCsAAAAAAADAIFsBAAAAAAAABtkKAAAAAAAAMMhWAAAAAAAAgEG2AgAAAAAAAAyyFQAAAAAAAGCQrQAAAAAAAACDbAUAAAAAAAAYZCsAAAAAAADAIFsBAAAAAAAABtkKAAAAAAAAMMhWAAAAAAAAgEG2AgAAAAAAAAyyFQAAAAAAAGCQrQAAAAAAAACDbAUAAAAAAAAYZCsAAAAAAADAIFsBAAAAAAAABtkKAAAAAAAAMMhWAAAAAAAAgEG2AgAAAAAAAAyyFQAAAAAAAGCQrQAAAAAAAACDbAUAAAAAAAAYZCsAAAAAAADAIFsBAAAAAAAABtkKAAAAAAAAMMhWAAAAAAAAgEG2AgAAAAAAAAyyFQAAAAAAAGCQrQAAAAAAAACDbAUAAAAAAAAYZCsAAAAAAADAIFsBAAAAAAAABtkKAAAAAAAAMMhWAAAAAAAAgEG2AgAAAAAAAAyyFQAAAAAAAGCQrQAAAAAAAACDbAUAAAAAAAAYAvSAc9ikmegyAAAAAElFTkSuQmCC","korea":"M176.7,164.9 L175.6,165.1 L175.3,164.0 L176.7,164.9Z M177.8,165.0 L176.7,164.9 L177.6,164.3 L177.8,165.0Z M177.1,163.9 L175.9,163.8 L176.1,162.9 L177.1,163.9Z M177.3,162.8 L177.1,163.9 L176.4,162.7 L177.3,162.8Z M178.4,163.6 L177.3,164.1 L177.3,162.8 L178.4,163.6Z M175.4,163.9 L173.9,164.6 L174.4,163.5 L175.4,163.9Z M175.6,165.1 L174.3,164.9 L175.3,164.2 L175.6,165.1Z M174.3,164.9 L175.5,165.5 L173.4,165.0 L174.3,164.9Z M173.8,166.2 L172.8,165.6 L173.9,165.5 L173.8,166.2Z M173.4,165.0 L173.6,165.8 L171.6,165.3 L172.4,164.4 L173.4,165.0Z M173.8,166.2 L174.3,166.8 L172.6,166.9 L173.8,166.2Z M175.2,165.8 L174.4,166.7 L173.9,165.4 L175.2,165.8Z M175.9,166.9 L174.4,166.7 L175.3,166.1 L175.9,166.9Z M175.9,166.9 L175.1,167.7 L174.3,166.8 L175.9,166.9Z M178.1,167.3 L177.2,167.8 L175.9,166.3 L178.1,167.3Z M177.6,165.9 L178.5,167.2 L176.4,165.9 L177.6,165.9Z M179.1,166.1 L178.7,167.1 L177.6,165.9 L179.1,166.1Z M179.1,166.1 L178.5,165.3 L179.7,164.8 L179.1,166.1Z M216.3,211.5 L217.0,212.3 L215.7,212.7 L216.3,211.5Z M217.3,212.2 L217.6,213.6 L216.7,213.3 L217.3,212.2Z M216.3,210.0 L216.3,211.5 L215.2,211.5 L216.3,210.0Z M219.5,211.8 L218.4,212.4 L217.6,211.3 L218.3,210.5 L219.5,211.8Z M214.1,213.2 L215.4,213.0 L215.6,214.4 L214.8,214.7 L214.1,213.2Z M218.3,210.5 L217.5,211.3 L216.1,210.3 L217.5,209.4 L218.3,210.5Z M212.4,214.2 L212.0,215.6 L211.3,214.2 L212.4,214.2Z M211.9,213.5 L211.4,212.3 L212.9,212.4 L213.0,211.3 L215.4,210.7 L214.0,213.5 L211.9,213.5Z M215.8,211.7 L214.6,213.1 L214.8,211.7 L215.8,211.7Z M221.4,208.9 L219.5,211.8 L217.6,209.4 L217.7,208.1 L219.3,207.8 L221.4,208.9Z M210.2,195.9 L210.7,198.4 L207.9,198.4 L207.9,195.7 L210.2,195.9Z M207.8,198.2 L205.7,197.9 L206.2,196.2 L208.0,196.3 L207.8,198.2Z M210.1,198.6 L209.5,199.8 L207.4,199.5 L207.9,198.4 L210.1,198.6Z M205.3,199.4 L205.8,198.3 L207.3,199.5 L206.7,200.2 L205.3,199.4Z M207.3,199.5 L209.2,199.9 L209.2,201.3 L206.9,201.0 L205.7,202.8 L203.1,203.4 L203.7,202.7 L202.7,201.6 L204.4,201.4 L203.3,200.5 L203.9,199.6 L207.3,199.5Z M205.7,197.9 L205.0,198.9 L203.4,198.7 L204.7,196.9 L205.7,197.9Z M164.9,167.9 L163.6,167.0 L166.5,165.8 L168.0,166.4 L164.9,167.9Z M169.9,166.9 L170.3,167.7 L169.0,167.8 L169.9,166.9Z M168.4,168.1 L170.5,167.7 L169.7,169.4 L168.0,169.6 L169.5,169.2 L168.4,168.1Z M171.7,167.0 L170.9,168.7 L169.7,168.5 L170.1,167.0 L171.7,167.0Z M171.6,166.0 L171.7,167.0 L170.1,166.9 L170.2,166.0 L171.6,166.0Z M172.2,164.8 L171.6,166.0 L170.0,165.8 L170.0,164.8 L172.2,164.8Z M170.9,164.6 L170.0,164.8 L170.1,167.0 L168.5,166.5 L167.9,164.7 L169.5,163.7 L170.9,164.6Z M163.1,161.6 L164.1,162.8 L163.3,163.6 L161.9,162.3 L163.1,161.6Z M161.9,160.3 L163.1,160.8 L160.7,161.2 L161.9,160.3Z M165.3,160.1 L167.0,161.6 L166.8,164.9 L163.9,164.2 L164.7,163.4 L163.5,160.8 L165.3,160.1Z M158.8,170.9 L159.9,171.7 L158.3,171.9 L158.8,170.9Z M166.1,171.4 L165.2,171.7 L165.2,170.8 L166.4,170.8 L166.1,171.4Z M131.0,157.0 L132.1,157.4 L131.1,158.2 L129.5,157.3 L131.0,157.0Z M176.3,213.0 L174.9,213.9 L174.4,212.4 L176.3,213.0Z M174.4,212.4 L172.4,213.5 L173.1,211.9 L174.4,212.4Z M174.5,212.5 L174.4,213.8 L171.4,214.1 L174.5,212.5Z M176.4,212.7 L173.1,211.9 L173.0,210.9 L174.9,210.4 L176.4,212.7Z M173.0,210.9 L173.5,211.8 L172.0,214.0 L169.5,213.1 L169.5,211.6 L171.1,210.4 L173.0,210.9Z M186.3,187.5 L187.2,188.0 L184.9,192.0 L184.4,189.1 L186.3,187.5Z M184.5,191.7 L183.4,190.2 L184.2,188.9 L185.2,190.0 L184.5,191.7Z M183.9,188.5 L182.8,192.2 L181.7,190.9 L183.9,188.5Z M184.1,186.9 L184.3,188.4 L181.3,190.4 L181.8,187.7 L183.7,186.0 L184.1,186.9Z M185.9,187.2 L185.4,188.9 L184.2,188.9 L183.9,187.0 L185.7,186.5 L185.9,187.2Z M222.2,204.6 L220.4,203.8 L222.2,203.7 L222.2,204.6Z M222.2,204.6 L222.6,206.5 L220.1,204.9 L222.2,204.6Z M223.0,205.1 L224.4,204.3 L223.9,206.0 L223.0,205.1Z M224.2,202.6 L223.4,205.3 L221.1,203.8 L222.3,202.1 L224.2,202.6Z M221.2,202.8 L220.1,204.9 L222.7,206.6 L221.5,208.9 L214.8,204.4 L218.2,201.2 L221.2,202.8Z M181.8,182.3 L182.1,184.3 L184.3,186.0 L181.2,187.8 L179.6,186.1 L180.3,184.5 L178.8,181.9 L181.8,182.3Z M177.0,171.4 L175.7,171.7 L174.9,170.3 L177.0,171.4Z M178.0,170.4 L177.1,171.6 L177.0,169.9 L178.0,170.4Z M179.7,168.3 L178.5,168.0 L179.8,166.9 L179.7,168.3Z M179.7,168.3 L178.5,169.7 L176.8,168.9 L179.7,168.3Z M179.1,161.4 L177.3,162.8 L176.3,161.7 L179.1,161.4Z M175.2,167.6 L174.2,169.2 L173.7,168.1 L175.2,167.6Z M175.9,168.4 L175.5,169.1 L174.8,168.2 L175.5,167.6 L175.9,168.4Z M172.8,165.6 L172.8,167.2 L171.2,166.7 L171.7,165.4 L172.8,165.6Z M173.8,166.7 L174.3,167.7 L173.4,168.3 L172.8,167.2 L173.8,166.7Z M178.7,173.4 L178.3,175.5 L179.3,176.2 L178.1,177.3 L174.5,178.1 L171.9,176.1 L178.7,173.4Z M178.0,157.2 L179.3,158.7 L178.4,159.4 L176.4,158.3 L178.0,157.2Z M173.9,168.8 L173.8,169.9 L175.1,170.4 L173.2,171.0 L173.0,169.4 L173.9,168.8Z M168.1,170.5 L169.3,170.9 L169.3,172.5 L168.9,171.6 L167.3,172.2 L167.1,170.6 L168.7,170.1 L168.1,170.5Z M173.1,169.1 L173.2,170.2 L170.7,170.2 L173.1,169.1Z M176.1,162.9 L173.4,165.0 L171.6,163.9 L173.3,161.8 L174.9,161.5 L174.4,163.1 L176.1,162.9Z M173.1,162.0 L172.2,163.9 L171.0,163.5 L173.1,162.0Z M171.8,162.4 L171.0,163.5 L169.8,162.8 L171.8,162.4Z M177.2,167.8 L175.5,167.9 L176.3,167.0 L177.2,167.8Z M179.6,164.8 L178.2,165.2 L178.5,163.6 L179.6,164.8Z M183.5,163.5 L181.9,166.3 L177.8,162.5 L182.1,161.1 L183.5,163.5Z M178.3,173.4 L176.2,172.7 L177.5,172.3 L178.3,173.4Z M171.4,168.0 L171.9,167.0 L173.0,167.2 L173.9,168.8 L168.7,170.1 L172.1,168.5 L171.4,168.0Z M175.1,168.8 L174.9,170.2 L173.8,169.9 L175.1,168.8Z M177.1,168.3 L174.9,170.2 L176.0,168.2 L177.1,168.3Z M181.9,166.1 L179.1,166.9 L179.8,164.6 L181.9,166.1Z M182.9,170.9 L184.4,174.5 L181.4,173.2 L178.7,174.4 L179.7,170.7 L179.0,169.6 L181.8,169.4 L181.7,170.9 L182.9,170.9Z M179.2,171.9 L177.6,171.7 L178.2,169.9 L179.6,170.3 L179.2,171.9Z M179.0,169.6 L177.8,170.5 L176.6,169.2 L179.0,169.6Z M175.7,157.8 L174.3,160.1 L174.9,161.5 L169.9,162.5 L169.8,157.5 L176.0,156.4 L175.7,157.8Z M188.5,173.2 L188.1,174.9 L185.8,175.2 L186.3,174.1 L182.7,171.9 L182.9,170.6 L185.5,169.1 L186.9,170.1 L186.4,172.6 L188.5,173.2Z M184.6,173.3 L186.2,175.0 L181.9,178.3 L178.6,176.8 L178.7,174.4 L181.4,173.2 L184.4,174.5 L184.6,173.3Z M169.7,160.9 L169.8,162.9 L172.2,164.8 L169.5,163.7 L167.6,164.3 L166.9,160.7 L169.7,160.9Z M171.2,175.5 L169.4,173.2 L169.1,170.6 L172.0,171.7 L172.4,170.5 L173.3,171.2 L174.6,170.5 L175.7,171.7 L179.3,172.2 L178.3,173.4 L176.4,172.4 L176.2,174.8 L174.0,174.9 L173.2,175.9 L171.2,175.5Z M184.1,168.0 L185.0,169.1 L182.9,170.9 L181.7,170.9 L181.8,169.4 L178.9,169.4 L179.7,166.7 L182.6,165.7 L184.1,168.0Z M176.4,158.0 L178.6,160.6 L176.3,161.3 L176.4,162.8 L174.4,163.1 L174.3,160.1 L175.6,157.8 L176.4,158.0Z M184.7,154.4 L185.0,155.6 L181.3,161.2 L178.3,160.9 L179.3,158.7 L178.0,157.0 L179.1,156.7 L178.5,155.5 L180.0,155.4 L179.7,153.1 L180.6,153.9 L182.1,153.2 L181.7,154.2 L182.8,154.8 L184.7,154.4Z M191.1,169.0 L190.9,171.9 L189.4,173.5 L186.4,172.6 L186.9,170.1 L184.0,168.1 L186.2,167.6 L191.1,169.0Z M178.1,151.1 L179.8,153.0 L180.0,155.4 L178.4,155.6 L179.1,156.8 L176.4,158.0 L176.0,156.4 L172.1,156.9 L173.5,154.5 L175.6,153.9 L175.9,152.2 L178.1,151.1Z M186.8,156.6 L188.3,158.5 L186.6,159.9 L186.2,162.0 L187.2,161.9 L187.4,164.3 L186.0,165.0 L181.5,160.9 L185.0,155.6 L186.8,156.6Z M183.5,163.5 L184.7,163.1 L186.0,165.0 L188.0,163.4 L192.7,165.3 L191.1,166.4 L191.9,167.0 L191.5,168.9 L184.1,168.0 L183.4,165.8 L182.2,166.0 L183.5,163.5Z M193.9,155.6 L196.4,156.3 L194.5,160.0 L192.2,159.7 L192.8,161.5 L188.3,163.0 L187.5,161.9 L186.2,162.1 L186.6,159.8 L188.3,158.5 L186.9,157.2 L187.3,155.0 L191.7,156.7 L193.9,155.6Z M198.0,170.4 L200.0,170.6 L199.9,171.3 L196.6,172.5 L195.2,171.2 L193.9,173.3 L191.0,172.6 L191.1,169.0 L192.2,167.5 L193.2,168.4 L194.4,166.3 L194.8,167.3 L197.5,167.9 L196.5,169.7 L198.0,170.4Z M213.0,159.7 L216.5,163.0 L216.3,165.5 L214.1,165.7 L213.1,164.6 L211.8,166.3 L209.7,165.8 L210.4,161.7 L207.6,161.2 L207.3,159.3 L211.7,158.2 L213.0,159.7Z M217.6,164.8 L218.3,167.1 L214.6,167.5 L214.9,165.8 L217.6,164.8Z M217.3,174.3 L213.0,174.7 L214.8,169.7 L215.7,169.6 L215.4,172.1 L217.3,174.3Z M207.6,152.6 L207.8,153.5 L205.0,154.3 L204.1,153.2 L207.6,152.6Z M218.5,166.9 L222.4,171.6 L222.5,173.4 L220.7,173.9 L220.1,175.4 L215.6,172.5 L215.6,169.4 L213.6,172.0 L212.4,169.6 L214.0,167.4 L218.5,166.9Z M205.3,158.7 L207.4,159.4 L206.2,161.9 L201.9,162.4 L200.8,163.9 L198.2,162.9 L192.9,165.4 L186.7,163.5 L187.4,161.9 L188.3,163.0 L192.8,161.5 L192.2,159.7 L194.5,160.0 L195.7,157.8 L199.0,158.7 L200.0,160.3 L205.3,158.7Z M200.8,163.9 L201.7,165.7 L200.6,166.8 L201.0,168.2 L198.0,170.4 L196.5,169.7 L197.7,168.3 L197.0,167.5 L194.8,167.3 L194.4,166.3 L192.9,168.5 L191.1,166.5 L198.2,162.9 L200.8,163.9Z M207.1,171.0 L208.4,172.6 L210.6,172.1 L213.2,172.9 L213.4,175.3 L211.1,174.4 L210.5,175.7 L205.6,173.7 L204.2,174.2 L203.4,173.1 L201.6,173.6 L201.0,173.1 L202.3,172.0 L197.9,170.5 L199.5,168.5 L201.2,168.2 L203.1,170.5 L204.1,169.5 L207.1,171.0Z M207.3,160.1 L207.6,161.2 L210.4,161.7 L210.8,163.0 L205.9,167.3 L207.5,170.7 L204.1,169.5 L203.1,170.5 L200.7,167.5 L201.7,165.8 L200.8,163.9 L201.9,162.4 L206.2,161.9 L207.3,160.1Z M214.9,165.8 L215.1,167.0 L212.4,169.5 L213.7,173.3 L207.1,171.9 L207.5,170.7 L205.7,168.0 L207.6,165.1 L211.8,166.4 L213.1,164.6 L214.9,165.8Z M193.7,150.6 L190.1,151.8 L188.0,151.1 L185.9,154.1 L182.9,154.9 L181.7,154.2 L182.1,153.2 L180.6,153.9 L178.1,151.1 L180.9,150.1 L186.0,150.8 L191.6,149.8 L193.7,150.6Z M193.2,151.1 L194.1,155.5 L193.1,156.3 L189.0,156.2 L187.5,155.0 L186.8,156.6 L185.2,156.3 L184.7,154.4 L187.9,151.1 L193.2,151.1Z M196.4,156.3 L194.0,156.0 L193.2,151.1 L198.9,150.2 L197.5,153.7 L198.1,155.9 L196.4,156.3Z M204.5,152.6 L205.0,154.3 L203.9,155.2 L205.9,156.4 L204.5,159.3 L202.6,160.0 L201.6,159.2 L200.0,160.3 L199.0,158.7 L195.4,157.5 L198.1,155.7 L197.5,153.7 L199.2,151.1 L198.0,150.1 L201.1,149.3 L202.1,151.4 L204.2,151.7 L204.5,152.6Z M207.3,152.1 L204.7,152.8 L200.3,149.3 L201.8,147.3 L201.9,145.0 L202.8,144.6 L203.9,145.8 L207.3,152.1Z M210.0,156.2 L211.7,158.2 L207.2,159.3 L205.2,158.7 L205.9,156.4 L203.7,154.8 L207.8,153.5 L210.0,156.2Z M191.7,177.4 L189.0,176.5 L190.8,172.0 L191.7,173.4 L194.2,172.9 L196.7,174.0 L197.6,176.6 L196.6,177.1 L196.5,179.0 L198.5,179.6 L195.5,179.8 L194.9,178.4 L191.7,177.4Z M199.9,171.3 L202.3,172.0 L201.0,173.1 L201.8,174.3 L200.1,175.2 L201.0,177.0 L200.1,179.9 L196.6,179.1 L197.5,174.7 L195.6,174.0 L194.3,171.9 L195.8,171.2 L196.6,172.5 L199.9,171.3Z M191.3,184.0 L188.6,184.1 L186.2,187.8 L185.0,185.8 L185.7,183.2 L189.3,181.5 L191.3,184.0Z M185.7,186.5 L184.1,186.9 L183.6,184.8 L185.7,183.1 L185.0,185.7 L185.7,186.5Z M182.5,181.6 L185.7,183.1 L182.9,184.8 L181.7,183.3 L182.5,181.6Z M188.4,181.9 L185.7,183.2 L182.5,181.6 L187.3,180.5 L188.4,181.9Z M191.9,184.0 L193.9,185.5 L193.5,188.5 L189.3,187.1 L186.3,187.5 L188.9,183.9 L191.9,184.0Z M193.5,188.5 L189.0,191.4 L189.0,192.4 L185.8,191.0 L186.5,188.2 L188.9,187.1 L193.5,188.5Z M196.7,190.9 L196.9,191.9 L195.4,191.9 L195.1,194.4 L193.4,195.4 L189.2,195.0 L187.8,193.2 L192.1,189.7 L196.7,190.9Z M185.0,176.0 L185.0,177.2 L187.7,178.8 L187.3,180.5 L184.9,181.1 L181.9,178.3 L185.0,176.0Z M197.0,179.8 L197.2,181.9 L195.1,181.4 L193.4,182.4 L194.5,182.7 L194.3,184.0 L193.5,182.9 L191.3,184.0 L188.4,180.5 L188.9,179.0 L191.7,178.5 L191.9,177.2 L194.9,178.4 L195.5,179.8 L197.0,179.8Z M189.9,173.5 L189.0,176.5 L191.9,178.1 L188.3,179.5 L185.0,177.2 L185.0,175.9 L188.1,174.9 L188.5,173.2 L189.9,173.5Z M208.6,174.9 L204.5,177.6 L204.1,179.9 L200.6,178.7 L201.0,177.0 L200.1,175.2 L202.4,173.1 L208.6,174.9Z M188.7,179.2 L188.9,182.1 L186.8,180.0 L188.7,179.2Z M184.5,180.9 L181.8,182.3 L179.4,181.4 L179.2,183.7 L176.4,182.9 L178.7,179.8 L181.7,178.4 L184.5,180.9Z M178.5,180.4 L178.2,176.9 L181.9,178.3 L178.5,180.4Z M176.4,182.9 L178.8,183.0 L180.3,184.4 L179.6,185.8 L181.8,187.7 L181.5,189.3 L176.1,189.9 L176.6,187.2 L174.6,186.9 L174.0,185.7 L175.4,182.6 L176.4,182.9Z M167.7,185.9 L168.4,186.4 L167.1,187.2 L168.7,186.3 L170.9,188.4 L169.9,189.3 L171.1,191.1 L169.7,192.3 L166.9,192.1 L166.5,189.3 L167.6,188.9 L166.1,188.3 L167.1,187.2 L166.0,186.2 L167.7,185.9Z M178.5,180.4 L176.0,183.1 L172.9,180.9 L173.2,178.5 L177.7,177.4 L178.5,180.4Z M164.4,178.4 L164.9,177.4 L163.1,176.3 L165.1,175.9 L167.0,179.6 L169.0,179.9 L169.5,181.1 L168.0,183.0 L165.3,184.0 L163.7,183.6 L162.9,179.3 L164.4,178.4Z M180.1,189.2 L180.2,190.9 L182.8,191.9 L182.6,193.3 L178.0,194.4 L175.9,191.7 L178.4,189.1 L180.1,189.2Z M181.3,189.4 L182.0,190.6 L181.0,191.2 L180.1,189.2 L181.3,189.4Z M170.3,176.2 L172.0,176.7 L173.4,180.3 L169.7,180.7 L165.9,178.5 L166.4,174.9 L170.3,176.2Z M184.5,191.7 L186.7,190.9 L188.0,191.5 L188.3,195.8 L183.6,195.3 L182.5,192.4 L183.4,190.5 L184.5,191.7Z M175.8,189.2 L177.6,190.6 L175.9,191.7 L176.4,192.9 L174.1,193.0 L173.7,194.4 L172.2,192.2 L170.2,192.1 L171.1,190.8 L170.0,189.6 L170.6,188.6 L173.3,188.2 L173.5,189.5 L175.8,189.2Z M169.3,194.8 L166.3,192.7 L172.0,192.2 L173.7,194.4 L171.1,195.8 L169.3,194.8Z M174.3,184.8 L174.6,186.9 L176.6,187.2 L175.9,189.2 L173.5,189.5 L173.3,188.2 L171.7,188.9 L170.2,187.8 L169.8,186.7 L174.3,184.8Z M171.8,185.3 L169.6,186.8 L166.1,185.7 L165.3,184.0 L171.3,182.7 L171.8,185.3Z M173.0,180.4 L175.7,182.3 L174.5,184.7 L171.3,185.4 L171.1,182.6 L168.1,183.7 L169.5,180.6 L173.0,180.4Z M164.0,184.1 L165.0,188.0 L163.1,187.2 L162.8,184.3 L164.0,184.1Z M159.4,181.6 L159.6,179.2 L160.1,179.9 L160.1,178.5 L162.4,178.1 L162.6,176.6 L163.1,178.3 L162.2,179.8 L163.6,180.3 L163.7,183.6 L162.4,184.3 L162.1,181.4 L160.5,182.6 L159.5,182.0 L160.8,181.3 L159.4,181.6Z M180.5,199.7 L177.9,201.1 L177.2,200.6 L177.4,199.0 L180.5,199.7Z M180.5,199.7 L177.7,199.2 L176.3,197.9 L178.9,197.7 L180.5,199.7Z M173.3,197.4 L169.9,198.3 L168.2,196.8 L165.3,199.4 L166.9,196.3 L171.0,196.1 L173.6,194.6 L174.6,195.8 L173.3,197.4Z M176.4,192.9 L179.0,194.7 L178.1,197.2 L176.2,198.1 L173.5,197.6 L174.6,195.8 L173.7,195.1 L173.9,193.2 L176.4,192.9Z M177.5,202.1 L178.4,205.4 L175.8,204.5 L175.0,206.0 L171.8,206.2 L171.7,204.4 L170.7,204.1 L170.9,202.7 L173.8,200.5 L177.5,202.1Z M187.7,204.5 L189.4,206.7 L188.1,209.1 L185.5,208.2 L183.8,209.5 L179.9,209.0 L183.2,205.6 L182.8,204.5 L185.4,204.7 L186.9,206.2 L187.7,204.5Z M173.3,197.4 L176.2,197.9 L176.2,199.4 L177.7,200.2 L177.4,202.3 L173.9,200.5 L172.6,201.3 L170.3,199.5 L169.9,198.3 L173.3,197.4Z M177.4,199.0 L177.5,199.9 L176.2,199.4 L176.4,198.4 L177.4,199.0Z M178.1,203.2 L177.5,201.6 L180.8,199.3 L176.8,197.4 L178.1,197.2 L178.9,194.1 L182.9,193.2 L183.7,195.2 L181.3,201.8 L179.7,200.9 L178.1,203.2Z M186.5,196.1 L188.5,198.8 L186.4,199.5 L185.4,203.2 L181.9,201.9 L181.4,200.4 L183.4,195.4 L186.5,196.1Z M193.4,195.4 L193.6,197.5 L190.0,199.9 L188.4,199.3 L186.5,196.1 L186.6,195.0 L188.3,195.8 L188.7,194.4 L193.4,195.4Z M190.0,199.9 L187.2,206.1 L183.4,204.5 L183.6,203.4 L185.4,203.2 L186.5,199.5 L188.4,198.9 L190.0,199.9Z M181.6,200.1 L181.9,201.9 L184.8,203.2 L182.8,204.5 L183.2,205.6 L179.1,206.3 L178.1,203.2 L179.7,200.9 L181.3,201.8 L181.6,200.1Z M173.7,206.3 L175.8,204.5 L179.1,206.3 L182.4,206.2 L178.3,209.5 L177.1,209.1 L176.9,206.2 L175.1,207.7 L173.7,206.3Z M165.1,206.6 L168.7,204.2 L171.7,204.4 L171.4,207.2 L169.3,209.1 L167.1,209.4 L165.1,206.6Z M172.9,201.4 L170.9,202.7 L170.7,204.1 L165.7,203.4 L167.6,201.7 L166.9,201.0 L167.8,201.9 L169.1,199.7 L171.6,199.8 L172.9,201.4Z M165.6,219.4 L163.5,219.4 L164.9,218.4 L165.6,219.4Z M191.3,224.6 L191.7,225.4 L189.9,224.4 L191.3,224.6Z M189.3,223.5 L190.1,223.9 L188.7,224.0 L189.3,223.5Z M191.6,221.0 L191.8,223.5 L190.2,222.8 L190.7,220.6 L191.6,221.0Z M186.9,218.4 L188.0,217.4 L188.7,218.7 L191.4,218.1 L191.0,220.5 L189.1,220.1 L188.3,221.1 L188.9,222.7 L187.0,221.9 L187.9,220.3 L186.9,218.4Z M187.6,217.0 L186.7,218.5 L181.0,217.6 L179.7,215.8 L179.9,213.0 L182.6,214.0 L184.5,211.7 L186.7,213.2 L187.6,217.0Z M171.8,214.0 L174.2,213.9 L173.7,217.5 L170.9,217.5 L169.9,216.4 L169.9,217.7 L168.5,216.7 L167.6,217.9 L166.7,217.0 L168.4,215.4 L168.3,213.4 L171.0,213.2 L171.8,214.0Z M190.7,216.5 L191.6,217.6 L190.1,217.1 L190.7,216.5Z M191.1,216.0 L188.8,217.6 L187.5,216.9 L186.7,213.3 L188.1,213.0 L188.5,211.8 L191.3,214.4 L191.1,216.0Z M178.1,209.5 L178.6,211.6 L177.5,211.8 L177.6,213.1 L173.4,209.6 L176.9,206.2 L177.1,209.1 L178.1,209.5Z M183.8,209.5 L184.3,212.5 L182.6,214.0 L180.1,212.8 L180.0,211.2 L178.4,211.5 L177.8,210.5 L179.9,208.8 L183.8,209.5Z M187.5,209.3 L188.1,213.0 L187.1,213.5 L183.6,211.6 L184.8,208.3 L187.5,209.3Z M185.6,225.9 L186.8,226.5 L185.8,226.9 L185.6,225.9Z M180.5,225.3 L180.3,226.5 L178.2,226.3 L180.5,225.3Z M185.4,224.3 L186.2,225.4 L184.9,225.4 L185.4,224.3Z M182.2,221.9 L182.7,220.2 L180.9,219.9 L183.2,218.8 L186.2,223.3 L184.0,223.5 L184.7,224.9 L182.6,226.3 L181.2,224.7 L178.7,224.6 L181.2,221.0 L182.2,221.9Z M184.0,219.5 L181.9,219.1 L177.2,222.5 L175.7,221.1 L178.0,216.6 L180.1,215.6 L180.7,217.4 L184.3,218.5 L183.2,218.5 L184.6,219.0 L184.0,219.5Z M180.1,212.8 L179.8,215.7 L177.3,218.5 L172.8,217.9 L173.8,217.4 L174.2,213.8 L177.8,213.0 L177.5,211.8 L179.9,211.2 L180.1,212.8Z M174.1,226.0 L173.2,226.1 L173.9,222.7 L172.2,219.5 L173.8,217.8 L175.1,218.8 L177.0,218.5 L175.7,221.1 L177.2,222.3 L175.4,222.6 L176.4,223.0 L175.8,225.7 L174.1,226.0Z M172.2,224.2 L171.9,222.9 L171.5,225.7 L170.0,225.7 L170.5,221.6 L169.5,220.6 L171.9,219.6 L173.9,222.7 L173.2,226.2 L172.1,225.9 L172.2,224.2Z M170.4,226.4 L168.7,227.1 L168.5,228.8 L166.8,229.2 L166.8,227.9 L165.8,227.9 L166.8,226.8 L165.6,226.2 L165.7,224.5 L161.7,223.0 L162.2,220.1 L167.3,222.1 L170.5,221.6 L169.7,224.4 L171.1,226.0 L170.4,226.4Z M172.8,217.9 L173.5,218.1 L172.2,219.7 L170.0,220.2 L169.2,221.8 L167.3,222.1 L166.0,220.5 L163.7,220.4 L166.6,219.9 L168.4,216.8 L169.9,217.7 L170.1,216.4 L172.8,217.9Z M165.6,213.9 L167.3,215.9 L166.6,219.9 L164.2,217.8 L164.0,215.4 L163.9,216.9 L162.7,216.8 L164.1,214.4 L163.2,213.6 L161.8,214.3 L161.4,213.2 L163.4,212.2 L163.1,213.5 L164.3,213.7 L164.6,214.8 L165.6,213.9Z M169.5,211.6 L167.9,215.9 L166.5,215.6 L165.8,213.4 L163.9,212.2 L168.4,210.7 L169.5,211.6Z M165.5,207.0 L167.1,209.4 L169.3,209.1 L168.0,211.5 L163.9,212.2 L164.0,211.2 L162.5,211.0 L164.4,208.1 L165.4,208.5 L164.5,207.6 L165.5,207.0Z M173.7,206.3 L174.8,207.6 L173.5,209.1 L173.9,210.4 L171.1,210.4 L169.9,211.6 L168.1,210.7 L171.0,208.0 L171.2,206.5 L173.7,206.3Z M167.4,231.5 L168.8,231.9 L166.7,232.6 L167.4,231.5Z M174.1,230.7 L174.6,231.9 L173.4,232.0 L174.1,230.7Z M167.8,230.4 L168.7,231.4 L167.4,231.2 L167.8,230.4Z M173.1,228.8 L171.4,228.4 L174.3,228.3 L173.1,228.8Z M176.8,228.3 L176.0,227.9 L178.2,228.3 L176.8,228.3Z M170.3,227.2 L171.9,229.3 L169.3,228.5 L169.2,227.5 L170.3,227.2Z M175.1,227.3 L174.4,228.0 L173.5,227.0 L175.1,227.3Z M173.0,226.4 L173.6,227.3 L171.7,228.0 L171.7,226.9 L173.0,226.4Z M157.5,228.8 L158.5,229.5 L157.1,229.4 L157.5,228.8Z M157.2,228.2 L157.9,228.7 L156.6,228.5 L157.2,228.2Z M161.6,223.5 L164.0,224.9 L163.8,226.3 L162.3,227.8 L159.2,227.9 L158.5,226.4 L161.6,223.5Z M157.8,222.7 L158.7,224.1 L157.3,224.6 L158.4,223.5 L157.8,222.7Z M159.8,221.8 L160.6,222.5 L159.1,222.9 L159.8,221.8Z M145.4,221.3 L146.2,221.5 L144.9,222.7 L145.4,221.3Z M156.1,220.7 L156.9,221.5 L155.1,221.8 L156.1,220.7Z M159.5,221.2 L158.1,221.1 L157.9,219.9 L160.1,220.2 L159.5,221.2Z M156.5,219.1 L156.6,220.0 L154.5,220.6 L156.5,219.1Z M159.8,218.9 L159.9,220.0 L158.3,219.5 L159.8,218.9Z M158.9,217.7 L159.6,218.4 L158.2,219.4 L157.5,218.8 L158.9,217.7Z M162.4,218.3 L161.1,218.3 L162.5,216.9 L164.0,218.6 L162.4,218.3Z M157.9,216.7 L158.3,218.0 L156.0,217.8 L157.9,216.7Z M159.9,216.1 L159.1,216.4 L159.5,215.6 L158.6,215.2 L159.9,215.0 L159.9,216.1Z M161.5,213.5 L161.7,215.1 L159.8,214.1 L161.5,213.5Z M157.8,213.9 L159.9,212.5 L158.6,214.4 L157.8,213.9Z M223.3,195.0 L224.3,195.9 L226.6,194.3 L225.5,198.9 L222.1,197.9 L220.9,194.6 L223.3,195.0Z M223.8,193.9 L222.3,195.5 L220.8,194.2 L218.9,195.3 L215.2,192.5 L217.0,191.2 L216.6,190.5 L218.8,191.4 L221.0,189.3 L221.4,190.5 L222.8,190.5 L223.8,193.9Z M224.7,201.8 L221.2,202.8 L218.3,201.2 L216.9,202.8 L214.8,200.6 L215.9,197.6 L218.0,197.2 L218.4,194.7 L220.8,194.2 L222.5,198.4 L225.6,199.0 L224.7,201.8Z M201.6,194.1 L201.5,194.9 L199.1,195.1 L198.8,196.5 L196.8,197.0 L197.3,198.9 L193.6,197.9 L193.4,195.4 L195.1,194.4 L195.4,191.9 L196.9,191.9 L196.6,190.9 L200.4,191.3 L201.6,194.1Z M215.2,181.1 L215.1,187.9 L213.7,190.0 L210.9,186.4 L207.6,187.9 L206.6,186.2 L204.3,185.9 L207.7,183.0 L207.5,181.8 L210.3,182.1 L210.5,180.0 L215.2,181.1Z M201.5,189.0 L206.3,192.0 L206.9,193.6 L201.6,194.1 L201.1,192.0 L198.4,190.5 L201.5,189.0Z M209.7,175.4 L208.3,178.4 L208.8,179.3 L210.1,178.8 L210.3,182.1 L207.4,182.1 L206.6,180.8 L205.1,180.6 L204.2,178.4 L207.3,175.3 L209.7,175.4Z M215.2,192.5 L218.4,194.7 L218.1,197.1 L216.7,196.9 L215.7,198.8 L213.7,199.1 L212.6,196.7 L209.5,195.1 L210.4,193.7 L211.5,194.1 L213.4,192.3 L215.2,192.5Z M194.3,184.0 L195.4,185.7 L197.2,183.9 L199.3,184.1 L202.5,187.9 L198.0,191.1 L192.9,190.4 L194.0,185.9 L191.8,184.1 L193.5,182.9 L194.3,184.0Z M203.0,180.1 L202.6,183.1 L201.0,183.8 L201.1,185.4 L198.2,183.6 L196.9,185.1 L194.5,185.4 L194.6,183.0 L193.4,182.4 L195.1,181.4 L197.2,181.9 L197.0,179.8 L200.1,179.9 L200.6,178.7 L203.0,180.1Z M214.8,199.0 L214.1,200.5 L210.8,201.6 L209.2,200.0 L210.7,198.4 L210.2,195.9 L212.7,196.7 L213.1,198.9 L214.8,199.0Z M213.1,191.9 L213.3,193.0 L211.5,194.1 L210.4,193.7 L208.6,195.7 L208.1,194.2 L207.0,194.7 L206.7,192.3 L204.5,191.5 L203.9,190.2 L204.7,189.4 L208.3,190.7 L208.3,191.7 L213.1,191.9Z M204.2,185.6 L206.6,186.2 L207.6,187.9 L210.5,186.2 L212.1,186.9 L213.4,191.8 L208.3,191.7 L207.5,190.3 L201.8,189.3 L202.5,185.5 L204.2,185.6Z M218.4,186.0 L220.4,189.2 L219.9,190.4 L218.8,191.4 L216.9,190.4 L215.9,192.2 L213.3,192.3 L212.4,190.7 L214.8,189.0 L215.4,184.2 L218.4,186.0Z M220.7,182.6 L219.7,184.3 L220.3,185.8 L218.0,186.0 L215.4,184.1 L215.1,180.7 L218.1,178.7 L220.9,178.7 L221.6,180.5 L220.7,182.6Z M223.7,183.2 L224.0,187.4 L222.8,190.5 L221.4,190.5 L218.4,186.0 L220.3,185.8 L220.0,182.8 L223.7,183.2Z M216.3,202.6 L215.2,203.4 L213.0,203.0 L211.3,204.3 L207.6,204.0 L206.3,203.2 L206.2,201.4 L209.6,200.8 L210.8,201.6 L215.7,198.8 L214.9,200.9 L216.3,202.6Z M205.0,198.9 L203.3,200.5 L204.3,201.5 L202.7,201.6 L203.4,203.3 L199.0,202.5 L199.8,202.0 L199.1,199.4 L200.7,200.1 L201.2,199.2 L203.0,199.8 L203.4,198.7 L205.0,198.9Z M201.5,194.9 L203.6,197.0 L203.0,199.8 L198.4,199.9 L196.8,197.0 L198.8,196.5 L199.1,195.1 L201.5,194.9Z M206.9,193.6 L208.4,195.6 L206.2,196.2 L205.6,198.0 L204.7,196.9 L203.6,197.8 L201.5,195.0 L201.6,194.1 L206.9,193.6Z M207.4,182.1 L207.7,183.0 L204.9,185.3 L202.5,185.5 L202.0,186.9 L201.0,186.5 L201.0,183.8 L202.6,183.1 L203.3,179.9 L204.9,179.2 L205.1,180.6 L207.4,182.1Z M219.0,175.4 L217.1,176.0 L218.4,178.7 L215.2,181.1 L211.6,179.7 L210.1,180.3 L210.1,178.8 L208.4,179.0 L209.6,175.6 L211.1,174.4 L212.9,175.3 L217.3,174.3 L219.0,175.4Z M223.7,175.2 L224.7,182.1 L223.7,183.2 L220.8,182.7 L221.0,178.9 L218.5,178.7 L217.1,176.0 L220.1,175.4 L222.1,173.3 L223.7,175.2Z M252.8,165.6 L252.2,167.3 L250.7,166.7 L250.5,166.0 L252.8,165.6Z M201.2,210.3 L203.0,211.5 L202.9,212.6 L199.9,213.2 L199.4,214.4 L198.7,213.1 L195.9,213.1 L193.6,211.1 L198.8,208.5 L199.6,210.4 L201.2,210.3Z M200.5,222.2 L201.7,222.5 L200.5,223.0 L200.5,222.2Z M202.8,218.5 L204.4,218.7 L204.1,220.0 L202.8,218.5Z M199.7,218.1 L200.4,218.4 L199.4,218.8 L199.7,218.1Z M204.5,215.9 L204.4,218.5 L201.7,217.3 L204.5,215.9Z M196.3,214.8 L195.4,214.7 L196.0,215.7 L194.6,215.7 L193.5,212.5 L198.6,213.1 L199.4,214.4 L197.5,217.0 L196.4,216.2 L197.0,213.8 L196.3,214.8Z M212.9,207.9 L214.8,208.9 L215.4,210.7 L213.0,211.3 L212.9,212.4 L210.3,212.1 L209.4,209.3 L212.9,207.9Z M215.5,203.2 L214.8,206.2 L212.9,207.9 L210.4,208.6 L207.1,206.4 L207.4,203.9 L215.5,203.2Z M209.0,219.5 L208.3,220.0 L209.1,220.7 L207.1,221.2 L207.5,219.8 L206.4,219.5 L207.4,218.4 L205.8,219.1 L205.1,217.8 L206.2,216.9 L208.1,217.5 L207.3,216.3 L208.5,216.2 L209.1,214.6 L209.9,215.0 L209.4,217.7 L210.6,217.5 L209.6,218.5 L210.3,219.5 L209.0,219.5Z M219.4,207.8 L216.3,210.0 L212.9,207.9 L214.7,205.4 L216.5,205.0 L219.4,207.8Z M208.6,208.0 L210.8,208.6 L209.4,209.3 L209.4,211.1 L207.8,211.0 L206.9,209.0 L207.4,207.7 L208.6,208.0Z M210.0,210.7 L210.3,212.3 L207.4,211.9 L210.0,210.7Z M204.9,213.6 L204.2,214.3 L202.7,213.2 L203.0,211.6 L204.3,212.2 L207.4,211.1 L207.0,212.8 L208.2,214.0 L207.1,214.3 L206.4,213.0 L204.9,213.6Z M207.3,210.0 L208.1,211.1 L205.2,211.7 L205.4,210.0 L207.3,210.0Z M210.9,214.1 L209.4,212.5 L207.8,212.4 L211.4,212.3 L212.3,213.2 L210.8,213.3 L210.9,214.1Z M203.3,205.3 L204.2,208.2 L202.0,208.3 L201.2,210.3 L199.7,210.4 L198.9,208.5 L197.6,208.6 L199.6,207.6 L199.9,205.9 L203.3,205.3Z M207.1,207.9 L207.4,210.0 L205.4,210.0 L204.4,212.1 L201.2,210.3 L202.1,208.3 L207.1,207.9Z M207.4,203.9 L207.1,206.4 L208.6,208.0 L204.8,207.9 L203.2,206.8 L204.1,205.9 L202.7,204.9 L202.8,203.4 L206.2,202.0 L207.4,203.9Z M202.6,212.9 L204.2,213.7 L203.1,215.1 L205.0,213.9 L205.6,215.1 L202.0,216.1 L201.2,217.3 L200.2,216.4 L199.8,217.4 L197.9,217.3 L199.6,213.4 L202.6,212.9Z M196.5,216.9 L196.0,218.0 L196.8,217.4 L197.5,218.7 L195.2,218.4 L196.5,216.9Z M194.0,218.1 L194.9,219.2 L197.1,218.9 L197.0,221.0 L195.0,221.1 L194.8,219.7 L193.0,220.7 L192.4,217.3 L194.3,216.5 L194.0,218.1Z M189.7,209.1 L191.4,211.1 L193.7,210.5 L194.6,212.1 L193.5,212.5 L194.5,214.4 L193.8,216.2 L191.8,216.7 L191.3,214.4 L188.4,211.6 L187.5,209.3 L189.7,209.1Z M195.0,205.2 L198.1,208.9 L194.0,211.0 L190.1,210.2 L189.7,209.1 L193.1,204.1 L195.0,205.2Z M193.0,204.2 L190.6,208.8 L188.4,208.8 L189.4,206.7 L187.7,204.5 L189.3,200.3 L193.4,202.3 L193.0,204.2Z M197.3,198.9 L196.5,200.0 L197.7,202.0 L195.9,202.9 L194.7,205.3 L192.6,204.0 L193.4,202.3 L189.5,200.3 L193.1,197.6 L197.3,198.9Z M199.0,200.2 L199.8,202.0 L199.0,202.5 L202.7,202.7 L203.3,205.3 L199.9,205.9 L199.6,207.6 L197.6,208.2 L194.9,204.7 L197.7,202.0 L196.6,199.9 L197.7,199.1 L199.0,200.2Z M174.3,244.4 L171.5,246.3 L159.8,248.9 L162.8,245.3 L171.6,243.4 L174.3,244.4Z M174.5,245.1 L175.0,246.1 L173.1,248.4 L168.4,249.9 L163.1,249.8 L162.0,250.7 L160.0,249.1 L174.5,245.1Z"};</script>
+<script>(function () {
+  var P = window.__RAIN__, chart = document.getElementById("chart"),
+      radar = document.getElementById("radar"), tip = document.getElementById("tip"),
+      meta = document.getElementById("meta");
+  var NS = "http://www.w3.org/2000/svg";
+  var st = { code: "140", cum: true, asos: true, radar: "raw" };
+  var W = 940, H = 380, PAD = { l: 52, r: 52, t: 22, b: 40 };
+
+  function el(n, a) {
+    var e = document.createElementNS(NS, n);
+    for (var k in a) if (a[k] !== null && a[k] !== undefined) e.setAttribute(k, a[k]);
+    return e;
+  }
+  function clear(n) { while (n.firstChild) n.removeChild(n.firstChild); }
+
+  function drawChart() {
+    var s = P.stations[st.code], rows = s.rows;
+    clear(chart);
+    var iw = W - PAD.l - PAD.r, ih = H - PAD.t - PAD.b;
+    var maxV = Math.max.apply(null, rows.map(function (r) { return r.v || 0; })) || 1;
+    var yMax = Math.ceil(maxV / 5) * 5;
+    var cumMax = Math.max(s.sum, st.asos ? s.asos : 0) * 1.08;
+
+    // 가로 눈금 — 값을 읽을 자가 없으면 막대는 장식이다
+    for (var i = 0; i <= 4; i++) {
+      var y = PAD.t + ih - ih * i / 4;
+      chart.appendChild(el("line", { x1: PAD.l, y1: y, x2: W - PAD.r, y2: y,
+        stroke: "var(--border-c)", "stroke-width": 1 }));
+      chart.appendChild(el("text", { x: PAD.l - 8, y: y + 4, "text-anchor": "end",
+        "font-size": 11, fill: "var(--fg-subtle)" })).textContent = (yMax * i / 4).toFixed(0);
+    }
+    chart.appendChild(el("text", { x: PAD.l - 8, y: PAD.t - 8, "text-anchor": "end",
+      "font-size": 11, fill: "var(--fg-muted)" })).textContent = "mm/30분";
+
+    var bw = iw / rows.length;
+    var cum = 0, pts = [];
+    rows.forEach(function (r, i) {
+      var x = PAD.l + i * bw;
+      if (r.v === null) {
+        chart.appendChild(el("rect", { x: x + .5, y: PAD.t, width: bw - 1, height: ih,
+          fill: "var(--fg-subtle)", "fill-opacity": .12 }));
+      } else {
+        var h = r.v / yMax * ih;
+        var b = el("rect", { x: x + .5, y: PAD.t + ih - h, width: Math.max(bw - 1, 1), height: h,
+          fill: "var(--analysis)", rx: 1, style: "cursor:pointer" });
+        b.addEventListener("mouseenter", function (e) { showTip(r, x + bw / 2, PAD.t + ih - h); });
+        b.addEventListener("mouseleave", function () { tip.style.opacity = 0; });
+        chart.appendChild(b);
+        cum += r.v;
+      }
+      pts.push([x + bw / 2, PAD.t + ih - cum / cumMax * ih]);
+      // 3시간마다 시각
+      if (i % 6 === 0) chart.appendChild(el("text", { x: x + bw / 2, y: H - PAD.b + 16,
+        "text-anchor": "middle", "font-size": 10.5, fill: "var(--fg-subtle)" })).textContent = r.kst;
+    });
+
+    if (st.cum) {
+      chart.appendChild(el("polyline", { points: pts.map(function (p) { return p[0] + "," + p[1]; }).join(" "),
+        fill: "none", stroke: "var(--forecast)", "stroke-width": 2.4 }));
+      chart.appendChild(el("text", { x: W - PAD.r + 6, y: pts[pts.length - 1][1] + 4,
+        "font-size": 11.5, fill: "var(--forecast)" })).textContent = s.sum + "mm";
+    }
+    if (st.asos) {
+      var ya = PAD.t + ih - s.asos / cumMax * ih;
+      chart.appendChild(el("line", { x1: PAD.l, y1: ya, x2: W - PAD.r, y2: ya,
+        stroke: "var(--cone)", "stroke-width": 2, "stroke-dasharray": "8 6" }));
+      chart.appendChild(el("text", { x: W - PAD.r + 6, y: ya + 4, "font-size": 11.5,
+        fill: "var(--cone)" })).textContent = s.asos + "mm";
+    }
+    meta.textContent = s.name + " · 2026-08-31 KST · RR " + s.sum + "mm vs ASOS " + s.asos +
+      "mm (" + s.ratio + "%) · 결측 " + s.missing + "칸";
+  }
+
+  function showTip(r, x, y) {
+    tip.innerHTML = "<b>" + r.kst + " KST</b><br><span class='k'>30분 강수</span>" +
+      (r.v === null ? "결측" : r.v + " mm") + "<br><span class='k'>UTC</span>" + r.utc;
+    var box = chart.getBoundingClientRect(), sc = box.width / W;
+    tip.style.left = Math.min(x * sc + 10, box.width - 170) + "px";
+    tip.style.top = Math.max(y * sc - 4, 2) + "px";
+    tip.style.opacity = 1;
+  }
+
+  function drawRadar() {
+    clear(radar);
+    var img = "data:image/png;base64," + P.radar_png;
+    if (st.radar === "raw") {
+      radar.setAttribute("viewBox", "0 0 940 529");
+      radar.appendChild(el("rect", { x: 0, y: 0, width: 940, height: 529, fill: "var(--surface)" }));
+      radar.appendChild(el("image", { href: img, x: 0, y: 0, width: 940, height: 529 }));
+      radar.appendChild(el("text", { x: 14, y: 22, "font-size": 12, fill: "var(--fg-subtle)" }))
+        .textContent = "투명 배경 · 에코만 (해안선·격자 없음)";
+    } else {
+      // 데모용 정합: 에코 덩어리가 한반도 남해안에 걸치도록 확대해 올린다.
+      // 실제 오버레이는 요청 bbox 를 그대로 LatLngBounds 로 넘겨 맞춘다(코드 탭 ③)
+      radar.setAttribute("viewBox", "0 0 940 660");
+      radar.appendChild(el("rect", { x: 0, y: 0, width: 940, height: 660, fill: "var(--sea)" }));
+      radar.appendChild(el("path", { d: P.korea, fill: "var(--land)",
+        stroke: "var(--border-strong)", "stroke-width": .6, transform: "translate(-1120,-190) scale(2.55)" }));
+      radar.appendChild(el("image", { href: img, x: -980, y: -1180, width: 3100, height: 1744,
+        opacity: .72 }));
+      radar.appendChild(el("text", { x: 14, y: 22, "font-size": 12, fill: "var(--fg-muted)" }))
+        .textContent = "우리 시군구 폴리곤 + 레이더 PNG (위치는 데모용 근사)";
+    }
+  }
+
+  document.querySelectorAll("[data-st]").forEach(function (b) {
+    b.addEventListener("click", function () {
+      st.code = b.dataset.st;
+      document.querySelectorAll("[data-st]").forEach(function (o) {
+        o.setAttribute("aria-pressed", String(o === b)); });
+      drawChart();
+    });
+  });
+  document.querySelectorAll("[data-layer]").forEach(function (b) {
+    b.addEventListener("click", function () {
+      st[b.dataset.layer] = !st[b.dataset.layer];
+      b.setAttribute("aria-pressed", String(st[b.dataset.layer]));
+      drawChart();
+    });
+  });
+  document.querySelectorAll("[data-radar]").forEach(function (b) {
+    b.addEventListener("click", function () {
+      st.radar = b.dataset.radar;
+      document.querySelectorAll("[data-radar]").forEach(function (o) {
+        o.setAttribute("aria-pressed", String(o === b)); });
+      drawRadar();
+    });
+  });
+  document.querySelectorAll(".tab").forEach(function (t) {
+    t.addEventListener("click", function () {
+      document.querySelectorAll(".tab").forEach(function (o) {
+        o.setAttribute("aria-selected", String(o === t)); });
+      document.querySelectorAll(".panel[id]").forEach(function (p) {
+        p.hidden = p.id !== t.dataset.panel; });
+    });
+  });
+  drawChart(); drawRadar();
+})();
+</script>
+</body>
+</html>

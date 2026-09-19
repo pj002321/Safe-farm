@@ -8,8 +8,12 @@
 
 바로 윗줄의 upper_temp 는 None 을 검사하는데 base_temp 는 안 했다. 그리고
 base_temp 를 쓰는 곳이 셋이라(daily_gdd_series · crop_interpretation ·
-compute_plot_growth) 호출부마다 막으면 다음에 또 빠뜨린다. 그래서 공통 조회인
-`_crop_for_cultivation` 이 "쓸 수 없는 작물"을 None 으로 걸러 낸다.
+compute_plot_growth) 호출부마다 막으면 다음에 또 빠뜨린다. 그래서 공통 조회가
+"쓸 수 없는 작물"을 None 으로 걸러 낸다.
+
+그 공통 조회는 2026-09-19 에 `plot_growth._crop_for_cultivation` 에서
+`repo.crop.usable_crop_of_variant` 로 옮겼다. 검사 대상도 같이 옮긴다 —
+가드가 사는 자리를 따라가지 않으면 이 테스트는 없어진 함수를 지키게 된다.
 
 GDD 는 기준온도 없이는 정의되지 않으므로 답은 0 이나 추정값이 아니라
 **판정 보류(None)** 다 — "근거를 못 만들면 카드를 만들지 않는다"는 스펙 규칙.
@@ -17,66 +21,61 @@ GDD 는 기준온도 없이는 정의되지 않으므로 답은 0 이나 추정�
 
 from types import SimpleNamespace
 
+from app.repo.crop import usable_crop_of_variant
 from app.service import plot_growth
 
 
-class _FakeQuery:
+class _FakeScalars:
     def __init__(self, row):
         self._row = row
-
-    def filter(self, *_args, **_kwargs):
-        return self
 
     def first(self):
         return self._row
 
 
 class _FakeSession:
-    """variant 조회 → crop 조회 순서로 미리 준비한 행을 돌려준다."""
+    """variant 조회 → crop 조회 순서로 미리 준비한 행을 돌려준다.
+
+    `usable_crop_of_variant` 는 `db.scalars(stmt).first()` 를 두 번 부른다.
+    실제 세션 없이 그 순서만 흉내 낸다 — 이 테스트가 지키는 것은 SQL 이 아니라
+    "base_temp 가 비면 None 을 돌려준다"는 판정이다.
+
+    `info` 는 요청 범위 캐시가 값을 놓는 자리다(`core/request_cache`). 진짜
+    Session 에는 원래 있는 dict 라, 여기서도 세션마다 새로 만든다 — 공유하면
+    테스트끼리 캐시가 새어 다음 테스트가 앞 테스트의 작물을 본다.
+    """
 
     def __init__(self, variant, crop):
         self._rows = [variant, crop]
         self._i = 0
+        self.info: dict = {}
 
-    def query(self, _model):
+    def scalars(self, _stmt):
         row = self._rows[self._i]
         self._i = min(self._i + 1, len(self._rows) - 1)
-        return _FakeQuery(row)
+        return _FakeScalars(row)
 
 
 VARIANT = SimpleNamespace(variant_id=1, crop_id=7)
-CULTIVATION = SimpleNamespace(variant_id=1)
 
 
 def test_crop_without_base_temp_is_unusable():
     """이게 운영에서 배치를 죽인 행이다. 터지지 않고 None 이어야 한다."""
     crop = SimpleNamespace(name="배추", base_temp=None, upper_temp=30.0)
 
-    result = plot_growth._crop_for_cultivation(
-        _FakeSession(VARIANT, crop), CULTIVATION
-    )
-
-    assert result is None
+    assert usable_crop_of_variant(_FakeSession(VARIANT, crop), 1) is None
 
 
 def test_crop_with_base_temp_passes_through():
     """정상 작물까지 막지 않았는지 — 고치면서 같이 죽이기 쉬운 자리다."""
     crop = SimpleNamespace(name="배추", base_temp=5.0, upper_temp=30.0)
 
-    result = plot_growth._crop_for_cultivation(
-        _FakeSession(VARIANT, crop), CULTIVATION
-    )
-
-    assert result is crop
+    assert usable_crop_of_variant(_FakeSession(VARIANT, crop), 1) is crop
 
 
 def test_missing_variant_is_unusable():
     """기존 동작(variant 없음 → None)을 유지하는지 같이 고정한다."""
-    result = plot_growth._crop_for_cultivation(
-        _FakeSession(None, None), CULTIVATION
-    )
-
-    assert result is None
+    assert usable_crop_of_variant(_FakeSession(None, None), 1) is None
 
 
 def test_all_three_callers_stop_on_unusable_crop():

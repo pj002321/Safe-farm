@@ -43,6 +43,15 @@ declare namespace kakao.maps {
     level?: number;
   }
 
+  /** 지도 배경 종류. 문자열 리터럴이 아니라 이 상수로 비교·지정한다(카카오 SDK 관례). */
+  const MapTypeId: {
+    readonly ROADMAP: string;
+    /** 위성사진 + 도로·지명 오버레이. 사용자가 찾는 "스카이뷰"가 이 쪽이다. */
+    readonly HYBRID: string;
+    /** 위성사진만, 도로·지명 없음. */
+    readonly SKYVIEW: string;
+  };
+
   /**
    * 카카오 SDK 의 실제 이름이 `kakao.maps.Map` 이라 바꿀 수 없다. 전역 Map 을
    * 가리는 범위는 이 네임스페이스 안뿐이고, 우리 코드는 늘 `sdk.maps.Map` 으로
@@ -58,8 +67,12 @@ declare namespace kakao.maps {
     setLevel(level: number): void;
     /** 현재 확대 수준. `setBounds` 가 너무 가깝게 맞췄는지 확인하는 데 쓴다. */
     getLevel(): number;
+    /** 배경을 일반 지도/위성사진으로 바꾼다. 값은 `MapTypeId` 상수를 쓴다. */
+    setMapTypeId(mapTypeId: string): void;
     /** 여러 좌표가 전부 보이도록 중심·배율을 한 번에 맞춘다. */
     setBounds(bounds: LatLngBounds): void;
+    /** 지금 화면에 보이는 좌표 범위. 격자를 화면 안에만 그릴 때 쓴다. */
+    getBounds(): LatLngBounds;
     /**
      * 컨테이너 크기가 바뀐 뒤 부른다. `display:none` 상태에서 만들어진 지도는
      * 크기를 0으로 잡아 회색 네모로 남는데, 보이게 한 직후 이걸 부르면 살아난다.
@@ -70,6 +83,8 @@ declare namespace kakao.maps {
   /** 여러 좌표를 담아 "이걸 다 보여줘"라고 지도에 넘기는 상자. */
   class LatLngBounds {
     extend(latlng: LatLng): void;
+    getSouthWest(): LatLng;
+    getNorthEast(): LatLng;
   }
 
   interface MarkerOptions {
@@ -115,6 +130,38 @@ declare namespace kakao.maps {
     constructor(options: PolygonOptions);
     setMap(map: Map | null): void;
     setOptions(options: Partial<PolygonOptions>): void;
+  }
+
+  interface PolylineOptions {
+    path: LatLng[];
+    strokeWeight?: number;
+    strokeColor?: string;
+    strokeOpacity?: number;
+    /** 선 모양. "solid"(실선)·"shortdash"(점선) 등 — 지나온 길/예보를 가르는 데 쓴다. */
+    strokeStyle?: string;
+  }
+
+  /** 이어진 선. 태풍 경로처럼 순서가 있는 좌표열을 그릴 때 쓴다(면을 채우지 않는다). */
+  class Polyline {
+    constructor(options: PolylineOptions);
+    setMap(map: Map | null): void;
+  }
+
+  interface CircleOptions {
+    center: LatLng;
+    /** 반경. **단위는 미터다** — km 값을 그대로 넣으면 안 된다. */
+    radius: number;
+    strokeWeight?: number;
+    strokeColor?: string;
+    strokeOpacity?: number;
+    fillColor?: string;
+    fillOpacity?: number;
+  }
+
+  /** 반경 원. 태풍 예보원·강풍반경처럼 "이 안 어딘가"를 나타낼 때 쓴다. */
+  class Circle {
+    constructor(options: CircleOptions);
+    setMap(map: Map | null): void;
   }
 
   /** 지도 클릭 시 핸들러가 받는 값. 우리가 쓰는 건 좌표 하나뿐이다. */

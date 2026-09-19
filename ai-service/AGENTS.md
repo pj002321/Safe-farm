@@ -88,8 +88,9 @@ tests/              # pytest
 `repo` 는 쿼리만, `domain` 은 가공만 한다. 둘을 합치는 코드는 `service` 에만 둔다.
 `graph/` 는 독립된 층이 아니라 service 가 쓰는 수단 중 하나다.
 
-- **`app/repo/` 는 아직 없다.** 쿼리가 `service/` 안에 있다. 한 파일이 쿼리와
-  가공을 같이 하게 될 때 떼어 낸다 — 빈 칸을 채우려고 미리 나누지 않는다.
+- **쿼리는 `repo/` 에만 쓴다.** `api/` · `service/` 에서 `db.query(...)` 를 직접
+  부르지 않는다. 예외는 `knowledge/`(pgvector 세션 상태)와 `core/db.py` 뿐이고,
+  `tests/test_queries_live_in_repo.py` 가 이를 검사한다.
 - `graph/` 는 환경변수를 읽지 않는다. DB 세션·LLM 같은 외부 의존은 state 나 인자로 받는다.
 - 점수 로직(`domain/suitability.py`)은 프론트에도 한 벌 더 있다. 정본 미정.
 

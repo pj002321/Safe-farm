@@ -146,11 +146,35 @@ export interface SigunguWindFeatureCollection {
       station?: string;
       stationName?: string;
       windMax?: number | null;
+      /** 지금 풍향(0~360°, 불어오는 방향). Open-Meteo 실시간 조회라 없을 수 있다. */
+      windDeg?: number | null;
       color?: string;
       label?: string;
     };
     geometry: { type: "Polygon" | "MultiPolygon"; coordinates: unknown };
   }>;
+}
+
+/** 태풍 경로 위 점 하나. `ft` 로 지나온 길(0)과 예보(1)를 가른다. */
+export interface TyphoonPoint {
+  ft: 0 | 1;
+  atUtc: string;
+  lat: number;
+  lon: number;
+  pressureHpa: number | null;
+  windMs: number | null;
+  /** 15m/s 강풍반경(km). 없으면 결측 — 지도가 fallback 값을 쓴다. */
+  rad15Km: number | null;
+  /** 70% 이상 예상확률반경(km, 예보원). 예측 점에만 값이 있다. */
+  forecastRadiusKm: number | null;
+  locationKo: string;
+}
+
+/** 태풍 경로. 태풍이 없으면 analysis·forecast 가 빈 배열이다(오류 아님). */
+export interface TyphoonTrack {
+  typhoonNo: string | null;
+  analysis: TyphoonPoint[];
+  forecast: TyphoonPoint[];
 }
 
 /** 밭 좌표 기준 실황·시간별·7일 예보. `/weather` 탭이 그린다. */
@@ -166,6 +190,12 @@ export interface PlotForecast {
     humidityPct: number | null;
     rainfallMm: number | null;
     windMs: number | null;
+    /**
+     * 바람이 **불어오는** 쪽(도, 0=북 · 90=동).
+     *
+     * ⚠ 0 과 null 이 다르다 — 0 은 정북풍이고 null 은 모른다는 뜻이다.
+     */
+    windDirDeg: number | null;
   } | null;
   /** 지금부터 24시간. 서버가 **지난 시간을 잘라내고** 준다(00시부터 오지 않는다). */
   hours: Array<{
@@ -182,6 +212,11 @@ export interface PlotForecast {
     rainChance: number | null;
     windMax: number | null;
     humidityPct: number | null;
+    /** 해 뜸·해 짐. "2026-09-19T06:19" 꼴 — 시각만 뽑는 것은 화면의 일이다. */
+    sunrise: string | null;
+    sunset: string | null;
+    /** 그날 대표 풍향(도). 불어오는 쪽이다. */
+    windDirDeg: number | null;
   }>;
   /** 최근접 관측소 기준 누적 강수량(mm). 그 구간에 관측이 없으면 null(판정 보류). */
   rainfall3d: number | null;
@@ -572,17 +607,30 @@ export const aiService = {
     call<SigunguWindFeatureCollection>("/v1/map/sigungu-wind", {
       timeoutMs: 15_000,
     }),
+  /** 진행 중인 태풍의 분석·예측 경로. 없으면 analysis·forecast 가 빈 배열이다. */
+  typhoonTrack: () =>
+    call<TyphoonTrack>("/v1/typhoon/track", {
+      // 기상청 발표가 하루 4번(04·10·16·22시 + 수시)이다. sigungu-warn 처럼
+      // 매번 받을 이유가 없다 — 1시간 캐시로 같은 응답을 스무 번 받지 않는다.
+      revalidateSec: 60 * 60,
+      timeoutMs: 15_000,
+    }),
   /**
-   * 밭 좌표의 7일 예보. `plotId` 를 주면 최근 14일 하루치 GDD(growthSeries)와
-   * 작물 기준 해석(cropImpact)까지 함께 온다.
+   * 밭 좌표의 7일 예보. `plot` 을 주면 최근 14일 하루치 GDD(growthSeries)와
+   * 작물 기준 해석(cropImpact)·기상특보(alert)까지 함께 온다.
+   *
+   * ⚠️ 밭 id 와 소유자 id 를 **한 객체로 묶어 받는다.** 따로 받으면 id 만 넘기는
+   *    호출이 생기는데, 그때 ai-service 는 남의 밭인지 가릴 수 없어 밭 값을
+   *    통째로 비우고 경고만 남긴다(`app/api/weather.py`). 화면에는 "작물 정보
+   *    없음" 으로만 보여 원인을 찾기 어렵다 — 실제로 그렇게 새어 나갔던 자리다.
    */
   plotForecast: async (
     lat: number,
     lon: number,
-    plotId?: string,
+    plot?: { id: string; userId: string },
   ): Promise<AiResult<PlotForecast>> => {
     const result = await call<PlotForecast>(
-      `/v1/weather/plot?lat=${lat}&lon=${lon}${plotId ? `&plot_id=${plotId}` : ""}`,
+      `/v1/weather/plot?lat=${lat}&lon=${lon}${plot ? `&plot_id=${plot.id}&user_id=${plot.userId}` : ""}`,
       {
         revalidateSec: WEATHER_REVALIDATE_SEC,
         timeoutMs: FORECAST_TIMEOUT_MS,
