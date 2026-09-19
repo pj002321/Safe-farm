@@ -32,6 +32,7 @@ from app.domain.water_balance import (
 )
 from app.knowledge.embedder import get_client
 from app.models.farm import Advice, FarmAdvice, Plot
+from app.service.disaster_notes import prevention_notes_for
 from app.service.plot_growth import (
     compute_plot_growth,
     daily_gdd_series,
@@ -85,6 +86,11 @@ class ReportInput:
     is_last_stage: bool = False
     #: 이 품종의 단계 수. 하나뿐이면 단계 이름에 시기 정보가 없다(상추: '수확' 한 칸)
     stage_count: int = 0
+    #: 이맘때 이 작물에 미리 해 둘 것(app/service/disaster_notes). 없으면 빈 튜플.
+    #:
+    #: ⚠ **지금 그 재해가 온다는 뜻이 아니다.** 해마다 이맘때 나오는 대비 요령이다 —
+    #:   프롬프트가 그 선을 못박는다.
+    prevention_notes: tuple[str, ...] = ()
     #: 조심할 재해 갈래 — ('가뭄','과습','저온' …)
     stage_hazards: tuple[str, ...] = ()
     rainfall_7d_mm: float | None = None
@@ -173,6 +179,7 @@ def build_report_input(db: Session, plot: Plot) -> ReportInput | None:
         stage_gdd_to=growth.stage_gdd_to,
         is_last_stage=growth.is_last_stage,
         stage_count=growth.stage_count,
+        prevention_notes=prevention_notes_for(db, growth.crop_name_ko, _kst_today().month),
         water_need_mm=growth.water_need_mm,
         fertilize_needed=growth.fertilize_needed,
         water=water,
@@ -317,6 +324,12 @@ def _build_prompt(report_input: ReportInput) -> str:
         본날 = report_input.vegetation.observed_on
         lines.append(f"위성이 본 것({본날} 관측): {' '.join(위성말)}")
         lines.append("NDVI·NDMI 같은 말은 쓰지 말고 위 문장의 뜻만 쓸 것.")
+    # ── 이맘때 미리 해 둘 것 ──────────────────────────────────────
+    # ⚠ **"지금 그 재해가 온다" 가 아니다.** 해마다 이맘때 나오는 대비 요령이라
+    #   단정하면 거짓이 된다. 한 번 틀린 경보를 보면 맞는 경보도 무시하게 된다.
+    if report_input.prevention_notes:
+        lines.append(f"이맘때 미리 해 두는 것: {' / '.join(report_input.prevention_notes)}")
+        lines.append("지금 그 재해가 온다는 뜻으로 쓰지 말 것. 미리 대비하는 요령으로만 말할 것.")
     if report_input.fertilize_needed:
         lines.append("현재 시비 시기다.")
     if report_input.tomorrow_temp_min is not None:

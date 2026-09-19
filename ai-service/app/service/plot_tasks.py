@@ -13,6 +13,7 @@ DB에서 값을 모아 넘기고, 나온 후보를 plot_tasks 테이블에 적�
 from __future__ import annotations
 
 import traceback
+from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
@@ -28,6 +29,7 @@ from app.domain.task_rules import (
 )
 from app.domain.water_balance import WaterBalance, judge_water
 from app.models.farm import Plot, PlotTask, WeatherObsDaily
+from app.service.crop_hazard import temp_limits_for
 from app.service.pest_notes import pest_names_for
 from app.service.plot_growth import (
     _crop_for_cultivation,
@@ -193,8 +195,21 @@ WATER_PAST_DAYS = 14
 _COORD_NDIGITS = 2
 
 
-def _water_balance(plot: Plot, memo: dict | None = None) -> WaterBalance:
-    """밭 좌표의 물 사정. Open-Meteo **한 번의 호출**로 과거와 예보를 같이 받는다.
+@dataclass(frozen=True)
+class _PlotWeather:
+    """한 번의 Open-Meteo 호출에서 나오는 것 둘.
+
+    ⚠ **왕복을 늘리지 않으려고 같이 들고 나온다.** 내일 기온은 물수지를 낼 때
+      이미 받아 둔 응답 안에 있다. 따로 부르면 밭마다 1.2초가 더 붙는다.
+    """
+
+    water: WaterBalance
+    #: 내일 예보 한 줄(temp_min·temp_max·rainfall_mm …). 못 찾으면 None
+    tomorrow: dict | None = None
+
+
+def _plot_weather(plot: Plot, memo: dict | None = None) -> _PlotWeather:
+    """밭 좌표의 물 사정과 내일 예보. Open-Meteo **한 번의 호출**로 둘 다 받는다.
 
     ⚠ **밭마다 한 번씩 나간다.** 하루 1회 배치라 감당되지만, 따로 부르면 왕복이 둘이
       되고 밭 수만큼 곱해진다 — past_days 와 forecast_days 를 한 요청에 같이 준다.
@@ -219,24 +234,24 @@ def _water_balance(plot: Plot, memo: dict | None = None) -> WaterBalance:
     if memo is not None and 키 in memo:
         return memo[키]
 
-    결과 = _fetch_water_balance(float(plot.latitude), float(plot.longitude))
+    결과 = _fetch_plot_weather(float(plot.latitude), float(plot.longitude))
     if memo is not None:
         memo[키] = 결과
     return 결과
 
 
-def _fetch_water_balance(lat: float, lon: float) -> WaterBalance:
+def _fetch_plot_weather(lat: float, lon: float) -> _PlotWeather:
     """실제로 부르는 쪽. 메모가 없을 때만 여기까지 온다."""
     try:
         payload = fetch_forecast(lat, lon, past_days=WATER_PAST_DAYS)
         daily = payload["daily"]
         rows = normalize_daily_forecast(daily)
     except Exception:  # noqa: BLE001 — 기상이 없어도 시비 판정은 해야 한다
-        return WaterBalance()
+        return _PlotWeather(WaterBalance())
 
     today = daily_index_of(daily, _kst_today().isoformat())
     if today is None:
-        return WaterBalance()
+        return _PlotWeather(WaterBalance())
 
     past = rows[max(0, today - WATER_PAST_DAYS) : today]
     ahead = rows[today + 1 :]
@@ -250,7 +265,7 @@ def _fetch_water_balance(lat: float, lon: float) -> WaterBalance:
     # ⚠ 둘 중 하나라도 없으면 수지를 만들지 않는다. 한쪽만으로 낸 값은 뜻이 다르다
     수지 = None if (비 is None or 증발 is None) else 비 - 증발
 
-    return WaterBalance(
+    물 = WaterBalance(
         balance_14d_mm=수지,
         # ⚠ 판정에는 안 쓰고 **문장에만** 쓴다. 사람에게는 "비가 0.1mm" 가 통하고
         #   "-56mm"(증발산을 뺀 값)는 안 통한다 — dryness_note 참고
@@ -260,6 +275,7 @@ def _fetch_water_balance(lat: float, lon: float) -> WaterBalance:
         rain_7d_mm=합("rainfall_mm", ahead[:7]),
         soil_moisture=None,  # hourly 에 있다. 지금은 안 쓴다 — is_soil_dry 가 False 로 떨어진다
     )
+    return _PlotWeather(물, tomorrow=ahead[0] if ahead else None)
 
 
 def generate_tasks_for_plot(
@@ -292,6 +308,11 @@ def generate_tasks_for_plot(
         _skip(plot, _why_no_growth(db, plot))
         return []
 
+    # 한 번의 Open-Meteo 호출에서 물수지와 내일 예보를 같이 꺼낸다
+    날씨 = _plot_weather(plot, water_memo)
+    내일 = 날씨.tomorrow or {}
+    한계 = temp_limits_for(db, growth.crop_name_ko)
+
     inputs = PlotTaskInputs(
         crop_name_ko=growth.crop_name_ko,
         stage_name=growth.stage_name,
@@ -301,7 +322,7 @@ def generate_tasks_for_plot(
         stage_tasks=growth.stage_tasks,
         fertilize_needed=growth.fertilize_needed,
         # 사정 — 기상. 못 만들면 빈 값이라 물 카드가 안 나온다(시비는 그대로 나간다)
-        water=_water_balance(plot, water_memo),
+        water=날씨.water,
         recent_rain_mm=_recent_rain_mm(db, station.station_code),
         # 수확 — GDD 가 '때'를, 위성이 '아직 있나'를 말한다(task_rules 주석)
         gdd_target_passed=past_target(growth.accumulated_gdd, growth.gdd_target),
@@ -311,6 +332,11 @@ def generate_tasks_for_plot(
         pest_names=pest_names_for(db, growth.crop_name_ko, _kst_today()),
         # 재해 — 기상청이 판정한 것을 **받아 적기만** 한다(task_rules 주석)
         warnings=_active_warnings(db, plot),
+        # 기온 한계 — 작물이 몇 도부터 상하나 × 내일 예보
+        frost_limit_c=한계.frost_c,
+        heat_limit_c=한계.heat_c,
+        tomorrow_temp_min=내일.get("temp_min"),
+        tomorrow_temp_max=내일.get("temp_max"),
     )
     candidates = build_task_candidates(inputs)
     if not candidates:

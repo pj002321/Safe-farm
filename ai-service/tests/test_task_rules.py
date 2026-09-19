@@ -418,3 +418,54 @@ def test_특보가_겹치면_가장_위험한_쪽의_안전을_남긴다():
     # 대비 작업은 둘 다 적는다 — 빠지는 건 안전 문구뿐이다
     assert "비닐과 지주" in 카드.reason
     assert "차광망" in 카드.reason
+
+
+# ── 기온 한계: 시기 × 한계 × 사정 ───────────────────────────────
+#
+# ★ crop_disaster_rules 93행이 작물 상세 화면에서만 읽히고 홈·리포트·카드
+#   어디에도 안 닿고 있었다. 물 카드와 같은 구조로 꺼냈다.
+
+추운밤 = dict(stage_hazards=("저온",), frost_limit_c=0.0, tomorrow_temp_min=-1.0)
+
+
+def test_내일_아침이_한계_아래면_추위_대비를_말한다():
+    (카드,) = build_task_candidates(밭(**추운밤))
+    assert 카드.title == "배추 추위 대비하기"
+    assert "-1도" in 카드.reason
+    assert "0도부터" in 카드.reason
+    assert 카드.priority == "high"
+
+
+def test_한계보다_따뜻하면_조용하다():
+    assert 제목들(밭(**{**추운밤, "tomorrow_temp_min": 5.0})) == []
+
+
+def test_시기를_곱한다():
+    """한계만 보면 한겨울 빈 밭에도 경고가 간다 — 물 카드와 같은 원칙이다."""
+    assert 제목들(밭(**{**추운밤, "stage_hazards": ("가뭄",)})) == []
+
+
+def test_한계를_모르면_말하지_않는다():
+    """규칙이 없는 작물이 많다(93행뿐). 모름을 '안전' 으로 읽지 않는다."""
+    assert 제목들(밭(**{**추운밤, "frost_limit_c": None})) == []
+
+
+def test_예보를_못_받으면_말하지_않는다():
+    assert 제목들(밭(**{**추운밤, "tomorrow_temp_min": None})) == []
+
+
+def test_더위도_같은_구조다():
+    (카드,) = build_task_candidates(
+        밭(stage_hazards=("고온",), heat_limit_c=30.0, tomorrow_temp_max=33.0)
+    )
+    assert 카드.title == "배추 더위 대비하기"
+    assert "차광망" in 카드.reason
+
+
+def test_특보_카드와_따로다():
+    """저쪽은 기상청이 낸 특보를 옮기고, 이쪽은 이 작물의 한계를 본다.
+    특보가 없어도 이 밭에는 추울 수 있다."""
+    titles = 제목들(밭(**추운밤, warnings=("한파",)))
+    assert len(titles) == 2
+    assert titles[0].startswith("한파 특보")
+    assert titles[1] == "배추 추위 대비하기"

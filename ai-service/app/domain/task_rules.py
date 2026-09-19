@@ -55,6 +55,9 @@ RAIN_WINDOW_DAYS = 7
 #   과습 — 반대로 물이 많으면 피해가 나는 시기 (104)
 _DROUGHT = "가뭄"
 _WET = "과습"
+# 기온 한계 카드가 보는 갈래(crop_stages 269행 중 저온 118 · 고온 21)
+_COLD = "저온"
+_HOT = "고온"
 
 #: 관측 강수 {RAIN_WINDOW_DAYS}일 합계가 이보다 적거나 같으면 마른 것으로 본다(mm).
 #:
@@ -112,6 +115,15 @@ class PlotTaskInputs:
     sow_method: str | None = None
     #: 최근 위성 NDVI. 없으면 None — 수확 판정에서 빠진다(없으면 거짓)
     ndvi: float | None = None
+
+    # ── 재해 한계: 작물이 몇 도부터 상하나 ──────────────────────
+    #: 아침 최저가 이 아래면 언다·상한다(crop_disaster_rules). 모르면 None
+    frost_limit_c: float | None = None
+    #: 낮 최고가 이 위면 상한다. 모르면 None
+    heat_limit_c: float | None = None
+    #: 내일 예보 최저·최고(도). 못 받았으면 None — 판정에서 빠진다
+    tomorrow_temp_min: float | None = None
+    tomorrow_temp_max: float | None = None
 
     # ── 재해: 기상청 특보를 **그대로 받는다** ────────────────────
     #: 지금 이 밭에 걸려 있는 특보 종류 — ('호우', '강풍'). 없으면 빈 튜플.
@@ -325,6 +337,58 @@ _기본안전 = "특보가 풀린 뒤에 나가세요. 무리하지 마세요."
 _위험순서 = ("폭염", "태풍", "호우", "대설", "한파", "강풍", "건조")
 
 
+def _temp_candidate(inputs: PlotTaskInputs) -> TaskCandidate | None:
+    """내일 기온이 이 작물의 한계를 넘나. **시기 × 한계 × 사정**이다.
+
+    ★ 2026-09-19 — `crop_disaster_rules` 93행이 작물 상세 화면에서만 읽히고
+      홈·리포트·카드 어디에도 안 닿고 있었다. 물 카드와 같은 구조로 꺼냈다 —
+      `stage_hazards` 가 "이 시기에 저온 피해가 잦다" 를 말하고, 이 표가
+      "몇 도부터" 를 준다.
+
+    ⚠ **시기를 곱한다.** 한계만 보면 한겨울 빈 밭에도 경고가 간다. 단계표가
+      '저온'·'고온' 을 걱정하는 시기여야 낸다 — 물 카드가 '가뭄'·'과습' 을
+      보는 것과 같다.
+
+    ⚠ 특보 카드와 겹치지 않는다. 저쪽은 **기상청이 낸 특보**를 옮기는 것이고
+      여기는 **이 작물의 한계**를 본다. 특보가 없어도 이 밭에는 추울 수 있다.
+    """
+    최저, 최고 = inputs.tomorrow_temp_min, inputs.tomorrow_temp_max
+
+    if (
+        _COLD in inputs.stage_hazards
+        and inputs.frost_limit_c is not None
+        and 최저 is not None
+        and 최저 <= inputs.frost_limit_c
+    ):
+        return TaskCandidate(
+            title=f"{inputs.crop_name_ko} 추위 대비하기",
+            reason=(
+                f"내일 아침 최저가 {최저:.0f}도예요. "
+                f"{inputs.crop_name_ko}는 {inputs.frost_limit_c:.0f}도부터 상합니다. "
+                "덮개나 짚을 미리 씌워 두세요."
+            ),
+            priority="high",
+        )
+
+    if (
+        _HOT in inputs.stage_hazards
+        and inputs.heat_limit_c is not None
+        and 최고 is not None
+        and 최고 >= inputs.heat_limit_c
+    ):
+        return TaskCandidate(
+            title=f"{inputs.crop_name_ko} 더위 대비하기",
+            reason=(
+                f"내일 낮 최고가 {최고:.0f}도예요. "
+                f"{inputs.crop_name_ko}는 {inputs.heat_limit_c:.0f}도부터 상합니다. "
+                "차광망을 덮고 물은 해 뜨기 전이나 해 진 뒤에 주세요."
+            ),
+            priority="high",
+        )
+
+    return None
+
+
 def _hazard_candidate(inputs: PlotTaskInputs) -> TaskCandidate | None:
     """특보가 떴을 때 **미리 할 일과 안전 당부** 한 장.
 
@@ -428,6 +492,10 @@ def build_task_candidates(inputs: PlotTaskInputs) -> list[TaskCandidate]:
     # **맨 앞이다.** 태풍이 오는 날 물 주기 카드가 위에 있으면 안 된다.
     if (재해 := _hazard_candidate(inputs)) is not None:
         candidates.append(재해)
+
+    # 기온 한계는 특보 바로 다음이다. 특보가 없어도 이 밭에는 추울 수 있다
+    if (기온 := _temp_candidate(inputs)) is not None:
+        candidates.append(기온)
 
     # ── 수확 ──────────────────────────────────────────────────────
     # ★ 2026-09-19 — **GDD 가 '때'를 말하고 위성이 '아직 있나'를 말한다.**
