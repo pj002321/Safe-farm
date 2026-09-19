@@ -28,7 +28,7 @@ def fetch_forecast(lat, lon, days=7):
         params={
             "latitude": lat,
             "longitude": lon,
-            "current": "temperature_2m,relative_humidity_2m,precipitation,wind_speed_10m",
+            "current": "temperature_2m,relative_humidity_2m,precipitation,wind_speed_10m,wind_direction_10m",
             "hourly": "temperature_2m,precipitation,precipitation_probability",
             "daily": "temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_probability_max,wind_speed_10m_max,relative_humidity_2m_mean",
             # ⚠️ **반드시 지정한다.** Open-Meteo 의 풍속 기본 단위는 km/h 다.
@@ -70,6 +70,31 @@ def normalize_daily_forecast(daily):
     return out
 
 
+def fetch_current_wind_directions(coords: list[tuple[float, float]]) -> list[float | None]:
+    """여러 지점의 지금 풍향(도, 0=N)을 한 번의 호출로 받는다. coords 순서대로 반환.
+
+    Open-Meteo 는 latitude/longitude 를 콤마로 이어 주면 지점 수만큼 배열로 답한다 —
+    시군구에 배정된 관측소(약 100개)를 하나씩 부르면 왕복이 100번이 된다.
+    """
+    if not coords:
+        return []
+    resp = requests.get(
+        FORECAST_URL,
+        params={
+            "latitude": ",".join(str(lat) for lat, _lon in coords),
+            "longitude": ",".join(str(lon) for _lat, lon in coords),
+            "current": "wind_direction_10m",
+            "timezone": "Asia/Seoul",
+        },
+        timeout=15,
+    )
+    resp.raise_for_status()
+    data = resp.json()
+    # 지점이 하나면 객체 하나, 여럿이면 배열 — 응답 형태가 갈린다(Open-Meteo 실측).
+    rows = data if isinstance(data, list) else [data]
+    return [(row.get("current") or {}).get("wind_direction_10m") for row in rows]
+
+
 def normalize_current(current):
     """현재 실황 한 건. 키가 없으면 None 으로 둔다 — 값이 없는 것과 0 은 다르다."""
     if not current:
@@ -80,6 +105,9 @@ def normalize_current(current):
         "humidityPct": current.get("relative_humidity_2m"),
         "rainfallMm": current.get("precipitation"),
         "windMs": current.get("wind_speed_10m"),
+        # 바람이 "불어오는" 방향(기상학 관례, 0=N). 화면은 이걸 180° 돌려
+        # "불어가는" 방향 화살표로 그린다 — DOMAIN_REF.md:719 참고.
+        "windDeg": current.get("wind_direction_10m"),
     }
 
 

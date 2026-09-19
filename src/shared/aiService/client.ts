@@ -146,6 +146,8 @@ export interface SigunguWindFeatureCollection {
       station?: string;
       stationName?: string;
       windMax?: number | null;
+      /** 지금 풍향(0~360°, 불어오는 방향). Open-Meteo 실시간 조회라 없을 수 있다. */
+      windDeg?: number | null;
       color?: string;
       label?: string;
     };
@@ -166,6 +168,8 @@ export interface PlotForecast {
     humidityPct: number | null;
     rainfallMm: number | null;
     windMs: number | null;
+    /** 바람이 불어오는 방향(0~360°, 기상학 관례). `WeatherNow` 가 180° 돌려 화살표로 그린다. */
+    windDeg: number | null;
   } | null;
   /** 지금부터 24시간. 서버가 **지난 시간을 잘라내고** 준다(00시부터 오지 않는다). */
   hours: Array<{

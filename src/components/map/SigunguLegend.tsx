@@ -211,5 +211,18 @@ function detail(
     return `${r.rainMm != null ? `${r.rainMm}mm` : "데이터 없음"} · ${r.label}`;
   }
   const w = p as WindProperties;
-  return `${w.windMax != null ? `${w.windMax}m/s` : "데이터 없음"} · ${w.label}`;
+  const speed = w.windMax != null ? `${w.windMax}m/s` : "데이터 없음";
+  const dir = w.windDeg != null ? ` (${compassLabel(w.windDeg)})` : "";
+  return `${speed}${dir} · ${w.label}`;
+}
+
+/** 0~360° → 16방위 "OO풍"(바람이 불어오는 방향, 기상청 표기 관례). */
+function compassLabel(deg: number): string {
+  const names = [
+    "북풍", "북북동풍", "북동풍", "동북동풍",
+    "동풍", "동남동풍", "남동풍", "남남동풍",
+    "남풍", "남남서풍", "남서풍", "서남서풍",
+    "서풍", "서북서풍", "북서풍", "북북서풍",
+  ];
+  return names[Math.round(deg / 22.5) % 16];
 }

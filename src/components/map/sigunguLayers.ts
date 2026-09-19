@@ -76,3 +76,25 @@ export function outerRings(geometry: Geometry): number[][][] {
   const coords = geometry.coordinates as number[][][][];
   return coords.map((polygon) => polygon[0]);
 }
+
+/** 외곽 고리들의 경계상자 한가운데. 화살표를 대충 그 지역 한가운데 놓는 용도다.
+ *
+ * ⚠️ **점들의 평균이 아니라 경계상자 중심을 쓴다.** 해안선이 낀 시군구는 그
+ * 쪽 좌표점 밀도가 내륙 직선 경계보다 훨씬 높아서, 점을 그냥 평균 내면
+ * 무게중심이 바다 쪽으로 쏠려 폴리곤 바깥(심하면 화면 밖)으로 나간다(실측).
+ */
+export function centroid(geometry: Geometry): { lat: number; lng: number } {
+  let minLat = Infinity;
+  let maxLat = -Infinity;
+  let minLng = Infinity;
+  let maxLng = -Infinity;
+  for (const ring of outerRings(geometry)) {
+    for (const [lng, lat] of ring) {
+      if (lat < minLat) minLat = lat;
+      if (lat > maxLat) maxLat = lat;
+      if (lng < minLng) minLng = lng;
+      if (lng > maxLng) maxLng = lng;
+    }
+  }
+  return { lat: (minLat + maxLat) / 2, lng: (minLng + maxLng) / 2 };
+}

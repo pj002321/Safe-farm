@@ -63,6 +63,7 @@ const DEFAULT_LEVEL = 4;
 export function PlotLocationStep() {
   const [status, setStatus] = useState<KakaoSdkStatus>("loading");
   const [selected, setSelected] = useState<SelectedLocation | null>(null);
+  const [skyview, setSkyview] = useState(false);
 
   /**
    * 마지막으로 보낸 역지오코딩 요청 번호.
@@ -214,6 +215,17 @@ export function PlotLocationStep() {
     map.setCenter(new sdk.maps.LatLng(coord.lat, coord.lon));
   }
 
+  /** 일반 지도 ↔ 스카이뷰(위성사진). 핀 좌표는 그대로 — 배경만 바뀐다. */
+  function toggleSkyview() {
+    const sdk = window.kakao;
+    const map = mapRef.current;
+    if (!sdk || !map) return;
+
+    const next = !skyview;
+    setSkyview(next);
+    map.setMapTypeId(next ? sdk.maps.MapTypeId.HYBRID : sdk.maps.MapTypeId.ROADMAP);
+  }
+
   return (
     <>
       <KakaoSdkScript onStatusChange={setStatus} />
@@ -222,6 +234,16 @@ export function PlotLocationStep() {
         <PlotMapFrame
           controls={
             <PlotMapControls disabled={status !== "ready"} onGoTo={goTo} />
+          }
+          overlay={
+            <button
+              className="inline-flex min-h-9 items-center rounded-md border border-border bg-surface/90 px-3 font-medium text-fg text-xs shadow-sm backdrop-blur transition-colors duration-200 ease-out-expo hover:border-accent hover:text-accent disabled:opacity-50"
+              disabled={status !== "ready"}
+              onClick={toggleSkyview}
+              type="button"
+            >
+              {skyview ? "일반 지도" : "스카이뷰"}
+            </button>
           }
         />
         <div className="self-start">

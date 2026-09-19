@@ -314,6 +314,10 @@
    * opacity 가 초기값으로 돌아가 항목이 깜빡이며 사라진다.
    * prefers-reduced-motion 은 아래 전역 블록이 0.01ms 로 눌러 즉시 완료시킨다. */
   --animate-rise: rise 0.42s var(--ease-out-expo) both;
+  /* 바람 화살표. 회전은 바깥 요소가 고정으로 맡고, 이 애니메이션은 안쪽에서
+   * 제 축(X) 방향으로만 흔든다 — 부모의 rotate 위에서 합성되므로 결과적으로
+   * 가리키는 방향으로 흘러가는 것처럼 보인다. */
+  --animate-wind-flow: wind-flow 1.1s ease-in-out infinite;
 }
 
 @keyframes pulse-ring {
@@ -355,6 +359,18 @@
   }
   to {
     transform: translateY(-96px);
+  }
+}
+
+@keyframes wind-flow {
+  0%,
+  100% {
+    transform: translateX(0);
+    opacity: 0.55;
+  }
+  50% {
+    transform: translateX(5px);
+    opacity: 1;
   }
 }
 

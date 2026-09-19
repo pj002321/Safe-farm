@@ -1,4 +1,9 @@
-import { CloudRainIcon, DropletIcon, WindIcon } from "@/components/icons";
+import {
+  ArrowRightIcon,
+  CloudRainIcon,
+  DropletIcon,
+  WindIcon,
+} from "@/components/icons";
 import type { PlotForecast } from "@/shared/aiService/client";
 
 /**
@@ -58,7 +63,17 @@ export function WeatherNow({
           <dt>
             <WindIcon aria-label="풍속" className="size-3.5" />
           </dt>
-          <dd>{current.windMs != null ? `${current.windMs}m/s` : "—"}</dd>
+          <dd className="flex items-center gap-1">
+            {current.windMs != null ? `${current.windMs}m/s` : "—"}
+            {/* 기상청 표기는 "불어오는" 방향이라, 화살표는 180° 돌려 "불어가는" 쪽을 가리킨다. */}
+            {current.windDeg != null && (
+              <ArrowRightIcon
+                aria-label={`풍향 ${current.windDeg}도`}
+                className="size-3 text-fg-subtle"
+                style={{ transform: `rotate(${current.windDeg + 90}deg)` }}
+              />
+            )}
+          </dd>
         </div>
       </dl>
 

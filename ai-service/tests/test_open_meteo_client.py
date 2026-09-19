@@ -48,6 +48,7 @@ def test_normalize_current_maps_fields():
             "relative_humidity_2m": 62,
             "precipitation": 0.0,
             "wind_speed_10m": 3.4,
+            "wind_direction_10m": 270,
         }
     ) == {
         "observedAt": "2026-09-17T09:00",
@@ -55,6 +56,7 @@ def test_normalize_current_maps_fields():
         "humidityPct": 62,
         "rainfallMm": 0.0,
         "windMs": 3.4,
+        "windDeg": 270,
     }
 
 

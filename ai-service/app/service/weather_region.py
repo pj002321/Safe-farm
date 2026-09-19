@@ -7,13 +7,47 @@ GDD 와 달리 평년 대비가 아니라 관측소별 가장 최근 관측일�
 
 from __future__ import annotations
 
+import csv
+from functools import lru_cache
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 from sqlalchemy.sql.elements import ColumnElement
 
+from app.core.config import DATA_DIR
 from app.domain.gdd import station_plot_id
 from app.domain.weather_region import classify_rain, classify_wind
 from app.models.weather import WeatherDaily
+from pipeline.open_meteo_client import fetch_current_wind_directions
+
+STATION_COORDS_PATH = DATA_DIR / "master" / "stations.csv"
+
+
+@lru_cache(maxsize=1)
+def _station_coords() -> dict[str, tuple[float, float]]:
+    """관측소 번호 → (위도, 경도). 풍향을 Open-Meteo 로 낼 때 좌표가 필요하다 —
+    일통계(arcltr_sfc_day) 에는 풍향 필드 자체가 없다(DOMAIN_REF.md §3-①).
+    """
+    with STATION_COORDS_PATH.open(encoding="utf-8") as f:
+        return {
+            row["station_code"]: (float(row["latitude"]), float(row["longitude"]))
+            for row in csv.DictReader(f)
+        }
+
+
+def _wind_directions_by_station(stations: list[str]) -> dict[str, float]:
+    """관측소별 지금 풍향(도). 외부 호출 실패는 화살표만 빠지게 두고 지도 전체를
+    깨뜨리지 않는다 — 색상(windMax)은 이미 DB 값이라 이 호출과 무관하다.
+    """
+    coords_by_stn = _station_coords()
+    known = [s for s in stations if s in coords_by_stn]
+    if not known:
+        return {}
+    try:
+        degrees = fetch_current_wind_directions([coords_by_stn[s] for s in known])
+    except Exception:  # noqa: BLE001 — 외부 API 장애는 방향 없음으로 낮춘다
+        return {}
+    return {stn: deg for stn, deg in zip(known, degrees) if deg is not None}
 
 
 def _latest_value_by_station(
@@ -57,9 +91,10 @@ def sigungu_rain_levels(db: Session, sigungu_stations: list[dict]) -> dict[str, 
 
 
 def sigungu_wind_levels(db: Session, sigungu_stations: list[dict]) -> dict[str, dict]:
-    """시군구 코드 → {station, stationName, windMax, color, label}."""
+    """시군구 코드 → {station, stationName, windMax, windDeg, color, label}."""
     stations = sorted({row["station"] for row in sigungu_stations})
     by_stn = _latest_value_by_station(db, stations, WeatherDaily.wind_max)
+    deg_by_stn = _wind_directions_by_station(stations)
 
     out: dict[str, dict] = {}
     for row in sigungu_stations:
@@ -69,6 +104,7 @@ def sigungu_wind_levels(db: Session, sigungu_stations: list[dict]) -> dict[str, 
             "station": row["station"],
             "stationName": row["station_name"],
             "windMax": round(value, 1) if value is not None else None,
+            "windDeg": deg_by_stn.get(row["station"]),
             "color": color,
             "label": label,
         }
