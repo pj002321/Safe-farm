@@ -75,6 +75,10 @@ def build_graph_default() -> CompiledStateGraph:
     builder.add_node("plan", plan)
     builder.add_node("run_tools", run_tools)
     builder.add_node("retrieve", retrieve)
+    """
+    START → plan     → run_tools    ↘  [gen까지 2step]
+          → retrieve [gen까지 1step] →  generate(defer로 올때까지 기다리기) → END
+    """
     builder.add_node("generate", generate, defer=True)
 
     builder.add_edge(START, "plan")
