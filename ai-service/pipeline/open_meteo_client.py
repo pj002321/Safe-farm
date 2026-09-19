@@ -64,6 +64,8 @@ def _cached(key):
         if time.monotonic() - stored_at >= FORECAST_CACHE_TTL:
             del _cache[key]
             return None
+        
+        # LRU 캐시를 목적으로 LR인 애를 맨 앞으로 보내게 됨 -> 풀방이면 처리 하려고
         _cache.move_to_end(key)
     # 사본을 준다. 원본을 그대로 주면 부르는 쪽이 한 번 손대는 순간 다음 요청까지
     # 같이 틀어지는데, 그 인과는 로그로 못 쫓는다. 수천 개 실수 복사라 비용은 없다.
