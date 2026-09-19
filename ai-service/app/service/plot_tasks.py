@@ -20,6 +20,7 @@ from datetime import date, datetime, timedelta, timezone
 
 from sqlalchemy.orm import Session
 
+from app.core.config import KMA_API_KEY
 from app.domain.gdd import past_target
 from app.domain.kst import KST, kst_hour, kst_today
 from app.domain.task_rules import (
@@ -28,6 +29,7 @@ from app.domain.task_rules import (
     PlotTaskInputs,
     build_task_candidates,
 )
+from app.domain.typhoon import TyphoonPoint, is_approaching, split_track
 from app.domain.vegetation_text import Vegetation, summarize_points
 from app.domain.water_balance import WaterBalance, judge_water
 from app.domain.task_rules import RAIN_WINDOW_DAYS, PlotTaskInputs, build_task_candidates
@@ -41,6 +43,7 @@ from app.service.plot_growth import compute_plot_growth, nearest_station
 from app.service.satellite_cache import stored_observations
 from app.service.warn_region import plot_warning
 
+from pipeline.kma_client import fetch_typhoon_track
 from pipeline.open_meteo_client import (
     daily_index_of,
     hourly_value_at,
@@ -140,7 +143,24 @@ def _vegetation(db: Session, plot: Plot) -> Vegetation:
     return summarize_points(points)
 
 
-def _active_warnings(db: Session, plot: Plot) -> tuple[str, ...]:
+def _fetch_typhoon_forecast() -> tuple[TyphoonPoint, ...]:
+    """지금 진행 중인 태풍의 예측 경로. 없거나 못 받으면 빈 튜플이다.
+
+    ⚠ typhoon.py(지도 레이어)와 같은 자료원이다 — 판정을 새로 하지 않는다.
+    """
+    if not KMA_API_KEY:
+        return ()
+    try:
+        rows = fetch_typhoon_track(KMA_API_KEY)
+    except Exception:  # noqa: BLE001 — 외부 API 장애가 나머지 카드를 막지 않는다
+        return ()
+    _, forecast = split_track(rows)
+    return tuple(forecast)
+
+
+def _active_warnings(
+    db: Session, plot: Plot, typhoon_forecast: tuple[TyphoonPoint, ...] | None = None
+) -> tuple[str, ...]:
     """이 밭에 지금 걸려 있는 기상특보 종류. 못 읽으면 빈 튜플이다.
 
     ⚠ `warn_region.plot_warning` 을 **부르기만** 한다 — 리포트(report.py)도 같은
@@ -148,14 +168,27 @@ def _active_warnings(db: Session, plot: Plot) -> tuple[str, ...]:
 
     ⚠ 실패해도 배치를 막지 않는다. 특보를 못 읽으면 대비 카드가 안 나갈 뿐이고,
       물·시비 카드는 그대로 나가야 한다(_plot_weather 와 같은 판단).
+
+    ⚠ **한국 지역특보보다 먼저 "태풍" 을 켤 수 있다.** 지역특보는 태풍이 실제로
+      한국에 닿아야 뜨는데, 그때까지 기다리면 대비가 늦다 — 예보 경로가 이
+      밭에 닿는 범위(`typhoon.is_approaching`)면 특보 발효 전에도 켠다.
+
+    ⚠ `typhoon_forecast` 는 배치가 미리 받아 넘긴 것을 쓴다(없으면 직접 받는다) —
+      밭마다 기상청을 새로 부르면 배치 시간이 밭 수만큼 늘어난다.
     """
+    경보: set[str] = set()
     try:
         warning, _ = plot_warning(db, float(plot.latitude), float(plot.longitude))
+        if warning:
+            경보.update(warning.get("warnings") or ())
     except Exception:  # noqa: BLE001 — 특보 조회 실패가 나머지 카드를 막지 않는다
-        return ()
-    if not warning:
-        return ()
-    return tuple(warning.get("warnings") or ())
+        pass
+
+    태풍경로 = typhoon_forecast if typhoon_forecast is not None else _fetch_typhoon_forecast()
+    if is_approaching(태풍경로, float(plot.latitude), float(plot.longitude)):
+        경보.add("태풍")
+
+    return tuple(경보)
 
 
 def _recent_rain_mm(db: Session, station_code: str) -> float | None:
@@ -349,7 +382,10 @@ def _prefetch_weather(plots: Sequence[Plot], memo: dict) -> None:
 
 
 def generate_tasks_for_plot(
-    db: Session, plot: Plot, water_memo: dict | None = None
+    db: Session,
+    plot: Plot,
+    water_memo: dict | None = None,
+    typhoon_forecast: tuple[TyphoonPoint, ...] | None = None,
 ) -> list[PlotTask]:
     """밭 하나를 판정해 새 카드를 만든다.
 
@@ -401,7 +437,7 @@ def generate_tasks_for_plot(
         # 이맘때 이 작물에 자주 나오는 병해충. DB 조회 한 번이라 배치를 안 늦춘다
         pest_names=pest_names_for(db, growth.crop_name_ko, kst_today()),
         # 재해 — 기상청이 판정한 것을 **받아 적기만** 한다(task_rules 주석)
-        warnings=_active_warnings(db, plot),
+        warnings=_active_warnings(db, plot, typhoon_forecast),
         # 기온 한계 — 작물이 몇 도부터 상하나 × 내일 예보
         frost_limit_c=한계.frost_c,
         heat_limit_c=한계.heat_c,
@@ -474,9 +510,11 @@ def generate_daily_tasks(db: Session) -> int:
     # 루프에 들기 전에 좌표들을 동시에 받아 둔다. 순서대로 기다릴 이유가 없다 —
     # 1.2초는 응답 크기가 아니라 왕복 지연이다(_PREFETCH_WORKERS 주석).
     _prefetch_weather(plots, water_memo)
+    # 태풍은 좌표별이 아니라 전역 하나다 — 밭마다 다시 부르지 않고 배치당 한 번만 받는다.
+    태풍경로 = _fetch_typhoon_forecast()
     for plot in plots:
         try:
-            created += len(generate_tasks_for_plot(db, plot, water_memo))
+            created += len(generate_tasks_for_plot(db, plot, water_memo, 태풍경로))
         except Exception:
             db.rollback()
             traceback.print_exc()

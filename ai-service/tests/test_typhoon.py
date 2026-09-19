@@ -1,4 +1,10 @@
-from app.domain.typhoon import FALLBACK_REACH_KM, closest_approach, reaches, split_track
+from app.domain.typhoon import (
+    FALLBACK_REACH_KM,
+    closest_approach,
+    is_approaching,
+    reaches,
+    split_track,
+)
 
 _ROWS = [
     {
@@ -53,3 +59,18 @@ def test_reaches_는_강풍반경_없으면_대체값을_쓴다():
     without_radius = next(p for p in forecast if p.rad15_km is None)
     assert reaches(without_radius, FALLBACK_REACH_KM - 1)
     assert not reaches(without_radius, FALLBACK_REACH_KM + 1)
+
+
+def test_is_approaching_는_가장_가까운_점이_강풍반경_안이면_참():
+    _, forecast = split_track(_ROWS)
+    # 제주도 남쪽 해상(33.0, 126.5, rad15 없음)이 상주에서 가장 가깝다
+    assert is_approaching(forecast, 33.0, 126.5)
+
+
+def test_is_approaching_는_멀면_거짓():
+    _, forecast = split_track(_ROWS)
+    assert not is_approaching(forecast, 36.41, 128.16)
+
+
+def test_is_approaching_예측이_없으면_거짓():
+    assert not is_approaching([], 36.41, 128.16)
