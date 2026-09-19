@@ -87,5 +87,25 @@ EMBED_MAX_TOKENS = 8191  # 넘으면 뒤가 조용히 잘린다
 
 EMBED_BATCH_SIZE = _env_int("EMBED_BATCH_SIZE", 100)  # 레이트리밋에 걸리면 줄인다
 
+# --- 답변 비용 ---
+# 아래 둘은 docs/OPTIMIZATION.md 의 근거로 정했다. env 로 뺀 이유는 모델을 바꾸면
+# 적정값이 같이 바뀌는데, 그때 배포를 새로 하지 않고 돌려보며 맞추기 위해서다.
+#
+# 출력 상한. 없으면 모델이 마음대로 길게 쓴다 — 출력 토큰이 입력보다 비싸고,
+# 첫 글자가 아니라 **마지막 글자**까지의 시간이 화면 체감을 정한다.
+# 800 은 "근거 하나에 한두 문장" 규칙(generator.SYSTEM_PROMPT)으로 나오는 답의
+# 두 배쯤이다. 상한에 닿아 잘리면 문장 중간에서 끊기므로 넉넉히 둔다.
+ANSWER_MAX_TOKENS = _env_int("ANSWER_MAX_TOKENS", 800)
+
+# 프롬프트에 넣을 근거 본문의 글자 예산. 0 이면 무제한(예전 동작).
+# 근거는 matches(top-5) + 같은 문서 앞뒤 조각(neighbors)이라 본문이 1.8배로 는다
+# (vector_store.neighbors 주석). 문서 하나가 길면 그 한 건이 예산을 다 먹는다.
+CONTEXT_CHAR_BUDGET = _env_int("CONTEXT_CHAR_BUDGET", 12000)
+
+# --- 외부 API 캐시 ---
+# Open-Meteo 예보를 좌표별로 들고 있는 시간(초). 화면이 밭마다 부르는데 예보는
+# 시간 단위로만 바뀐다 — 같은 자리를 1분에 열 번 물어도 답은 같다.
+FORECAST_CACHE_TTL = _env_int("FORECAST_CACHE_TTL", 600)
+
 # --- 경로 ---
 DATA_DIR = BASE_DIR / "data"

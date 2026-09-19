@@ -23,9 +23,17 @@ api → service → (repo, domain)
 | `api/`, `schemas/` | 엔드포인트와 요청/응답 계약 | 쿼리 |
 | `pipeline/` | 오프라인 배치 CLI | 런타임 경로에서 import 되기 |
 
-- **`repo/` 는 지금 비어 있다.** 쿼리가 `service/` 안에 있다(`ask_context.py`
-  등). 한 파일이 쿼리와 가공을 같이 하게 되면 그때 `repo/` 로 뗀다 — 비어 있는
-  칸을 채우려고 미리 나누지 않는다.
+- **`repo/` 가 쿼리의 유일한 자리다**(2026-09-19). 그 전에는 `service/` 와 `api/`
+  안에 흩어져 있었는데, 같은 조회가 여러 벌이 되면서 조건이 갈렸다 — `deleted_at
+  is null` 이 한 곳에서 빠져 지운 밭에 할 일 카드가 계속 쌓였고, 같은 밭을 `/ask`
+  와 리포트가 서로 다른 작물로 말했다. 둘 다 예외가 아니라 조용히 틀린 값이었다.
+  - 모듈은 **표 하나에 하나**다(`repo/plot.py`, `repo/weather_obs.py` …).
+  - **repo 는 commit 하지 않는다.** 트랜잭션 경계는 service 가 쥔다.
+  - **repo 끼리 import 하지 않는다.** 두 표를 함께 봐야 하면 조인을 쓰거나,
+    각각 받아 service 에서 합친다.
+  - 예외는 `knowledge/` 뿐이다. pgvector 연산자와 `set local hnsw.iterative_scan`
+    은 같은 트랜잭션 안에서만 의미가 있어 호출부와 떼면 조용히 효과가 사라진다.
+  - 이 셋은 `tests/test_queries_live_in_repo.py` 가 기계로 막는다.
 - `graph/` 는 독립 층이 아니라 service 가 쓰는 수단이다. DB 세션·LLM 은 state 나
   팩토리 인자로 받는다. 노드 안에서 모델을 만들면 테스트가 불가능해진다.
 - 점수 로직(`domain/suitability.py`)은 프런트에도 한 벌 더 있다. 정본 미정.
@@ -114,6 +122,12 @@ SCORE_RULE: HybridRule = hybrid_score_1   # ← 바꿀 땐 이 줄만
   코드가 직접 한다(`_owned_plot`). 없는 것과 남의 것을 구분해 알리지 않는다.
 - soft delete 를 쓰는 테이블은 조회마다 `deleted_at is null` 을 건다.
 - 누적 GDD 는 저장하지 않는다. 매번 관측에서 다시 쌓는다.
+- 조회 캐시는 `core/request_cache.memo` 로 **세션 범위**에 둔다(`docs/OPTIMIZATION.md`).
+  - **정적 마스터만** 담는다(`crops`·`crop_variants`·`crop_stages`). 사용자 데이터를
+    담으면 같은 요청 안에서 쓰기 뒤의 읽기가 옛 값을 본다.
+  - **세션보다 오래 사는 캐시에 ORM 객체를 넣지 않는다.** detach 된 뒤 속성을 읽으면
+    `DetachedInstanceError` 다. 밖으로 들고 가야 하면 `repo/station.py` 처럼 값
+    dataclass 로 베껴 담는다.
 
 ## 8. 테스트
 
