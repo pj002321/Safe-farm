@@ -9,6 +9,7 @@ import {
   NDVI_GROWING,
   NDVI_NONE,
   NDVI_SPARSE,
+  summarizeObservations,
 } from "./vegetationText";
 
 /**
@@ -143,5 +144,45 @@ describe("isRipeningStage", () => {
     expect(isRipeningStage(null)).toBe(false);
     expect(isRipeningStage(undefined)).toBe(false);
     expect(isRipeningStage("")).toBe(false);
+  });
+});
+
+describe("summarizeObservations — 홈 배너 한 줄", () => {
+  const 앞 = { date: "2026-09-05", ndvi: 0.7, ndmi: 0.423 };
+  const 뒤 = { date: "2026-09-18", ndvi: 0.727, ndmi: 0.344 };
+  const 논 = [앞, 뒤];
+
+  it("실측값이 사람 말 한 줄이 된다", () => {
+    // 아빠 논1번 09-18 관측. 홈 배너에 그대로 나갈 문장이다
+    expect(summarizeObservations(논)).toBe(
+      "잎이 빽빽하게 덮였어요. 잎의 물기가 지난번보다 줄었어요.",
+    );
+  });
+
+  it("관측이 하나뿐이면 잎만 말한다", () => {
+    // 구름 때문에 흔한 일이다 — 견줄 것이 없으면 추세를 말하지 않는다
+    expect(summarizeObservations([뒤])).toBe("잎이 빽빽하게 덮였어요.");
+  });
+
+  it("관측이 없으면 배너를 안 그린다", () => {
+    expect(summarizeObservations([])).toBeNull();
+  });
+
+  it("익어 가는 중이면 물기 준 것을 정상이라고 말한다", () => {
+    const 말 = summarizeObservations(논, { isRipening: true }) ?? "";
+    expect(말).toContain("자연스러운");
+    expect(말).not.toContain("줄었");
+  });
+
+  it("한 달 넘게 벌어진 관측은 견주지 않는다", () => {
+    // 계절이 바뀐 것을 마름으로 읽지 않는다
+    const 벌어짐 = [{ ...앞, date: "2026-07-25" }, 뒤];
+    expect(summarizeObservations(벌어짐)).toBe("잎이 빽빽하게 덮였어요.");
+  });
+
+  it("밭이 아닌 좌표는 위치를 의심하게 한다", () => {
+    // 설화고 실측 −0.151. 홈에서도 좌표를 고치라고 알려 주는 편이 낫다
+    const 밭아님 = [{ date: "2026-09-08", ndvi: -0.151, ndmi: -0.353 }];
+    expect(summarizeObservations(밭아님)).toContain("밭 위치");
   });
 });

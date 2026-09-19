@@ -133,3 +133,42 @@ export function isRipeningStage(
   const name = stageNameKo ?? "";
   return RIPENING_WORDS.some((word) => name.includes(word));
 }
+
+/**
+ * 한 밭의 위성 관측을 한 줄로 묶는다. 할 말이 없으면 `null`.
+ *
+ * ⚠ **'2주 전' 같은 고정 간격을 쓰지 않는다.** 관측이 평균 18일에 한 번밖에
+ *   안 남아(실측 · 최장 공백 32일) 그 날짜에 값이 있을 보장이 없다. 있는 것 중
+ *   **가까운 둘**을 쓰고, 벌어졌으면 `describeNdmiTrend` 가 알아서 침묵한다.
+ *
+ * ⚠ 서버가 날짜 오름차순으로 준다는 전제다(app/api/satellite.py).
+ *
+ * ⚠ ai-service 의 `vegetation_text.summarize_points` 와 **같은 일**을 한다.
+ *   한쪽만 고치면 홈 배너와 리포트가 같은 밭을 두고 다른 말을 한다.
+ *   `SatellitePanel` 도 지금은 제 안에서 같은 계산을 한다 — 이 함수로 옮기면
+ *   한 곳이 된다(남의 파일이라 이번엔 두었다).
+ */
+export function summarizeObservations(
+  points: ReadonlyArray<{ date: string; ndvi: number; ndmi: number }>,
+  options: { isRipening?: boolean } = {},
+): string | null {
+  if (points.length === 0) return null;
+
+  const last = points[points.length - 1];
+  const prev = points.length >= 2 ? points[points.length - 2] : undefined;
+  if (!last) return null;
+
+  const gapDays = prev
+    ? Math.round((Date.parse(last.date) - Date.parse(prev.date)) / 86_400_000)
+    : undefined;
+
+  const 말 = [
+    describeNdvi(last.ndvi),
+    describeNdmiTrend(last.ndmi, prev?.ndmi, {
+      isRipening: options.isRipening ?? false,
+      gapDays,
+    }),
+  ].filter((x): x is string => x !== null);
+
+  return 말.length > 0 ? 말.join(" ") : null;
+}
