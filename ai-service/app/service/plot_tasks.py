@@ -14,17 +14,24 @@ from __future__ import annotations
 
 import traceback
 from datetime import date, datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
 from app.domain.task_rules import RAIN_WINDOW_DAYS, PlotTaskInputs, build_task_candidates
+from app.domain.water_balance import WaterBalance, judge_water
 from app.models.farm import Plot, PlotTask, WeatherObsDaily
 from app.service.plot_growth import (
     _crop_for_cultivation,
     _lead_cultivation,
     compute_plot_growth,
     nearest_station,
+)
+from pipeline.open_meteo_client import (
+    daily_index_of,
+    fetch_forecast,
+    normalize_daily_forecast,
 )
 
 #: 안 하고 넘어간 카드를 닫기까지의 일수.
@@ -37,6 +44,12 @@ from app.service.plot_growth import (
 #:      · 여기가 더 짧으면: 화면에 "3일째"로 남아 있는 카드가 이미 닫혀서,
 #:        같은 제목의 새 카드가 그 옆에 하나 더 뜬다.
 EXPIRE_AFTER_DAYS = 3
+
+
+def _kst_today() -> date:
+    """한국 날짜. 예보 응답이 KST 라 운영 서버(UTC)에서 date.today() 를 쓰면 어긋난다."""
+    return datetime.now(ZoneInfo("Asia/Seoul")).date()
+
 
 #: 한국 표준시. 서머타임이 없어 고정 오프셋으로 둔다.
 _KST = timezone(timedelta(hours=9))
@@ -102,17 +115,98 @@ def _why_no_growth(db: Session, plot: Plot) -> str:
 def _recent_rain_mm(db: Session, station_code: str) -> float | None:
     """최근 RAIN_WINDOW_DAYS 일 누적 강수량. 관측이 하나도 없으면 None(판정 보류)."""
     since = date.today() - timedelta(days=RAIN_WINDOW_DAYS)
-    rows = db.execute(
-        select(WeatherObsDaily.rainfall_mm).where(
-            WeatherObsDaily.station_code == station_code,
-            WeatherObsDaily.obs_date >= since,
+    rows = (
+        db.execute(
+            select(WeatherObsDaily.rainfall_mm).where(
+                WeatherObsDaily.station_code == station_code,
+                WeatherObsDaily.obs_date >= since,
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     values = [float(r) for r in rows if r is not None]
     return sum(values) if values else None
 
 
-def generate_tasks_for_plot(db: Session, plot: Plot) -> list[PlotTask]:
+#: 물수지를 낼 때 되돌아보는 날수. 14일이면 한 번의 소나기에 안 흔들리고,
+#: 뿌리대가 마르는 데 걸리는 시간과도 얼추 맞는다(조사 §4-1).
+WATER_PAST_DAYS = 14
+
+
+#: 좌표를 묶는 소수점 자리. 2자리면 약 1km 다 — 예보 격자보다 촘촘해서 값이 안 흔들린다.
+#: 실측(2026-09-19): 밭 28개 중 예보가 필요한 10개가 좌표 7개로 묶인다.
+_COORD_NDIGITS = 2
+
+
+def _water_balance(plot: Plot, memo: dict | None = None) -> WaterBalance:
+    """밭 좌표의 물 사정. Open-Meteo **한 번의 호출**로 과거와 예보를 같이 받는다.
+
+    ⚠ **밭마다 한 번씩 나간다.** 하루 1회 배치라 감당되지만, 따로 부르면 왕복이 둘이
+      되고 밭 수만큼 곱해진다 — past_days 와 forecast_days 를 한 요청에 같이 준다.
+
+    ⚠ **자리로 오늘을 찾지 않는다.** past_days 를 주면 배열 맨 앞이 14일 전이다.
+      날짜로 찾는다(daily_index_of). 못 찾으면 빈 WaterBalance 를 돌려주고, 그러면
+      judge_water 가 None 이라 **물 카드를 안 만든다** — 틀린 근거로 조언하느니 침묵한다.
+
+    ⚠ 외부 API 장애가 배치 전체를 막지 않는다. 시비 카드는 기상과 무관하게 나가야 한다.
+
+    `memo` 는 **한 번의 배치 안에서만 사는 사전**이다. 같은 마을의 밭 둘이 같은 예보를
+    두 번 받아 오지 않게 한다 — 실측으로 10회가 7회로 준다.
+    ⚠ 모듈 수준 캐시(`lru_cache`)를 쓰지 않는다. 이 레포의 `lru_cache` 는 전부
+      `maxsize=1` 짜리 **참조 데이터**용이다(map.py · sigungu_ref · warn_region).
+      예보는 시시각각 바뀌므로 배치가 끝나면 같이 사라져야 한다. 호출자가 사전을
+      만들어 넘기면 수명이 그 배치로 묶인다.
+    """
+    키 = (
+        round(float(plot.latitude), _COORD_NDIGITS),
+        round(float(plot.longitude), _COORD_NDIGITS),
+    )
+    if memo is not None and 키 in memo:
+        return memo[키]
+
+    결과 = _fetch_water_balance(float(plot.latitude), float(plot.longitude))
+    if memo is not None:
+        memo[키] = 결과
+    return 결과
+
+
+def _fetch_water_balance(lat: float, lon: float) -> WaterBalance:
+    """실제로 부르는 쪽. 메모가 없을 때만 여기까지 온다."""
+    try:
+        payload = fetch_forecast(lat, lon, past_days=WATER_PAST_DAYS)
+        daily = payload["daily"]
+        rows = normalize_daily_forecast(daily)
+    except Exception:  # noqa: BLE001 — 기상이 없어도 시비 판정은 해야 한다
+        return WaterBalance()
+
+    today = daily_index_of(daily, _kst_today().isoformat())
+    if today is None:
+        return WaterBalance()
+
+    past = rows[max(0, today - WATER_PAST_DAYS) : today]
+    ahead = rows[today + 1 :]
+
+    def 합(칸, 것들):
+        값 = [x[칸] for x in 것들 if x.get(칸) is not None]
+        return sum(값) if 값 else None
+
+    비 = 합("rainfall_mm", past)
+    증발 = 합("et0_mm", past)
+    # ⚠ 둘 중 하나라도 없으면 수지를 만들지 않는다. 한쪽만으로 낸 값은 뜻이 다르다
+    수지 = None if (비 is None or 증발 is None) else 비 - 증발
+
+    return WaterBalance(
+        balance_14d_mm=수지,
+        rain_3d_mm=합("rainfall_mm", ahead[:3]),
+        rain_7d_mm=합("rainfall_mm", ahead[:7]),
+        soil_moisture=None,  # hourly 에 있다. 지금은 안 쓴다 — is_soil_dry 가 False 로 떨어진다
+    )
+
+
+def generate_tasks_for_plot(
+    db: Session, plot: Plot, water_memo: dict | None = None
+) -> list[PlotTask]:
     """밭 하나를 판정해 새 카드를 만든다.
 
     **먼저 오래된 미완료 카드를 닫는다.** 순서가 중요하다 — 닫기 전에 판정하면
@@ -143,9 +237,14 @@ def generate_tasks_for_plot(db: Session, plot: Plot) -> list[PlotTask]:
     inputs = PlotTaskInputs(
         crop_name_ko=growth.crop_name_ko,
         stage_name=growth.stage_name,
-        water_need_mm=growth.water_need_mm,
-        recent_rain_mm=_recent_rain_mm(db, station.station_code),
+        # 시기 — crop_stages. water_need_mm 자리를 이 셋이 이어받았다
+        irrigate_needed=growth.irrigate_needed,
+        stage_hazards=growth.stage_hazards,
+        stage_tasks=growth.stage_tasks,
         fertilize_needed=growth.fertilize_needed,
+        # 사정 — 기상. 못 만들면 빈 값이라 물 카드가 안 나온다(시비는 그대로 나간다)
+        water=_water_balance(plot, water_memo),
+        recent_rain_mm=_recent_rain_mm(db, station.station_code),
     )
     candidates = build_task_candidates(inputs)
     if not candidates:
@@ -154,8 +253,12 @@ def generate_tasks_for_plot(db: Session, plot: Plot) -> list[PlotTask]:
         # 위의 건너뜀들과 섞이면 "데이터가 없다"와 "할 일이 없다"를 구분할 수 없다.
         _skip(
             plot,
-            f"조건 미달 — 최근 {RAIN_WINDOW_DAYS}일 강수 {inputs.recent_rain_mm}mm / "
-            f"필요 {inputs.water_need_mm}mm · 시비 {inputs.fertilize_needed}",
+            f"조건 미달 — 물판정 {judge_water(inputs.water)}"
+            f"(14일수지 {inputs.water.balance_14d_mm}mm · 3일비 {inputs.water.rain_3d_mm}mm"
+            f" · 7일비 {inputs.water.rain_7d_mm}mm)"
+            f" · 관수시기 {inputs.irrigate_needed} · 재해 {inputs.stage_hazards or '없음'}"
+            f" · 시비 {inputs.fertilize_needed}"
+            f" · 관측 {RAIN_WINDOW_DAYS}일 강수 {inputs.recent_rain_mm}mm",
         )
         return []
 
@@ -215,9 +318,12 @@ def generate_daily_tasks(db: Session) -> int:
     plots = db.query(Plot).filter(Plot.deleted_at.is_(None)).all()
 
     created = 0
+    # 같은 마을의 밭들이 같은 예보를 거듭 받아 오지 않게 한다. 이 배치가 끝나면
+    # 사전도 같이 사라진다 — 예보는 시시각각 바뀌므로 다음 배치는 새로 받아야 한다.
+    water_memo: dict = {}
     for plot in plots:
         try:
-            created += len(generate_tasks_for_plot(db, plot))
+            created += len(generate_tasks_for_plot(db, plot, water_memo))
         except Exception:
             db.rollback()
             traceback.print_exc()

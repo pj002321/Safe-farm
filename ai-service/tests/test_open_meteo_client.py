@@ -1,5 +1,7 @@
 """네트워크 없이 순수 함수만 검증. fixture 는 실제 응답 형태 그대로."""
+
 from pipeline.open_meteo_client import (
+    daily_index_of,
     normalize_current,
     normalize_daily_forecast,
     normalize_hourly,
@@ -35,6 +37,8 @@ def test_normalize_daily_forecast_maps_columns_by_index():
         "rain_chance": 10,
         "wind_max": 9.4,
         "humidity": 55,
+        # et0_fao_evapotranspiration 을 안 받은 응답이라 None 이다 — 없는 것과 0 은 다르다
+        "et0_mm": None,
     }
     assert rows[1]["date"] == "2026-09-18"
     assert rows[1]["wind_max"] == 21.6
@@ -105,3 +109,57 @@ def test_forecast_request_pins_wind_unit_to_ms():
 
     source = inspect.getsource(open_meteo_client.fetch_forecast)
     assert '"wind_speed_unit": "ms"' in source
+
+
+# 과거를 같이 받은 응답. `past_days=14` 를 주면 **맨 앞이 오늘이 아니다.**
+PAST_DAILY_RESPONSE = {
+    "time": ["2026-09-15", "2026-09-16", "2026-09-17", "2026-09-18"],
+    "temperature_2m_max": [30.0, 29.0, 28.8, 27.1],
+    "temperature_2m_min": [20.0, 19.0, 18.2, 17.5],
+    "precipitation_sum": [0.0, 0.0, 0.0, 12.4],
+    "precipitation_probability_max": [0, 0, 10, 80],
+    "wind_speed_10m_max": [3.0, 4.0, 9.4, 21.6],
+    "relative_humidity_2m_mean": [50, 52, 55, 78],
+    "et0_fao_evapotranspiration": [4.1, 3.9, 3.5, 1.2],
+}
+
+
+def test_daily_index_of_finds_today_by_date_not_position():
+    """`past_days` 를 주면 0 번이 오늘이 아니다 — 자리로 세면 조용히 지난날을 가리킨다."""
+    assert daily_index_of(PAST_DAILY_RESPONSE, "2026-09-17") == 2
+    assert daily_index_of(PAST_DAILY_RESPONSE, "2026-09-15") == 0
+
+
+def test_daily_index_of_returns_none_when_absent():
+    """응답에 그 날짜가 없으면 None. 호출자는 예보를 비운다 — 틀린 날을 내일이라 하지 않는다."""
+    assert daily_index_of(PAST_DAILY_RESPONSE, "2026-01-01") is None
+    assert daily_index_of({}, "2026-09-17") is None
+    assert daily_index_of(None, "2026-09-17") is None
+
+
+def test_normalize_daily_forecast_keeps_source_order():
+    """받은 차례 그대로 편다. 과거를 걸러내지 않는다 — 어느 날인지는 date 칸이 말한다."""
+    rows = normalize_daily_forecast(PAST_DAILY_RESPONSE)
+    assert [r["date"] for r in rows] == PAST_DAILY_RESPONSE["time"]
+
+
+def test_normalize_daily_forecast_maps_et0_when_present():
+    rows = normalize_daily_forecast(PAST_DAILY_RESPONSE)
+    assert rows[0]["et0_mm"] == 4.1
+    assert rows[3]["et0_mm"] == 1.2
+
+
+def test_forecast_request_defaults_past_days_to_zero():
+    """화면 예보(`/v1/weather/plot`)가 이 함수를 그대로 쓴다.
+
+    기본을 올리면 밭을 열 때마다 응답이 커지고 그만큼 느려진다. 과거가 필요한 쪽
+    (하루 1회 배치)만 인자로 올린다. **요청을 검사한다** — 풍속 단위와 같은 까닭이다.
+    """
+    import inspect
+
+    from pipeline import open_meteo_client
+
+    sig = inspect.signature(open_meteo_client.fetch_forecast)
+    assert sig.parameters["past_days"].default == 0
+    sig2 = inspect.signature(open_meteo_client.fetch_daily_forecast)
+    assert sig2.parameters["past_days"].default == 0

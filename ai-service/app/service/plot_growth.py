@@ -20,7 +20,15 @@ from sqlalchemy.orm import Session
 
 from app.domain.gdd import daily_gdd
 from app.domain.geo import haversine_km
-from app.models.farm import Crop, CropStage, CropVariant, Cultivation, Plot, Station, WeatherObsDaily
+from app.models.farm import (
+    Crop,
+    CropStage,
+    CropVariant,
+    Cultivation,
+    Plot,
+    Station,
+    WeatherObsDaily,
+)
 
 
 @dataclass
@@ -35,14 +43,33 @@ class PlotGrowth:
     accumulated_gdd: float
     stage_name: str | None
     guide_text: str | None
-    # 아래 둘은 stage_name 이 None 이면 같이 None/False 다 — 작업카드 판정(task_rules.py)이 씀
+    # 아래 넷은 stage_name 이 None 이면 같이 비어 있다 — 작업카드 판정(task_rules.py)이 씀
+    # ⚠ water_need_mm 은 **영영 빈 칸이다**(원천 없음. crop_stage.py 주석 참고).
+    #   지우지 않고 남겨 두되 판정에 쓰지 않는다 — 아래 셋이 그 자리를 이어받았다.
     water_need_mm: float | None
     fertilize_needed: bool
+    #: 이 단계에 물주기·배수 작업이 있는가 (crop_stages.irrigate_needed)
+    irrigate_needed: bool = False
+    #: 조심할 재해 갈래 — ('가뭄','과습','저온' …). CSV 가 쉼표로 이어 준 것을 쪼갠다
+    stage_hazards: tuple[str, ...] = ()
+    #: 농작업 갈래 — ('웃거름','물주기','배수' …)
+    stage_tasks: tuple[str, ...] = ()
     # 씨뿌림→수확 총 목표 GDD. 역산이 안 끝난 숙기는 None(리포트 화면의 진행 게이지는
     # 이때 숨긴다 — 분모 없는 진행률은 거짓 숫자다).
-    gdd_target: int | None
+    gdd_target: int | None = None
     # 현재 단계가 끝나는(=다음 단계가 시작하는) 누적 GDD. stage_name 이 None 이면 같이 None.
-    stage_gdd_to: int | None
+    stage_gdd_to: int | None = None
+
+
+def _split(value: str | None) -> tuple[str, ...]:
+    """쉼표로 이은 칸을 튜플로. 빈 칸·None 은 빈 튜플이다.
+
+    ⚠ 빈 조각을 버린다 — 'a,,b' 나 끝의 쉼표가 빈 문자열을 만들면 `'' in hazards` 같은
+      검사가 엉뚱하게 참이 된다.
+    """
+    if not value:
+        return ()
+    return tuple(x.strip() for x in value.split(",") if x.strip())
 
 
 def nearest_station(db: Session, plot: Plot) -> Station | None:
@@ -243,8 +270,15 @@ def compute_plot_growth(db: Session, plot: Plot, station: Station) -> PlotGrowth
         accumulated_gdd=round(accumulated, 1),
         stage_name=stage.stage_name if stage else None,
         guide_text=stage.guide_text if stage else None,
-        water_need_mm=float(stage.water_need_mm) if stage and stage.water_need_mm is not None else None,
+        water_need_mm=float(stage.water_need_mm)
+        if stage and stage.water_need_mm is not None
+        else None,
         fertilize_needed=bool(stage.fertilize_needed) if stage else False,
+        irrigate_needed=bool(stage.irrigate_needed) if stage else False,
+        # ⚠ CSV 가 쉼표로 이은 한 칸이다('가뭄,과습'). 쪼개는 것은 **여기 한 곳**에서만 한다 —
+        #   시더는 통째로 넣고(master_seed_farm_db 주석), 읽는 쪽이 푼다.
+        stage_hazards=_split(stage.stage_hazards) if stage else (),
+        stage_tasks=_split(stage.stage_tasks) if stage else (),
         gdd_target=variant.gdd_target if variant else None,
         stage_gdd_to=stage.gdd_to if stage else None,
     )
