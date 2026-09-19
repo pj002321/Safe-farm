@@ -1,14 +1,14 @@
 import "server-only";
 
-import { nearestStation } from "@/shared/geo/nearestStation";
+import { stationsByDistance } from "@/shared/geo/nearestStation";
 import { listStations } from "@/shared/geo/stationStore";
 import {
   type ArrivalForecast,
   type ArrivalRule,
-  forecastArrival_1,
-  type MonthlyNormal,
+  forecastArrival_2,
 } from "@/shared/growth/forecast";
 import { type DailyTemp, recentDailyGdd } from "@/shared/growth/gdd";
+import { listMonthlyNormals } from "@/shared/growth/normalStore";
 import {
   recommendTasks_2,
   type TaskAdvice,
@@ -47,16 +47,23 @@ import { listObservations, listStages } from "./growthStore";
  * - **규칙 변형(`_1`/`_2`)을 고르는 자리가 이 파일이다.** 아래 세 상수의 오른쪽만
  *   바꾸면 화면 전체가 그 규칙으로 돈다. 고르고 나면 진 쪽 함수는 지운다 —
  *   남겨 두면 다음 사람이 어느 쪽이 도는지 코드에서 알 수 없다.
- * - 평년값(`MonthlyNormal`)을 적재하는 표가 아직 없다. 그래서 `forecastArrival_2`
- *   를 고르면 예측이 늘 null 이 된다 — 데이터가 들어오기 전까지 `_1` 이 기본이다.
+ * - 도달 예측은 **예보 → 평년값** 순으로 메운다. 예보가 닿는 날은 예보 기온으로,
+ *   그 밖은 그 달의 평년 기온으로 쌓는다(`forecastArrival_2`). 평년값은 밭에서
+ *   가까운 관측소 것을 읽고, 없으면 다음으로 가까운 곳으로 물러선다.
  * - 소유 확인은 `getCultivationCard(plotId, ...)` 가 밭 id 를 같이 걸어서 한다.
  * ---------------------------------------------
  */
 
 /** ── 규칙 선택 ─────────────────────────────────────────────── */
 
-/** `forecastArrival_2` 는 월별 평년값 표가 생긴 뒤에 쓸 수 있다. */
-const ARRIVAL_RULE: ArrivalRule = forecastArrival_1;
+/**
+ * `forecastArrival_1` 은 최근 기온이 계속된다고 본다. 계절이 바뀌는 구간에서
+ * 도달일이 크게 어긋나 `_2`(평년값 외삽)로 간다.
+ *
+ * ⚠️ `_1` 을 아직 지우지 않았다. `normals` 가 비어 있는 환경에서는 `_2` 가
+ *    "모른다"만 내놓으므로, 적재 상태를 확인하기 전까지 되돌릴 자리를 남긴다.
+ */
+const ARRIVAL_RULE: ArrivalRule = forecastArrival_2;
 
 /** `recommendTasks_1` 은 단계만 본다. 기상 경고를 같이 내려면 `_2`. */
 const TASK_RULE: TaskRule = recommendTasks_2;
@@ -70,8 +77,13 @@ const HORIZON_DAYS = 120;
 /** 최근 기온 평균을 낼 때 보는 기간. `growthGauge` 와 같은 값이다. */
 const RECENT_WINDOW_DAYS = 7;
 
-/** 평년값은 적재하는 표가 없다. 빈 배열이 정직한 상태다. */
-const NORMALS: readonly MonthlyNormal[] = [];
+/**
+ * 평년값을 물어볼 관측소 수. 가까운 순으로 이만큼만 본다.
+ *
+ * 가장 가까운 곳에 평년값이 없을 수 있어 1 로는 부족하고(`normalStore.ts` 참고),
+ * 전부 받아 오면 쓰지도 않을 관측소 몇천 행을 매 요청마다 읽는다.
+ */
+const NORMAL_STATION_CANDIDATES = 3;
 
 /** ── 반환 모양 ─────────────────────────────────────────────── */
 
@@ -148,23 +160,43 @@ export async function loadCultivationDetail(
    * `plotStrip.ts` 가 생육단계를 인자로 받는 것과 같은 이유다.
    */
   weather: TaskWeather | null = null,
+  /**
+   * 내일부터의 예보 기온. 도달 예측이 이 구간을 먼저 쓰고, 그 밖을 평년값으로
+   * 메운다. `weather` 와 같은 이유로 여기서 직접 읽지 않는다 — 예보 조회는
+   * `features/monitoring` 에 있고 features 끼리는 import 할 수 없다.
+   */
+  forecast: readonly DailyTemp[] = [],
 ): Promise<CultivationDetail | null> {
   const card = await getCultivationCard(plot.id, cultivationId);
   if (card === null) return null;
 
-  const [events, station, stagesByVariant] = await Promise.all([
+  const [events, nearby, stagesByVariant] = await Promise.all([
     listCultivationEvents(card.id),
-    listStations().then((stations) => nearestStation(plot, stations)),
+    listStations().then((stations) => stationsByDistance(plot, stations)),
     listStages([card.variantId]),
   ]);
   const stages = stagesByVariant.get(card.variantId) ?? [];
+  // 관측은 가장 가까운 한 곳에서만 읽는다. 평년값은 그 곳에 없을 수 있어
+  // 가까운 순으로 몇 곳을 후보로 넘긴다(`normalStore.ts` 참고).
+  const station = nearby[0] ?? null;
 
   // 관측은 파종일부터 읽는다. 단계 보정이 더 뒤를 가리켜도 앞 구간이 있어야
   // "보정 전에는 어땠나"를 그릴 수 있다.
-  const observations: DailyTemp[] =
+  const [observations, normals] = await Promise.all([
     station === null || card.sowingDate === null
-      ? []
-      : await listObservations(station.stationCode, card.sowingDate);
+      ? Promise.resolve<DailyTemp[]>([])
+      : listObservations(station.stationCode, card.sowingDate),
+    listMonthlyNormals(
+      nearby
+        .slice(0, NORMAL_STATION_CANDIDATES)
+        .map((point) => point.stationCode),
+    ).catch((error) => {
+      // 평년값이 없으면 예보 끝에서 멈출 뿐, 게이지와 타임라인은 그대로다.
+      // 화면 전체를 죽일 이유가 없다.
+      console.error("[cultivation] 평년값 조회 실패", error);
+      return [];
+    }),
+  ]);
 
   const override = latestOverride(events);
   const rebase =
@@ -228,10 +260,9 @@ export async function loadCultivationDetail(
       targetGdd,
       baseTempC: card.baseTempC,
       upperTempC: card.upperTempC,
-      // 예보를 적재하는 코드가 아직 없다. 빈 배열이면 규칙이 전 구간을 메운다.
-      forecast: [],
+      forecast,
       recent,
-      normals: NORMALS,
+      normals,
       today,
       horizonDays: HORIZON_DAYS,
     });
