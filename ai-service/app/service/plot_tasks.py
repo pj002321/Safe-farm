@@ -18,7 +18,12 @@ from datetime import date, datetime, timedelta, timezone
 from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
-from app.domain.task_rules import RAIN_WINDOW_DAYS, PlotTaskInputs, build_task_candidates
+from app.domain.task_rules import (
+    DRY_MM,
+    RAIN_WINDOW_DAYS,
+    PlotTaskInputs,
+    build_task_candidates,
+)
 from app.models.farm import Plot, PlotTask, WeatherObsDaily
 from app.service.plot_growth import (
     _crop_for_cultivation,
@@ -145,6 +150,7 @@ def generate_tasks_for_plot(db: Session, plot: Plot) -> list[PlotTask]:
         stage_name=growth.stage_name,
         water_need_mm=growth.water_need_mm,
         recent_rain_mm=_recent_rain_mm(db, station.station_code),
+        irrigate_needed=growth.irrigate_needed,
         fertilize_needed=growth.fertilize_needed,
     )
     candidates = build_task_candidates(inputs)
@@ -154,8 +160,9 @@ def generate_tasks_for_plot(db: Session, plot: Plot) -> list[PlotTask]:
         # 위의 건너뜀들과 섞이면 "데이터가 없다"와 "할 일이 없다"를 구분할 수 없다.
         _skip(
             plot,
-            f"조건 미달 — 최근 {RAIN_WINDOW_DAYS}일 강수 {inputs.recent_rain_mm}mm / "
-            f"필요 {inputs.water_need_mm}mm · 시비 {inputs.fertilize_needed}",
+            f"조건 미달 — 최근 {RAIN_WINDOW_DAYS}일 강수 {inputs.recent_rain_mm}mm "
+            f"(마름 기준 {DRY_MM}mm 이하) · 관수시기 {inputs.irrigate_needed} "
+            f"· 시비 {inputs.fertilize_needed}",
         )
         return []
 
