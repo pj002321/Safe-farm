@@ -19,6 +19,7 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
+from app.domain.gdd import past_target
 from app.domain.task_rules import (
     DRY_MM,
     RAIN_WINDOW_DAYS,
@@ -33,6 +34,7 @@ from app.service.plot_growth import (
     compute_plot_growth,
     nearest_station,
 )
+from app.service.satellite_cache import stored_observations
 from pipeline.open_meteo_client import (
     daily_index_of,
     fetch_forecast,
@@ -115,6 +117,33 @@ def _why_no_growth(db: Session, plot: Plot) -> str:
             "— crops.base_temp 를 채우세요"
         )
     return "생육단계를 낼 수 없습니다 — crop_stages 와 관측 자료를 확인하세요"
+
+
+#: 관측이 이보다 오래됐으면 "지금 밭에 서 있다" 의 근거로 쓰지 않는다.
+#:
+#: ⚠ 창(READ_DAYS=90)과 **다른 값이다.** 창은 "점을 찾아볼 범위" 이고 이건 "그 점을
+#:   지금 것으로 쳐도 되나" 다. 90일 전 관측으로 "아직 푸르다" 고 하면, 두 달 전에
+#:   거둔 밭에 수확 카드를 보낸다.
+#:
+#: 30일인 까닭은 NDMI 비교를 포기하는 간격(NDMI_MAX_GAP_DAYS)과 같다 — 실측으로
+#: 관측이 평균 18일에 한 번, 최장 공백이 32일이었다. 한 달을 넘기면 그 사이에
+#: 수확이 들어갈 수 있다.
+NDVI_STALE_DAYS = 30
+
+
+def _latest_ndvi(db: Session, plot: Plot) -> float | None:
+    """이 밭의 **최근** NDVI. 표에 있는 것만 보고, 오래된 것은 안 쓴다.
+
+    ⚠ 여기서 Sentinel Hub 를 부르면 밭마다 1.5초가 붙어 50초 한도에 금방 닿는다.
+      표가 비면 None 이고, 그러면 수확 카드가 안 나갈 뿐이다(없으면 거짓).
+      표를 채우는 일은 사람이 날씨 화면을 열 때 일어난다(satellite_cache).
+
+    ⚠ **날짜를 봐야 한다.** 예전에는 창 안의 마지막 점을 그냥 썼는데, 구름이
+      길게 끼면 그 점이 석 달 전 것일 수 있다. 그걸 "지금 밭이 푸르다" 로 읽으면
+      이미 거둔 밭에 "거둘 때 살펴보세요" 가 나간다 — 오류도 없이.
+    """
+    points = stored_observations(db, float(plot.latitude), float(plot.longitude), NDVI_STALE_DAYS)
+    return points[-1]["ndvi"] if points else None
 
 
 def _recent_rain_mm(db: Session, station_code: str) -> float | None:
@@ -254,6 +283,10 @@ def generate_tasks_for_plot(
         # 사정 — 기상. 못 만들면 빈 값이라 물 카드가 안 나온다(시비는 그대로 나간다)
         water=_water_balance(plot, water_memo),
         recent_rain_mm=_recent_rain_mm(db, station.station_code),
+        # 수확 — GDD 가 '때'를, 위성이 '아직 있나'를 말한다(task_rules 주석)
+        gdd_target_passed=past_target(growth.accumulated_gdd, growth.gdd_target),
+        sow_method=growth.sow_method,
+        ndvi=_latest_ndvi(db, plot),
     )
     candidates = build_task_candidates(inputs)
     if not candidates:

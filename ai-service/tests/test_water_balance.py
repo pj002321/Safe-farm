@@ -210,3 +210,19 @@ def test_조사에_적힌_대전_실측값이_물_줘라로_떨어진다():
     """
     b = WaterBalance(balance_14d_mm=-52.7, rain_3d_mm=0.0, rain_7d_mm=3.0, soil_moisture=0.303)
     assert judge_water(b) == "give"
+
+
+def test_관측을_밝히는_기준이_한_곳이다():
+    """카드와 리포트가 같은 함수를 쓴다 — 한쪽만 붙이면 근거가 어긋난다."""
+    from app.domain.water_balance import RAIN_DISAGREE_MM, 관측을_밝힐까
+
+    # 비슷하면 같은 말을 두 번 하지 않는다
+    assert 관측을_밝힐까(0.1, 0.4) is False
+    assert 관측을_밝힐까(0.1, 0.1 + RAIN_DISAGREE_MM - 0.1) is False
+    # 어긋나면 출처를 밝힌다 — "우리 동네는 비 왔는데?" 를 막는 자리다
+    assert 관측을_밝힐까(0.1, 18.0) is True
+    assert 관측을_밝힐까(0.1, 0.1 + RAIN_DISAGREE_MM) is True
+    # 예보를 모르면 관측이 유일한 근거다
+    assert 관측을_밝힐까(None, 3.0) is True
+    # 관측이 없으면 적을 것이 없다
+    assert 관측을_밝힐까(0.1, None) is False

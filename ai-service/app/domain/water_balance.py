@@ -169,6 +169,28 @@ def 기간말(일수: int | None) -> str | None:
     return "일주일" if 주 == 1 else f"{주}주"
 
 
+#: 예보(모델)와 관측(실측)이 이만큼 벌어지면 출처를 밝힌다(mm).
+#:
+#: "한 번 지나간 소나기" 쯤이다 — 그만큼 차이 나면 사용자도 몸으로 안다.
+#: 그 아래면 같은 말을 두 번 하는 셈이라 적지 않는다.
+RAIN_DISAGREE_MM = 5.0
+
+
+def 관측을_밝힐까(예보: float | None, 관측: float | None) -> bool:
+    """관측 강수를 문장에 덧붙일 것인가.
+
+    ⚠ **카드(task_rules)와 리포트(report)가 같은 규칙을 써야 한다.** 한쪽만 붙이면
+      같은 밭을 두고 홈 카드와 리포트가 서로 다른 근거를 댄다.
+
+    ⚠ 예보를 모르면(None) 관측이 유일한 근거다 — 그때는 밝힌다.
+    """
+    if 관측 is None:
+        return False
+    if 예보 is None:
+        return True
+    return abs(관측 - 예보) >= RAIN_DISAGREE_MM
+
+
 def dryness_note(b: WaterBalance) -> str | None:
     """판정의 **근거를 사실로** 적은 한 줄. 카드 문장에 그대로 넣는다.
 

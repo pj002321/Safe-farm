@@ -15,14 +15,21 @@ import logging
 import math
 import uuid
 from dataclasses import dataclass, field
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from sqlalchemy.orm import Session
 
 from app.core.config import OPENAI_MODEL
+from app.domain.gdd import past_target
 from app.domain.report_payload import ReportPayload, parse_report_json
-from app.domain.water_balance import WaterBalance, dryness_note, judge_water
+from app.domain.vegetation_text import Vegetation, summarize_points, vegetation_lines
+from app.domain.water_balance import (
+    WaterBalance,
+    dryness_note,
+    judge_water,
+    관측을_밝힐까,
+)
 from app.knowledge.embedder import get_client
 from app.models.farm import Advice, FarmAdvice, Plot
 from app.service.plot_growth import (
@@ -31,6 +38,8 @@ from app.service.plot_growth import (
     nearest_station,
     rainfall_totals,
 )
+from app.service.satellite_cache import READ_DAYS
+from app.service.satellite_cache import observations as satellite_observations
 from app.service.warn_region import plot_warning
 from pipeline.open_meteo_client import (
     daily_index_of,
@@ -71,6 +80,11 @@ class ReportInput:
     water: WaterBalance = field(default_factory=WaterBalance)
     #: 이 단계에 물주기·배수 작업이 있는가 (crop_stages)
     irrigate_needed: bool = False
+    #: 지금 단계가 단계표의 마지막인가. '수확' 이라는 낱말을 믿어도 되는지 가른다 —
+    #: 여러 번 거두는 작물은 수확이 중간에 온다(고추: 풋고추 → 붉은고추)
+    is_last_stage: bool = False
+    #: 이 품종의 단계 수. 하나뿐이면 단계 이름에 시기 정보가 없다(상추: '수확' 한 칸)
+    stage_count: int = 0
     #: 조심할 재해 갈래 — ('가뭄','과습','저온' …)
     stage_hazards: tuple[str, ...] = ()
     rainfall_7d_mm: float | None = None
@@ -87,6 +101,12 @@ class ReportInput:
     # 오늘 다음 날부터 최대 6일치 예보. 내일 예보(tomorrow_*)와 겹치지만
     # 저건 LLM 프롬프트용 단일 값이고 이건 화면의 주간 스트립용이다.
     forecast_week: list[dict] | None = None
+    #: 위성이 본 것(NDVI·NDMI). **비어 있는 것이 기본값이다.**
+    #:
+    #: ⚠ `build_report_input` 이 채우지 않는다. 저 함수는 화면 경로라 매번 도는데,
+    #:   위성은 왕복이 1.5초라 탭을 열 때마다 그만큼 느려진다. 그래서 **캐시가
+    #:   빗나갔을 때만**(하루 한 번) 채운다 — `get_cached_or_generate_report`.
+    vegetation: Vegetation = field(default_factory=Vegetation)
 
 
 def build_report_input(db: Session, plot: Plot) -> ReportInput | None:
@@ -151,6 +171,8 @@ def build_report_input(db: Session, plot: Plot) -> ReportInput | None:
         accumulated_gdd=growth.accumulated_gdd,
         gdd_target=growth.gdd_target,
         stage_gdd_to=growth.stage_gdd_to,
+        is_last_stage=growth.is_last_stage,
+        stage_count=growth.stage_count,
         water_need_mm=growth.water_need_mm,
         fertilize_needed=growth.fertilize_needed,
         water=water,
@@ -227,12 +249,29 @@ def _days_to_target(
 
 
 def _build_prompt(report_input: ReportInput) -> str:
+    # ★ 2026-09-19 — **GDD 를 목표와 나란히 적는다.**
+    #
+    #   예전에는 "누적 GDD 1764.7" 만 줬다. 그 숫자만 보고는 지금이 모내기 직후인지
+    #   추수 직전인지 알 수가 없다 — LLM 이 작물 상태를 못 맞히던 진짜 이유였다.
+    지났다 = past_target(report_input.accumulated_gdd, report_input.gdd_target)
+    목표 = ""
+    if report_input.gdd_target is not None:
+        넘음 = " — 이미 넘었다" if 지났다 else ""
+        목표 = f" (다 자라는 데 필요한 양 {report_input.gdd_target}{넘음})"
     lines = [
         f"작물: {report_input.crop_name_ko}",
-        f"파종 후 {report_input.days_since_planting}일, 누적 GDD {report_input.accumulated_gdd}",
+        f"파종 후 {report_input.days_since_planting}일, "
+        f"누적 GDD {report_input.accumulated_gdd}{목표}",
     ]
+
     if report_input.stage_name:
         lines.append(f"현재 생육단계: {report_input.stage_name}")
+    elif 지났다:
+        # ⚠ **모름과 끝남을 같게 두지 않는다.** 단계표를 다 지나면 stage_name 이
+        #   None 이 되는데, 예전에는 그냥 침묵해서 "단계를 모른다" 와 구분이 안 됐다.
+        #   정작 그때가 가장 익은 때다 — 사용자의 논이 그랬다(마지막 단계 GDD 1521,
+        #   누적 1764.7). 마스터 자료가 비어 모르는 경우는 여전히 침묵한다.
+        lines.append("생육 단계표의 마지막을 지났다. 거둘 때로 본다.")
     if report_input.guide_text:
         lines.append(f"단계별 안내: {report_input.guide_text}")
     # ★ 2026-09-19 — **`water_need_mm` 을 떠났다.** 그 칸은 520행 내내 비어 있어
@@ -242,8 +281,11 @@ def _build_prompt(report_input: ReportInput) -> str:
     #     없이는 양을 못 낸다. 아래 문장이 그 선을 지킨다.
     물근거 = dryness_note(report_input.water)
     if 물근거:
+        # ⚠ 관측 강수를 **늘 적지 않는다.** 앞 문장이 이미 "2주 동안 비가 0.1mm" 라고
+        #   말했는데 관측을 덧붙이면 같은 말을 두 번 한다. 어긋날 때만 밝힌다 —
+        #   기준은 water_balance 한 곳에 있고 카드(task_rules)도 같은 함수를 쓴다.
         rain = report_input.rainfall_7d_mm
-        if rain is not None:
+        if 관측을_밝힐까(report_input.water.rain_past_mm, rain):
             물근거 += f" 가까운 관측소의 최근 7일 강수량은 {rain:.1f}mm 다."
         lines.append(f"물 사정: {물근거}")
     if report_input.irrigate_needed:
@@ -256,6 +298,25 @@ def _build_prompt(report_input: ReportInput) -> str:
         lines.append("앞으로 비가 많다. 물을 더 주라고 하지 말 것. '장마'라는 말은 쓰지 말 것.")
     elif 판정 in ("give", "watch"):
         lines.append("마른 쪽으로 기울었다. 다만 양(mm)을 지정하지 말고 시기만 말할 것.")
+    # ── 위성 ──────────────────────────────────────────────────────
+    # ⚠ **숫자를 주지 않는다.** `NDVI 0.787` 을 주면 LLM 이 그 숫자를 문장에 그대로
+    #   적는다(SYSTEM_PROMPT 가 "주어진 값만 근거로" 라고 못박아 둔 탓이기도 하다).
+    #   농민 화면에 NDVI 라는 말이 나가면 안 되므로, 규칙이 만든 **말**을 준다.
+    #   규칙이 사실을 정하고 LLM 은 엮기만 한다.
+    # ⚠ `past_gdd_target` 을 같이 넘긴다. 단계표를 지나면 stage_name 이 None 이라
+    #   '익어 가는 중' 글자 판정이 통째로 거짓이 된다 — 정작 그때가 가장 익은
+    #   때인데도. 그러면 추수 앞둔 논에 "잎의 물기가 줄었어요" 가 그대로 나간다.
+    위성말 = vegetation_lines(
+        report_input.vegetation,
+        report_input.stage_name,
+        is_last_stage=report_input.is_last_stage,
+        stage_count=report_input.stage_count,
+        past_gdd_target=지났다,
+    )
+    if 위성말:
+        본날 = report_input.vegetation.observed_on
+        lines.append(f"위성이 본 것({본날} 관측): {' '.join(위성말)}")
+        lines.append("NDVI·NDMI 같은 말은 쓰지 말고 위 문장의 뜻만 쓸 것.")
     if report_input.fertilize_needed:
         lines.append("현재 시비 시기다.")
     if report_input.tomorrow_temp_min is not None:
@@ -291,9 +352,39 @@ def generate_report(report_input: ReportInput) -> ReportPayload | None:
     return parse_report_json(data)
 
 
-def get_cached_or_generate_report(db: Session, report_input: ReportInput) -> ReportPayload | None:
+def _vegetation_for(db: Session, plot: Plot) -> Vegetation:
+    """이 밭의 위성 관측. **날씨 탭과 같은 표를 본다.**
+
+    ⚠ 위성은 **더하는 신호지 의존하는 신호가 아니다**(sentinelhub_client 머리).
+      못 받으면 빈 Vegetation 이라 프롬프트에서 위성 줄이 빠질 뿐이다 —
+      `WaterBalance` 와 같은 원칙이다. 그래서 여기서 예외를 삼킨다.
+    """
+    오늘 = _kst_today()
+    try:
+        points = satellite_observations(
+            db,
+            float(plot.latitude),
+            float(plot.longitude),
+            (오늘 - timedelta(days=READ_DAYS)).isoformat(),
+            오늘.isoformat(),
+        )
+    except Exception:  # noqa: BLE001 — 위성이 없어도 기상만으로 리포트는 나온다
+        logging.warning("[report] 위성 조회 실패 — 위성 없이 간다", exc_info=True)
+        return Vegetation()
+    return summarize_points(points)
+
+
+def get_cached_or_generate_report(
+    db: Session, report_input: ReportInput, plot: Plot | None = None
+) -> ReportPayload | None:
     """오늘치 캐시(advices)가 있으면 그대로 돌려주고, 없으면 LLM 을 불러 저장한다.
-    LLM 호출을 하루에 한 번으로 묶어 토큰을 아끼는 게 목적이다."""
+    LLM 호출을 하루에 한 번으로 묶어 토큰을 아끼는 게 목적이다.
+
+    ⚠ `plot` 을 받는 이유는 **위성을 여기서 부르기 위해서**다. 캐시가 맞으면 아예
+      안 부른다 — `build_report_input` 에 넣었으면 탭을 열 때마다 1.5초가 붙는다.
+      그 함수는 캐시보다 **먼저** 불리기 때문이다(api/reports.py).
+      `plot` 이 없으면 위성 없이 간다(밭 전체 총평 경로).
+    """
     today = date.today()
     try:
         cached = (
@@ -310,6 +401,10 @@ def get_cached_or_generate_report(db: Session, report_input: ReportInput) -> Rep
         return ReportPayload(
             summary=cached.summary, todos=list(cached.todos), cautions=list(cached.warnings)
         )
+
+    # 캐시가 빗나갔다 — 여기서부터 하루 한 번이다. 이제 위성을 불러도 된다
+    if plot is not None and not report_input.vegetation.observed_on:
+        report_input = dataclasses.replace(report_input, vegetation=_vegetation_for(db, plot))
 
     try:
         payload = generate_report(report_input)

@@ -16,6 +16,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import date, timedelta
 
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.domain.gdd import daily_gdd
@@ -63,6 +64,14 @@ class PlotGrowth:
     gdd_target: int | None = None
     # 현재 단계가 끝나는(=다음 단계가 시작하는) 누적 GDD. stage_name 이 None 이면 같이 None.
     stage_gdd_to: int | None = None
+    # 심는 법('씨뿌림'·'아주심기' …). 작업카드가 **거둬도 밭에 남는 작물**을 가르는
+    # 데 쓴다 — 나무는 한 번 심고 두는 것이라 이 칸이 빈다(task_rules 주석).
+    sow_method: str | None = None
+    # 지금 단계가 단계표의 마지막인가. '수확' 이라는 낱말을 믿어도 되는지 가른다 —
+    # 여러 번 거두는 작물은 수확이 중간에 온다(고추: 풋고추 → 붉은고추).
+    is_last_stage: bool = False
+    # 이 품종의 단계 수. 하나뿐이면 단계 이름에 시기 정보가 없다(상추: '수확' 한 칸)
+    stage_count: int = 0
 
 
 def _split(value: str | None) -> tuple[str, ...]:
@@ -267,6 +276,23 @@ def compute_plot_growth(db: Session, plot: Plot, station: Station) -> PlotGrowth
 
     variant = db.query(CropVariant).filter(CropVariant.variant_id == cultivation.variant_id).first()
 
+    # 지금 단계가 **단계표의 마지막인가.**
+    #
+    # ⚠ 이것이 있어야 '수확' 이라는 낱말을 믿을 수 있다. 여러 번 거두는 작물은
+    #   수확이 중간에 온다 — 고추가 `풋고추 수확 → 붉은고추 수확` 이고, 그동안
+    #   나무는 계속 자란다. 마지막인지 안 보고 '수확' 만으로 "익어 가는 중" 이라
+    #   판정하면, **여름 가뭄으로 잎이 마르는 것을 자연스러운 변화라고 덮는다.**
+    #   (2026-09-19 실측: 단계표에 '수확' 이 마지막이 아닌 품종이 여럿이다)
+    #
+    # ⚠ 개수도 같이 센다. **단계가 하나뿐이면 이름에 시기 정보가 없다** — 상추가
+    #   '수확' 한 칸(GDD 0~573)이라 심은 날부터 '마지막 수확 단계' 가 된다.
+    #   그대로 두면 32% 자란 상추가 "익어 가는 중" 으로 읽힌다(vegetation_text 주석).
+    stage_count, last_order = (
+        db.query(func.count(CropStage.stage_order), func.max(CropStage.stage_order))
+        .filter(CropStage.variant_id == cultivation.variant_id)
+        .one()
+    )
+
     return PlotGrowth(
         cultivation_id=cultivation.id,
         crop_name_ko=crop.name,
@@ -284,5 +310,8 @@ def compute_plot_growth(db: Session, plot: Plot, station: Station) -> PlotGrowth
         stage_hazards=_split(stage.stage_hazards) if stage else (),
         stage_tasks=_split(stage.stage_tasks) if stage else (),
         gdd_target=variant.gdd_target if variant else None,
+        sow_method=variant.sow_method if variant else None,
         stage_gdd_to=stage.gdd_to if stage else None,
+        is_last_stage=bool(stage and last_order is not None and stage.stage_order == last_order),
+        stage_count=int(stage_count or 0),
     )
