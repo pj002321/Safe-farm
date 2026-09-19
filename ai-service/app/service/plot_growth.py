@@ -35,8 +35,14 @@ class PlotGrowth:
     accumulated_gdd: float
     stage_name: str | None
     guide_text: str | None
-    # 아래 둘은 stage_name 이 None 이면 같이 None/False 다 — 작업카드 판정(task_rules.py)이 씀
+    # 아래 셋은 stage_name 이 None 이면 같이 None/False 다 — 작업카드 판정(task_rules.py)이 씀
+    #
+    # ⚠️ water_need_mm 은 **영영 빈 칸이다**(2026-09-19 마이그레이션 주석). 원천이
+    #    없어 채우지 않기로 했고, 그 자리를 irrigate_needed 가 대신한다. 필요량(mm)이
+    #    아니라 **시기**다 — "이 단계에 물이 중요한가". "지금 마른가"는 기상이 댄다.
+    #    필드를 지우지 않는 이유는 CSV 계약 헤더에 남아 있어서다(같은 주석).
     water_need_mm: float | None
+    irrigate_needed: bool
     fertilize_needed: bool
     # 씨뿌림→수확 총 목표 GDD. 역산이 안 끝난 숙기는 None(리포트 화면의 진행 게이지는
     # 이때 숨긴다 — 분모 없는 진행률은 거짓 숫자다).
@@ -244,6 +250,7 @@ def compute_plot_growth(db: Session, plot: Plot, station: Station) -> PlotGrowth
         stage_name=stage.stage_name if stage else None,
         guide_text=stage.guide_text if stage else None,
         water_need_mm=float(stage.water_need_mm) if stage and stage.water_need_mm is not None else None,
+        irrigate_needed=bool(stage.irrigate_needed) if stage else False,
         fertilize_needed=bool(stage.fertilize_needed) if stage else False,
         gdd_target=variant.gdd_target if variant else None,
         stage_gdd_to=stage.gdd_to if stage else None,
