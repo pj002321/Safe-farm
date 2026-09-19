@@ -586,16 +586,21 @@ export const aiService = {
       timeoutMs: 15_000,
     }),
   /**
-   * 밭 좌표의 7일 예보. `plotId` 를 주면 최근 14일 하루치 GDD(growthSeries)와
-   * 작물 기준 해석(cropImpact)까지 함께 온다.
+   * 밭 좌표의 7일 예보. `plot` 을 주면 최근 14일 하루치 GDD(growthSeries)와
+   * 작물 기준 해석(cropImpact)·기상특보(alert)까지 함께 온다.
+   *
+   * ⚠️ 밭 id 와 소유자 id 를 **한 객체로 묶어 받는다.** 따로 받으면 id 만 넘기는
+   *    호출이 생기는데, 그때 ai-service 는 남의 밭인지 가릴 수 없어 밭 값을
+   *    통째로 비우고 경고만 남긴다(`app/api/weather.py`). 화면에는 "작물 정보
+   *    없음" 으로만 보여 원인을 찾기 어렵다 — 실제로 그렇게 새어 나갔던 자리다.
    */
   plotForecast: async (
     lat: number,
     lon: number,
-    plotId?: string,
+    plot?: { id: string; userId: string },
   ): Promise<AiResult<PlotForecast>> => {
     const result = await call<PlotForecast>(
-      `/v1/weather/plot?lat=${lat}&lon=${lon}${plotId ? `&plot_id=${plotId}` : ""}`,
+      `/v1/weather/plot?lat=${lat}&lon=${lon}${plot ? `&plot_id=${plot.id}&user_id=${plot.userId}` : ""}`,
       {
         revalidateSec: WEATHER_REVALIDATE_SEC,
         timeoutMs: FORECAST_TIMEOUT_MS,

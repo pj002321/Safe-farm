@@ -79,10 +79,19 @@ def build_graph_default() -> CompiledStateGraph:
     START → plan     → run_tools    ↘  [gen까지 2step]
           → retrieve [gen까지 1step] →  generate(defer로 올때까지 기다리기) → END
     """
+    
     builder.add_node("generate", generate, defer=True)
+
+    """
+    # 주의점
+    같은 파생 노드에서 시작된 n개 노드에 대해서는 db커넥션이나 어떤 공유 객체를 r/w하면 위험함.
+    START(파생 노드) -> plan / retrieve 와 같은 경우
+    plan, retreive는 서로 병렬로 수행되기 때문에, 공유객체가 깨질 수 있으니 주의
+    """
 
     builder.add_edge(START, "plan")
     builder.add_edge(START, "retrieve")
+
     builder.add_conditional_edges(
         "plan", route_after_plan, {"run_tools": "run_tools", "generate": "generate"}
     )

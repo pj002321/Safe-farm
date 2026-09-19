@@ -38,7 +38,9 @@ const SATELLITE_WINDOW_DAYS = 90;
 
 export default async function Page() {
   const profile = await getCurrentProfile();
-  const plots = profile ? await listPlots(profile.id) : [];
+  // 아래 목록에서 밭마다 넘겨야 해서 id 를 따로 뽑아 둔다 — 없으면 밭도 없다.
+  const userId = profile?.id ?? null;
+  const plots = userId ? await listPlots(userId) : [];
 
   // 카드가 "오늘"을 가리려면 기준일이 필요하다. 서버에서 한 번만 정해 내려보낸다 —
   // 카드마다 new Date() 를 부르면 자정 언저리에 카드끼리 날짜가 갈릴 수 있다.
@@ -58,7 +60,7 @@ export default async function Page() {
           title="날씨"
         />
       </div>
-      {plots.length === 0 ? (
+      {!userId || plots.length === 0 ? (
         <EmptyState
           actionHref="/plots/new"
           actionKo="텃밭 등록하기"
@@ -92,6 +94,7 @@ export default async function Page() {
                   nameKo={plot.nameKo ?? "이름 없는 밭"}
                   plotId={plot.id}
                   todayIso={todayIso}
+                  userId={userId}
                 />
               </Suspense>
             </li>
@@ -115,6 +118,7 @@ async function PlotForecast({
   nameKo,
   cropNameKo,
   plotId,
+  userId,
   todayIso,
   defaultOpen,
 }: {
@@ -123,11 +127,12 @@ async function PlotForecast({
   nameKo: string;
   cropNameKo: string | null;
   plotId: string;
+  userId: string;
   todayIso: string;
   defaultOpen: boolean;
 }) {
-  // plotId 를 줘야 서버가 이 밭의 작물·행정구역을 찾아 하루치 GDD·작물 해석·
-  // 기상특보까지 함께 돌려준다. 좌표만 주면 일반 기상값만 온다.
+  // 밭 id 와 소유자 id 를 함께 줘야 서버가 이 밭의 작물·행정구역을 찾아 하루치
+  // GDD·작물 해석·기상특보까지 돌려준다. 좌표만 주면 일반 기상값만 온다.
   //
   // 관측 계열은 **예보와 나란히** 받는다. 둘은 서로를 기다릴 이유가 없고, 이 밭의
   // 경계 안이라 느려도 다른 밭을 붙잡지 않는다.
@@ -136,7 +141,7 @@ async function PlotForecast({
   );
 
   const [result, satellite] = await Promise.all([
-    aiService.plotForecast(latitude, longitude, plotId),
+    aiService.plotForecast(latitude, longitude, { id: plotId, userId }),
     aiService.satelliteObservations(
       latitude,
       longitude,
