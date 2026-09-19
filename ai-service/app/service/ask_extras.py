@@ -19,9 +19,11 @@ from datetime import date
 
 from sqlalchemy.orm import Session
 
+from app.core.config import KMA_API_KEY
 from app.domain.ask_topics import topics_in
 from app.domain.gdd import past_target
 from app.domain.kst import kst_today
+from app.domain.typhoon import is_approaching, split_track
 from app.domain.vegetation_text import summarize_points, vegetation_lines
 from app.models.farm import Plot
 from app.service import forecast_cache
@@ -29,6 +31,7 @@ from app.service.disaster_notes import prevention_notes_for
 from app.service.pest_notes import pest_names_for
 from app.service.plot_growth import PlotGrowth, compute_plot_growth, nearest_station
 from app.service.satellite_cache import READ_DAYS, stored_observations
+from pipeline.kma_client import fetch_typhoon_track
 from pipeline.open_meteo_client import daily_index_of, normalize_daily_forecast
 
 
@@ -82,6 +85,29 @@ def _rain_forecast_line(plot: Plot) -> str | None:
     )
 
 
+def _typhoon_line(plot: Plot) -> str | None:
+    """지금 있는 태풍의 위치 한 줄. 태풍이 없으면 None.
+
+    ⚠ 밭 좌표만 있으면 되고 재배 중인 작물이 필요 없다 — rain 과 같은 이유로
+      아래 재배 조회 블록 밖에서 부른다.
+
+    ⚠ **캐시를 안 거친다.** typhoon.py(지도 레이어)도 그때그때 기상청을 불러
+      쓰는 자료다 — 발표가 하루 4번뿐이라 요청마다 불러도 부담이 적다.
+    """
+    if not KMA_API_KEY:
+        return None
+    rows = fetch_typhoon_track(KMA_API_KEY)
+    if not rows:
+        return None
+    _, forecast = split_track(rows)
+    if not forecast:
+        return None
+    최신 = forecast[-1]
+    닿음 = is_approaching(forecast, float(plot.latitude), float(plot.longitude))
+    영향 = "이 밭에 영향을 줄 수 있는 거리다" if 닿음 else "이 밭과는 아직 거리가 있다"
+    return f"제{rows[0]['typ_no']}호 태풍 예상 위치: {최신.location_ko}. {영향}."
+
+
 def extra_context_lines(
     db: Session, plot: Plot, *, question: str | None, today: date | None = None
 ) -> list[str]:
@@ -100,20 +126,37 @@ def extra_context_lines(
 
     오늘 = today or date.today()
     lines: list[str] = []
+
+    # 강수는 밭 좌표만 있으면 되고 재배 중인 작물이 필요 없다 — 아래 재배 조회와
+    # 묶으면, 재배 건이 없는 밭(작물 미등록)은 강수 질문에도 답을 못 얻는다
+    # (2026-09-20 실측: 재배 없는 밭에서 "비가 언제쯤 올까"가 빈 컨텍스트로 나감).
+    if "rain" in 갈래:
+        try:
+            줄 = _rain_forecast_line(plot)
+            if 줄:
+                lines.append(줄)
+        except Exception:  # noqa: BLE001 — 덧붙임이 실패해도 답변은 나가야 한다
+            logging.warning("[ask] 강수 컨텍스트 조회 실패", exc_info=True)
+
+    # 태풍 위치도 rain 과 같은 이유로 재배 조회 밖에서 처리한다 — 작물 미등록
+    # 밭에서도 "태풍이 근처에 있나?" 는 답할 수 있어야 한다.
+    if "disaster" in 갈래:
+        try:
+            줄 = _typhoon_line(plot)
+            if 줄:
+                lines.append(줄)
+        except Exception:  # noqa: BLE001 — 덧붙임이 실패해도 답변은 나가야 한다
+            logging.warning("[ask] 태풍 컨텍스트 조회 실패", exc_info=True)
+
     try:
         station = nearest_station(db, plot)
         growth = compute_plot_growth(db, plot, station) if station else None
         if growth is None:
-            return []
+            return lines
         작물 = growth.crop_name_ko
 
         if "satellite" in 갈래:
             줄 = _satellite_line(db, plot, growth)
-            if 줄:
-                lines.append(줄)
-
-        if "rain" in 갈래:
-            줄 = _rain_forecast_line(plot)
             if 줄:
                 lines.append(줄)
 

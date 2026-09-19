@@ -63,6 +63,18 @@ def closest_approach(points, lat, lon):
     return min(((p, haversine_km(lat, lon, p.lat, p.lon)) for p in points), key=lambda x: x[1])
 
 
+def is_approaching(points, lat, lon):
+    """예보 경로가 이 좌표에 닿는가. `_active_warnings`(plot_tasks) 가 특보 목록에
+    "태풍" 을 넣을지 여기 하나로 정한다 — closest_approach + reaches 를 매번
+    조합해 부르면 둘의 기준이 호출부마다 갈릴 수 있다.
+    """
+    found = closest_approach(points, lat, lon)
+    if found is None:
+        return False
+    point, distance_km = found
+    return reaches(point, distance_km)
+
+
 def reaches(point, distance_km):
     """그 시점의 강풍반경(없으면 FALLBACK_REACH_KM) 안에 드는가.
 
