@@ -1,5 +1,6 @@
 import "server-only";
 
+import { cache } from "react";
 import { getSupabaseServer } from "@/shared/supabase/server";
 import type { PlotEditInput } from "./domain/editPlot";
 import {
@@ -166,6 +167,28 @@ export async function getPlotDetail(
 
   return data ? toPlotDetail(data) : null;
 }
+
+/**
+ * 로그인 없이 보여줄 데모 밭. 랜딩 `#today` 섹션이 쓴다.
+ *
+ * `userId` 를 받지 않는다 — 소유자 확인이 아니라 `is_demo = true` 로 표시된
+ * 그 한 행만 본다(`plots_select_demo` RLS 정책, `plots_one_demo_idx` 가 하나임을
+ * 보장한다). 랜딩 조립(`page.tsx`)에서 여러 섹션이 같은 요청 안에서 부를 수
+ * 있어 `getCurrentProfile()` 과 같은 이유로 `cache()` 로 감싼다.
+ */
+export const getDemoPlot = cache(async (): Promise<PlotDetail | null> => {
+  const supabase = await getSupabaseServer();
+
+  const { data, error } = await supabase
+    .from("plots")
+    .select("id, name, region_ko, area_m2, latitude, longitude, grid_x, grid_y")
+    .eq("is_demo", true)
+    .maybeSingle();
+
+  if (error) throw new Error(error.message);
+
+  return data ? toPlotDetail(data) : null;
+});
 
 /**
  * 좌표·격자가 필요한 화면이 읽는 밭 전체. 날씨(`/weather`)가 쓴다.
