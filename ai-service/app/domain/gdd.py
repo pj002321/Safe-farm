@@ -70,3 +70,17 @@ def classify_deviation(deviation_pct: float | None) -> tuple[str, str]:
         if deviation_pct < threshold:
             return color, label
     return _TIERS[-1][1], _TIERS[-1][2]
+
+
+def past_target(accumulated: float, target: int | None) -> bool:
+    """다 자라는 데 필요한 온도를 넘겼나. **목표를 모르면 거짓이다.**
+
+    ★ 2026-09-19 — 작업카드(task_rules 의 수확)와 리포트(report 의 프롬프트)가
+      **같은 함수**를 쓰게 하려고 여기로 올렸다. 예전에는 같은 식이 두 곳에 베껴져
+      있었는데, 그러면 한쪽을 고칠 때 다른 쪽이 조용히 뒤처진다 — 같은 밭을 두고
+      홈 카드와 리포트가 서로 다른 말을 하게 된다.
+
+    ⚠ 목표가 없는 품종이 62개다(2026-09-19 실측). 그때는 "아직 아니다" 가 아니라
+      "모른다" 인데, 거짓으로 떨어뜨려 **아무 말도 안 하는 쪽**을 고른다.
+    """
+    return target is not None and accumulated >= target

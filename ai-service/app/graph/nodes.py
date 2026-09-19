@@ -246,7 +246,11 @@ def run_tools(state: GraphState) -> GraphState:
         run_tools({"db": db, "plot_id": uuid(...), "user_id": uuid(...)})
         -> {'tool_result': '이 밭은 서울에 있고...'}
     """
-    result = build_plot_context(state["db"], state["plot_id"], state["user_id"])
+    # question 을 같이 넘긴다 — 물어본 갈래(위성·병해충·재해)만 컨텍스트에 붙는다.
+    # 안 넘기면 예전 그대로다(ask_context.build_plot_context 주석).
+    result = build_plot_context(
+        state["db"], state["plot_id"], state["user_id"], state["question"]
+    )
     return {"tool_result": result}
 
 

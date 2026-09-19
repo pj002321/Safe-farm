@@ -20,6 +20,7 @@ from app.models.farm import (
     Station,
     WeatherObsDaily,
 )
+from app.service.ask_extras import extra_context_lines
 
 RECENT_WEATHER_DAYS = 7
 
@@ -248,12 +249,18 @@ def plot_crop_names(db: Session, plot_id: uuid.UUID, user_id: uuid.UUID) -> set[
 
 
 def build_plot_context(
-    db: Session, plot_id: uuid.UUID, user_id: uuid.UUID
+    db: Session, plot_id: uuid.UUID, user_id: uuid.UUID, question: str | None = None
 ) -> str | None:
     """밭 하나를 조회해 LLM 프롬프트에 붙일 한글 문장을 만든다.
 
     남의 밭이거나, 지운 밭이거나, 기르는 작물이 없으면 None — 이때 /ask 는
     컨텍스트 없이 일반론으로 답한다. 소유 확인은 `_owned_plot` 이 한다.
+
+    ★ 2026-09-19 — `question` 을 받으면 **물어본 갈래만** 한 줄씩 덧붙인다
+      (위성·병해충·재해 — app/service/ask_extras). 안 넘기면 예전 그대로다.
+
+      ⚠ 무조건 싣지 않는 이유는 ask_extras 파일 머리에 있다. 요약하면,
+        "웃거름 언제 줘요?" 에 병해충 목록이 따라붙으면 물어본 것이 흐려진다.
     """
     plot = _owned_plot(db, plot_id, user_id)
     if plot is None:
@@ -278,5 +285,8 @@ def build_plot_context(
     weather_line = _recent_weather_line(db, station)
     if weather_line:
         lines.append(weather_line)
+
+    # 질문이 물어본 갈래만. 아무것도 안 걸리면 빈 목록이라 예전과 같은 문장이 나간다
+    lines += extra_context_lines(db, plot, question=question)
 
     return " ".join(lines)

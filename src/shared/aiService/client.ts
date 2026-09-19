@@ -168,8 +168,12 @@ export interface PlotForecast {
     humidityPct: number | null;
     rainfallMm: number | null;
     windMs: number | null;
-    /** 바람이 불어오는 방향(0~360°, 기상학 관례). `WeatherNow` 가 180° 돌려 화살표로 그린다. */
-    windDeg: number | null;
+    /**
+     * 바람이 **불어오는** 쪽(도, 0=북 · 90=동).
+     *
+     * ⚠ 0 과 null 이 다르다 — 0 은 정북풍이고 null 은 모른다는 뜻이다.
+     */
+    windDirDeg: number | null;
   } | null;
   /** 지금부터 24시간. 서버가 **지난 시간을 잘라내고** 준다(00시부터 오지 않는다). */
   hours: Array<{
@@ -186,6 +190,11 @@ export interface PlotForecast {
     rainChance: number | null;
     windMax: number | null;
     humidityPct: number | null;
+    /** 해 뜸·해 짐. "2026-09-19T06:19" 꼴 — 시각만 뽑는 것은 화면의 일이다. */
+    sunrise: string | null;
+    sunset: string | null;
+    /** 그날 대표 풍향(도). 불어오는 쪽이다. */
+    windDirDeg: number | null;
   }>;
   /** 최근접 관측소 기준 누적 강수량(mm). 그 구간에 관측이 없으면 null(판정 보류). */
   rainfall3d: number | null;

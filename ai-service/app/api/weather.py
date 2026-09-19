@@ -63,6 +63,11 @@ def plot_forecast(
             "rainChance": row["rain_chance"],
             "windMax": row["wind_max"],
             "humidityPct": row["humidity"],
+            # 아침에 밭에 나갈 때 보는 값. "2026-09-19T06:19" 꼴을 그대로 넘긴다
+            "sunrise": row["sunrise"],
+            "sunset": row["sunset"],
+            # 그날 대표 풍향(도). **불어오는 쪽**이다 — 화살표는 화면이 돌린다
+            "windDirDeg": row["wind_dir_deg"],
         }
         for row in normalize_daily_forecast(payload["daily"])
     ]
