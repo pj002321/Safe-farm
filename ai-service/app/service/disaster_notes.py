@@ -23,6 +23,7 @@ import re
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from app.domain.livestock import is_livestock
 from app.service.bulletin_sql import CROP_IN_NAMES
 
 #: 미리 하는 것만. '발생전' 도 같은 결이다
@@ -39,12 +40,21 @@ _BULLET = re.compile(r"[○ㅇ●・*]\s*")
 
 
 def _첫항목(본문: str) -> str:
-    """'○ …' 로 나뉜 본문에서 첫 항목만. 너무 길면 자른다."""
-    조각 = [x.strip() for x in _BULLET.split(본문 or "") if x.strip()]
-    if not 조각:
-        return ""
-    첫 = " ".join(조각[0].split())
-    return 첫 if len(첫) <= _MAX_LEN else 첫[:_MAX_LEN].rstrip() + "…"
+    """'○ …' 로 나뉜 본문에서 쓸 만한 첫 항목. 너무 길면 자른다.
+
+    ⚠ **축산 항목은 건너뛰고 다음 것을 쓴다.** 이 표는 작물이 '더덕'·'감자' 인 행의
+      본문에도 축사 대책을 같이 적어 둔다. 실측(2026-09-19) 133작물 × 12달 중
+      더덕 10월이 "축사 주변 배수로 정비" 를 리포트로 내보내고 있었다.
+
+    ⚠ **자른 뒤에 판정한다.** 원문 항목 끝에 '황사 대비 농작물 및 가축 관리요령'
+      같은 목차가 붙어 오는 일이 있어, 자르기 전 글로 보면 포도 개화기 얘기가
+      축산으로 몰려 통째로 날아간다. 내보낼 글자만 보고 고른다.
+    """
+    for 조각 in (" ".join(x.split()) for x in _BULLET.split(본문 or "") if x.strip()):
+        쓸것 = 조각 if len(조각) <= _MAX_LEN else 조각[:_MAX_LEN].rstrip() + "…"
+        if not is_livestock(쓸것):
+            return 쓸것
+    return ""
 
 
 def prevention_notes_for(db: Session, crop_name_ko: str, month: int) -> tuple[str, ...]:

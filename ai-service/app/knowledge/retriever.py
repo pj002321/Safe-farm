@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.domain.crop_match import find_crops
 from app.domain.diversity import diversify
+from app.domain.livestock import is_livestock
 from app.domain.symptoms import expand_symptoms
 from app.knowledge import vector_store
 from app.knowledge.embedder import embed_texts
@@ -121,6 +122,8 @@ def find_matches(
     """
     crops = find_crops(question, known_crops(db)) or fallback_crops
     candidates = retrieve_with_score(db, question, CANDIDATES, crops=crops)
+    # 축산 문서는 이 서비스가 다루지 않는다 — 자세한 사정은 domain/livestock.py 머리말
+    candidates = [m for m in candidates if not is_livestock(m[0].document.title)]
     picked = diversify(
         candidates, key=lambda m: m[0].document.source, per_key=PER_SOURCE, limit=TOP_K
     )
