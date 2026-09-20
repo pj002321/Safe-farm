@@ -15,6 +15,19 @@ const CULTIVATION: TimelineCultivation = {
   failureReason: null,
 };
 
+/** 날씨 칸이 전부 빈 행. 이 작업 전에 쌓인 14행과 같은 모양이다. */
+const NO_WEATHER = {
+  skyKo: null,
+  tempMaxC: null,
+  tempMinC: null,
+  rainfallMm: null,
+  humidityPct: null,
+  windMs: null,
+  windDirDeg: null,
+  sunriseAt: null,
+  sunsetAt: null,
+};
+
 function note(id: string, occurredOn: string): TimelineEventRow {
   return {
     id,
@@ -23,6 +36,11 @@ function note(id: string, occurredOn: string): TimelineEventRow {
     body: "잎에 구멍",
     stageOrder: null,
     forecastOn: null,
+    workKind: null,
+    taskNote: null,
+    createdAt: "2026-09-19T11:41:00Z",
+    adviceText: null,
+    weather: NO_WEATHER,
   };
 }
 
@@ -98,6 +116,11 @@ describe("buildTimeline", () => {
           body: null,
           stageOrder: null,
           forecastOn: "2026-10-18",
+          workKind: null,
+          taskNote: null,
+          createdAt: "2026-09-19T11:41:00Z",
+          adviceText: null,
+          weather: NO_WEATHER,
         },
       ],
     });

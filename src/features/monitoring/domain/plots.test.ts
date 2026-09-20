@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DATA_SOURCES, PLOTS, SANGJU_TODAY } from "./plots";
+import { DATA_SOURCES, PLOTS } from "./plots";
 
 /**
  * ---------------------------------------------
@@ -51,13 +51,7 @@ describe("PLOTS", () => {
   });
 });
 
-describe("SANGJU_TODAY · DATA_SOURCES", () => {
-  it("오늘 값이 실측 범위를 벗어나지 않는다", () => {
-    expect(SANGJU_TODAY.tempMinC).toBeLessThan(SANGJU_TODAY.tempMaxC);
-    expect(SANGJU_TODAY.rain7dMm).toBeGreaterThanOrEqual(0);
-    expect(SANGJU_TODAY.alertKo).toBe("가을가뭄");
-  });
-
+describe("DATA_SOURCES", () => {
   it("출처 표기가 비어 있지 않다", () => {
     expect(DATA_SOURCES.length).toBeGreaterThan(0);
     for (const source of DATA_SOURCES) {

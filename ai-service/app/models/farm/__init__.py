@@ -21,6 +21,7 @@ from app.models.farm.pest import PestAlert, PestBulletin
 from app.models.farm.plot import Plot
 from app.models.farm.plot_task import PlotTask
 from app.models.farm.profile import Profile
+from app.models.farm.satellite_observation import SatelliteFetch, SatelliteObservation
 from app.models.farm.station import Station
 from app.models.farm.terms import Terms
 from app.models.farm.user_agreement import UserAgreement
@@ -46,6 +47,8 @@ __all__ = [
     "Plot",
     "PlotTask",
     "Profile",
+    "SatelliteFetch",
+    "SatelliteObservation",
     "Station",
     "Terms",
     "Variety",

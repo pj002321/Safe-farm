@@ -8,8 +8,19 @@
  *   맡기면 입력에 없는 약제와 배수를 지어낸다.
  * - **시점 제약을 두지 않는다.** "오늘 할 일" 만 추리면 사용자는 앞으로 무엇이
  *   기다리는지 모른 채 하루씩 끌려간다. 해당하는 것을 전부 내고 화면이 접는다.
- * - 규칙의 폭이 정해지지 않아 `recommendTasks_1` · `_2` 두 벌을 둔다. 둘 다
- *   `TaskRule` 이라 호출부 한 줄로 갈아 끼워진다.
+ * ⚠️ **`recommendTasks_1`·`_2` 와 `stageTasks` 는 이제 아무 데서도 안 부른다**
+ *    (2026-09-21). 재배 상세가 쓰던 자리를 ai-service 의 판정으로 바꿨다 —
+ *    같은 밭을 두고 홈과 상세가 **반대되는 말**을 했기 때문이다(아래 표).
+ *    되살리지 말 것. 파일이 남아 있는 것은 `weatherTasks` 때문이다.
+ *
+ * ```
+ * weatherTasks       랜딩 2곳이 쓴다 (CallToAction · TodayInSangju)   ← 산다
+ * recommendTasks_1·2 아무도 안 쓴다                                   ← 죽었다
+ * stageTasks         위 둘 안에서만 쓰였다                             ← 같이 죽었다
+ * ```
+ *
+ * ⚠️ **랜딩은 `weatherTasks` 를 계속 쓴다. 지우면 깨진다.** 로그인 전 데모 밭
+ *    이라 사용자의 밭·재배가 없고, ai-service 카드는 밭이 있어야 나온다.
  * - 단계 이름은 `crop_stages.stage_name` 그대로 들어온다. 품종마다 표기가 조금씩
  *   달라 **부분 일치**로 묶는다(`ai-service/app/domain/ask_suggest.py` 와 같은 방식).
  * - ⚠️ **약제 이름과 희석배수는 내지 않는다.** 등록 기준은 작물·병해충별로
@@ -182,7 +193,7 @@ const GENERIC: readonly TaskAdvice[] = [
   },
 ];
 
-/** 단계 이름이 걸리는 묶음의 작업들. 없으면 빈 배열. */
+/** 단계 이름이 걸리는 묶음의 작업들. 없으면 빈 배열. ⚠️ 부르는 곳이 없다. */
 function stageTasks(stageNameKo: string | null): readonly TaskAdvice[] {
   if (stageNameKo === null) return [];
   const group = STAGE_TASKS.find((entry) =>
@@ -192,7 +203,7 @@ function stageTasks(stageNameKo: string | null): readonly TaskAdvice[] {
 }
 
 /**
- * **변형 1 — 생육단계만 본다.**
+ * **변형 1 — 생육단계만 본다. ⚠️ 지금은 아무도 안 부른다**(파일 머리말).
  *
  * 기상 관측이 없어도 늘 같은 답이 나온다. `weather_obs_daily` 가 아직 얇아서
  * 지금 실제로 돌려도 결과가 흔들리지 않는 쪽이다.
@@ -221,7 +232,9 @@ const DRY_MM = 5;
 const MIN_WEATHER_DAYS = 3;
 
 /** 기상 조건에서 나오는 작업. 단계와 무관하게 붙는다. */
-function weatherTasks(weather: TaskWeather | null): readonly TaskAdvice[] {
+export function weatherTasks(
+  weather: TaskWeather | null,
+): readonly TaskAdvice[] {
   if (weather === null || weather.days < MIN_WEATHER_DAYS) return [];
 
   const tasks: TaskAdvice[] = [];
@@ -266,7 +279,12 @@ function weatherTasks(weather: TaskWeather | null): readonly TaskAdvice[] {
 }
 
 /**
- * **변형 2 — 단계와 기상을 함께 본다.**
+ * **변형 2 — 단계와 기상을 함께 본다. ⚠️ 지금은 아무도 안 부른다.**
+ *
+ * 재배 상세가 이걸 쓰다가 ai-service 로 옮겼다(2026-09-21). 여기 임계값은
+ * 작물과 무관한 고정값(더위 33도 · 가뭄 3일 5mm)이라, 작물별 한계값과 물수지를
+ * 보는 홈 판정과 갈렸다 — 추수 3주 전 물을 뺀 논에 홈은 조용한데 이쪽이
+ * "뿌리까지 젖도록 충분히 주기" 를 냈다. 정확히 반대였다.
  *
  * 단계 작업 앞에 기상에서 나온 작업을 붙인다. 급한 것이 위로 오도록 기상 쪽을
  * 먼저 두었다 — 폭염 경고는 웃거름보다 먼저 읽혀야 한다.

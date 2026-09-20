@@ -3,6 +3,7 @@ import {
   MATURITY_TYPES,
   type MaturityType,
 } from "@/shared/growth/maturity";
+import { isTransplantMethod } from "@/shared/growth/transplant";
 
 /**
  * ---------------------------------------------
@@ -108,7 +109,22 @@ export function toCropOption(
         sow_to: v.plant_to,
       })),
     ),
-    sowingNow: isSowingSeason(todayMmDd, row.crop_variants),
+    // ⚠️ 씨 창·옮 창을 **둘 다** 본다. 배지는 카드 맨 위에 하나뿐이라 씨앗/모종
+    //   라디오보다 먼저 그려지고, 어느 쪽을 고를지 아직 모른다.
+    //   `sow_*` 하나만 보던 시절엔 아래 안내 문구와 어긋났다 — 양파가 9월에
+    //   "8.11~9.20에 씨를 뿌립니다" 를 띄우면서 배지는 꺼져 있었다(sow_* 는 10.11~11.20).
+    //   2026-09-19 실측으로 seed_* 13숙기 · plant_* 35숙기가 sow_* 와 다르다.
+    sowingNow: isSowingSeason(todayMmDd, [
+      ...row.crop_variants,
+      ...row.crop_variants.map((v) => ({
+        sow_from: v.seed_from,
+        sow_to: v.seed_to,
+      })),
+      ...row.crop_variants.map((v) => ({
+        sow_from: v.plant_from,
+        sow_to: v.plant_to,
+      })),
+    ]),
   };
 }
 
@@ -179,6 +195,25 @@ interface SowingWindow {
 }
 
 /**
+ * 옮 쪽 창을 설명할 때 쓸 작업명.
+ *
+ * `sow_method` 는 §A 가 고른 **대표 작업 하나**라, 작물에 따라 씨 쪽 낱말이 온다 —
+ * 벼가 '모기르기' 다. 그 말로 옮 창(5.15~6.15)을 설명하면 "모를 기르기 시작합니다"
+ * 가 되어 앞뒤가 뒤집힌다. 옮 창은 **정의상 옮겨 심는 때**이므로, 옮겨심기 낱말이
+ * 아니면 '아주심기' 로 갈아 끼운다.
+ *
+ * ⚠️ 그래서 벼도 "모종으로 심습니다" 로 나온다. 농사짓는 사람의 말은 '모내기' 지만,
+ *   그 낱말은 지금 `crop_stages` 의 단계 이름에만 있고 `crop_variants` 에는 없다.
+ *   작물 이름을 박아 가르지 않는다 — 고치려면 마스터에 옮 쪽 작업명을 따로 실어야 한다.
+ */
+function toPlantMethod(method: string | null): string {
+  const m = (method ?? "").trim();
+  // 낱말표는 shared/growth/transplant.ts 하나에서 온다 — 여기에 다시 적지 않는다.
+  // 예전에는 여기와 seedlingStart.ts 가 목록을 따로 들고 있었고 서로 달랐다.
+  return isTransplantMethod(m) ? m : "아주심기";
+}
+
+/**
  * 파종 방법을 사람 말로. `<기간>에 ~` 뒤에 붙는 서술어다.
  *
  * 마스터의 `sow_method` 는 농업 용어라 그대로 보이면 초보자가 모른다 —
@@ -191,25 +226,6 @@ interface SowingWindow {
  *
  * 모르는 값이 새로 들어오면 그 말을 그대로 쓴다 — 지어내는 것보다 낫다.
  */
-/**
- * 옮 쪽 창을 설명할 때 쓸 작업명.
- *
- * `sow_method` 는 §A 가 고른 **대표 작업 하나**라, 작물에 따라 씨 쪽 낱말이 온다 —
- * 벼가 '모기르기' 다. 그 말로 옮 창(5.15~6.15)을 설명하면 "모를 기르기 시작합니다"
- * 가 되어 앞뒤가 뒤집힌다. 옮 창은 **정의상 옮겨 심는 때**이므로, 옮겨심기 낱말이
- * 아니면 '아주심기' 로 갈아 끼운다.
- *
- * ⚠️ 그래서 벼도 "모종으로 심습니다" 로 나온다. 농사짓는 사람의 말은 '모내기' 지만,
- *   그 낱말은 지금 `crop_stages` 의 단계 이름에만 있고 `crop_variants` 에는 없다.
- *   작물 이름을 박아 가르지 않는다 — 고치려면 마스터에 옮 쪽 작업명을 따로 실어야 한다.
- */
-const TRANSPLANT_METHODS = new Set(["아주심기", "정식", "모내기", "이앙"]);
-
-function toPlantMethod(method: string | null): string {
-  const m = (method ?? "").trim();
-  return TRANSPLANT_METHODS.has(m) ? m : "아주심기";
-}
-
 function toSowingPhrase(method: string | null): string {
   switch ((method ?? "").trim()) {
     case "아주심기":

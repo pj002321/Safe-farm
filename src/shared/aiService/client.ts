@@ -110,6 +110,11 @@ export interface AskInput {
   plotId?: string | null;
 }
 
+/** 사진 진단 결과. 저장하지 않는 일회성 호출이라 history_id 가 없다. */
+export interface DiagnoseImageResult {
+  diagnosis: string;
+}
+
 /** 시군구 경계 + 가장 최근 관측된 일 강수량·색상. `/map` 강수 레이어가 그대로 그린다. */
 export interface SigunguRainFeatureCollection {
   type: "FeatureCollection";
@@ -141,11 +146,35 @@ export interface SigunguWindFeatureCollection {
       station?: string;
       stationName?: string;
       windMax?: number | null;
+      /** 지금 풍향(0~360°, 불어오는 방향). Open-Meteo 실시간 조회라 없을 수 있다. */
+      windDeg?: number | null;
       color?: string;
       label?: string;
     };
     geometry: { type: "Polygon" | "MultiPolygon"; coordinates: unknown };
   }>;
+}
+
+/** 태풍 경로 위 점 하나. `ft` 로 지나온 길(0)과 예보(1)를 가른다. */
+export interface TyphoonPoint {
+  ft: 0 | 1;
+  atUtc: string;
+  lat: number;
+  lon: number;
+  pressureHpa: number | null;
+  windMs: number | null;
+  /** 15m/s 강풍반경(km). 없으면 결측 — 지도가 fallback 값을 쓴다. */
+  rad15Km: number | null;
+  /** 70% 이상 예상확률반경(km, 예보원). 예측 점에만 값이 있다. */
+  forecastRadiusKm: number | null;
+  locationKo: string;
+}
+
+/** 태풍 경로. 태풍이 없으면 analysis·forecast 가 빈 배열이다(오류 아님). */
+export interface TyphoonTrack {
+  typhoonNo: string | null;
+  analysis: TyphoonPoint[];
+  forecast: TyphoonPoint[];
 }
 
 /** 밭 좌표 기준 실황·시간별·7일 예보. `/weather` 탭이 그린다. */
@@ -161,6 +190,12 @@ export interface PlotForecast {
     humidityPct: number | null;
     rainfallMm: number | null;
     windMs: number | null;
+    /**
+     * 바람이 **불어오는** 쪽(도, 0=북 · 90=동).
+     *
+     * ⚠ 0 과 null 이 다르다 — 0 은 정북풍이고 null 은 모른다는 뜻이다.
+     */
+    windDirDeg: number | null;
   } | null;
   /** 지금부터 24시간. 서버가 **지난 시간을 잘라내고** 준다(00시부터 오지 않는다). */
   hours: Array<{
@@ -177,6 +212,11 @@ export interface PlotForecast {
     rainChance: number | null;
     windMax: number | null;
     humidityPct: number | null;
+    /** 해 뜸·해 짐. "2026-09-19T06:19" 꼴 — 시각만 뽑는 것은 화면의 일이다. */
+    sunrise: string | null;
+    sunset: string | null;
+    /** 그날 대표 풍향(도). 불어오는 쪽이다. */
+    windDirDeg: number | null;
   }>;
   /** 최근접 관측소 기준 누적 강수량(mm). 그 구간에 관측이 없으면 null(판정 보류). */
   rainfall3d: number | null;
@@ -251,6 +291,40 @@ export interface PlotReport {
   summary?: string;
   todos?: string[];
   cautions?: string[];
+}
+
+/**
+ * 영농일지 한 줄에 박을 그날 날씨. `/v1/weather/day` 한 줄이다.
+ *
+ * ⚠️ **칸마다 null 이 올 수 있고, 그게 정상이다.** 관측이 비는 날은 비는 대로
+ *    저장한다 — 0 으로 채우면 "비가 안 왔다" 는 뜻이 된다.
+ */
+export interface DiaryWeather {
+  date: string;
+  tempMax: number | null;
+  tempMin: number | null;
+  rainfallMm: number | null;
+  humidityPct: number | null;
+  windMax: number | null;
+  /** 그날 대표 풍향(도). **불어오는 쪽**이다. */
+  windDirDeg: number | null;
+  /** `"2026-09-19T06:19"` 꼴. `"06:19"` 로 자르는 것은 저장하는 쪽 일이다. */
+  sunrise: string | null;
+  sunset: string | null;
+}
+
+/**
+ * 작업카드 한 장. `/v1/tasks/cultivation` 이 돌려주는 모양이다.
+ *
+ * 홈 카드(`plot_tasks` 표)와 **같은 판정 함수**에서 나오지만 저장되지 않는다 —
+ * 화면이 그릴 때마다 새로 낸다. 그래서 id 가 없다. 화면이 제목을 열쇠로 쓴다
+ * (`domain/doneTasks.ts` 가 그날 `했음` 을 제목으로 거르는 것과 같은 열쇠다).
+ */
+export interface AiTaskCard {
+  title: string;
+  reason: string;
+  /** 홈의 `Priority` 와 같은 값이다 — 급함 · 보통 · 여유. */
+  priority: string;
 }
 
 /**
@@ -478,6 +552,9 @@ const ASK_TIMEOUT_MS = 60_000;
 /** 리포트 한 건의 한계. 안에서 GDD 계산 + Open-Meteo 조회 + 비스트리밍 LLM 호출이 순차로 돈다. */
 const REPORT_TIMEOUT_MS = 30_000;
 
+/** 사진 진단 한 건의 한계. vision 호출은 텍스트만 보낼 때보다 오래 걸린다. */
+const DIAGNOSE_TIMEOUT_MS = 30_000;
+
 export const aiService = {
   /** 서비스가 살아 있는지, 무엇을 할 수 있는지. */
   status: () => call<AiServiceStatus>("/v1/status"),
@@ -528,6 +605,17 @@ export const aiService = {
       }),
     }),
 
+  /**
+   * 작물 사진 한 장을 즉석에서 진단한다. 저장하지 않는 일회성 호출이라
+   * `userId` 를 넘기지 않는다 — 이력도, 일일 한도도 없다(ai-service `api/diagnose.py`).
+   */
+  diagnoseImage: (imageDataUrl: string, question: string | null) =>
+    call<DiagnoseImageResult>("/v1/diagnose/image", {
+      method: "POST",
+      body: JSON.stringify({ image_data_url: imageDataUrl, question }),
+      timeoutMs: DIAGNOSE_TIMEOUT_MS,
+    }),
+
   /** 답변 하나에 up/down 평가와 사유를 남긴다. */
   askFeedback: (
     historyId: string,
@@ -551,6 +639,14 @@ export const aiService = {
   /** 시군구 250개 폴리곤 + 최근 관측 최대풍속. */
   sigunguWind: () =>
     call<SigunguWindFeatureCollection>("/v1/map/sigungu-wind", {
+      timeoutMs: 15_000,
+    }),
+  /** 진행 중인 태풍의 분석·예측 경로. 없으면 analysis·forecast 가 빈 배열이다. */
+  typhoonTrack: () =>
+    call<TyphoonTrack>("/v1/typhoon/track", {
+      // 기상청 발표가 하루 4번(04·10·16·22시 + 수시)이다. sigungu-warn 처럼
+      // 매번 받을 이유가 없다 — 1시간 캐시로 같은 응답을 스무 번 받지 않는다.
+      revalidateSec: 60 * 60,
       timeoutMs: 15_000,
     }),
   /**
@@ -581,6 +677,28 @@ export const aiService = {
       ? { ok: true, data: normalizePlotForecast(result.data) }
       : result;
   },
+  /**
+   * 그 좌표 그 날짜 하루치 날씨. **영농일지가 저장할 때 한 번 부른다.**
+   *
+   * `plotForecast` 를 쓰지 않는 까닭 — 저쪽은 `past_days` 인자가 없어 **과거가
+   * 아예 안 온다.** 사용자는 한 달 전 날짜로도 일지를 쓴다.
+   *
+   * ⚠️ **`revalidateSec` 을 주지 않는다.** 저장 순간의 값을 행에 박는 호출이라
+   *    캐시된 응답을 쓰면 다른 날짜 값이 박힌다. ai-service 쪽 1시간 캐시가
+   *    (좌표, past_days) 를 열쇠로 이미 왕복을 줄여 준다.
+   *
+   * ⚠️ **`FORECAST_TIMEOUT_MS`(15초)를 쓰지 않는다.** 화면 예보는 그게 없으면
+   *    카드가 비지만, 여기서는 **농민이 저장 버튼을 누르고 기다리는 시간**이다.
+   *    날씨는 없어도 되는 값이라 기본값(5초)에 맡기고 빨리 포기한다 — 실패해도
+   *    메모는 저장되고, 1시간 캐시 덕에 다음 저장은 대개 즉시 붙는다.
+   *
+   * ⚠️ 92일보다 오래된 날짜는 `day` 가 **null 로 온다. 오류가 아니다** —
+   *    그대로 빈 채 저장하고 화면이 "그날 날씨를 못 찾았습니다" 로 그린다.
+   */
+  weatherOfDay: (lat: number, lon: number, date: string) =>
+    call<{ day: DiaryWeather | null }>(
+      `/v1/weather/day?lat=${lat}&lon=${lon}&date=${date}`,
+    ),
   /** 좌표 하나의 `dateFrom`~`dateTo`(YYYY-MM-DD) NDVI·NDMI 일별 평균(F5). */
   satelliteObservations: (
     lat: number,
@@ -592,6 +710,47 @@ export const aiService = {
       `/v1/satellite/observations?lat=${lat}&lon=${lon}&date_from=${dateFrom}&date_to=${dateTo}`,
       { revalidateSec: SATELLITE_REVALIDATE_SEC, timeoutMs: 15_000 },
     ),
+  /**
+   * 재배 한 건의 오늘 할 일. **저장하지 않고 받아만 온다.**
+   *
+   * 재배 상세의 `이번 주 할 일` 이 이걸 쓴다. 전에는 화면 쪽 규칙
+   * (`shared/growth/taskAdvice.ts` 의 `recommendTasks_2`)이 따로 판정했는데,
+   * 임계값이 홈과 갈려서 **반대되는 조언이 나갔다** — 추수 3주 전 물을 뺀 논에
+   * 홈은 조용한데 상세가 "충분히 주기" 를 냈다. 판정을 한 벌로 모았다.
+   *
+   * ⚠️ **밭 단위 값을 보내지 않는다.** 물수지·위성·특보·병해충·관측강수는
+   *    서버가 `plotId` 로 직접 읽는다. 보내면 남의 밭 값을 끼워 넣을 통로가
+   *    된다(ai-service `service/cultivation_tasks.py` 머리말).
+   *
+   * ⚠️ **누적 GDD 는 화면이 센 값을 보낸다.** 서버가 다시 계산하면 사용자가 고친
+   *    단계 보정(rebase)을 몰라, 화면과 다른 단계를 근거로 말한다.
+   *
+   * ⚠️ `revalidateSec` 을 주지 않는다. 특보·예보가 바뀌면 그날 안에도 카드가
+   *    달라져야 하는 값이라 캐시된 응답을 쓰면 안 된다. 서버 쪽 1시간 예보
+   *    캐시가 왕복은 이미 줄여 준다.
+   */
+  cultivationTasks: (input: {
+    plotId: string;
+    variantId: number;
+    /** 화면이 판정한 단계 번호. 못 정했으면 생략 — 기상만으로 판정한다. */
+    stageOrder?: number | null;
+    accumulatedGdd?: number | null;
+  }) => {
+    const query = new URLSearchParams({
+      plot_id: input.plotId,
+      variant_id: String(input.variantId),
+    });
+    // 빈 값을 보내지 않는다. FastAPI 가 `stage_order=` 를 0 이 아니라 422 로 본다
+    if (input.stageOrder != null) {
+      query.set("stage_order", String(input.stageOrder));
+    }
+    if (input.accumulatedGdd != null) {
+      query.set("accumulated_gdd", String(input.accumulatedGdd));
+    }
+    return call<{ tasks: readonly AiTaskCard[] }>(
+      `/v1/tasks/cultivation?${query}`,
+    );
+  },
   /**
    * 밭 하나만 즉시 판정해 오늘 할 일 카드를 만든다. 자정 배치를 기다리지 않고
    * 밭 등록·재배 추가 직후 호출한다(registerPlot/addCultivations).

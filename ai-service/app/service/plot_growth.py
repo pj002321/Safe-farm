@@ -24,6 +24,7 @@ from app.models.farm import Cultivation, Plot
 from app.repo.crop import (
     stage_at_gdd,
     stage_by_order,
+    stage_count_and_last_order,
     usable_crop_of_variant,
     variant_by_id,
 )
@@ -44,14 +45,45 @@ class PlotGrowth:
     accumulated_gdd: float
     stage_name: str | None
     guide_text: str | None
-    # 아래 둘은 stage_name 이 None 이면 같이 None/False 다 — 작업카드 판정(task_rules.py)이 씀
+    # 아래 넷은 stage_name 이 None 이면 같이 비어 있다 — 작업카드 판정(task_rules.py)이 씀
+    #
+    # ⚠️ water_need_mm 은 **영영 빈 칸이다**(2026-09-19 마이그레이션 주석). 원천이
+    #    없어 채우지 않기로 했고, 그 자리를 irrigate_needed 와 stage_hazards 가
+    #    대신한다. 필요량(mm)이 아니라 **시기**다 — "이 단계에 물이 중요한가".
+    #    "지금 마른가"는 기상이 댄다. 필드를 지우지 않는 이유는 CSV 계약 헤더에
+    #    남아 있어서다(같은 주석).
     water_need_mm: float | None
+    #: 이 단계에 물주기·배수 작업이 있는가 (crop_stages.irrigate_needed)
+    irrigate_needed: bool
     fertilize_needed: bool
+    #: 조심할 재해 갈래 — ('가뭄','과습','저온' …). CSV 가 쉼표로 이어 준 것을 쪼갠다
+    stage_hazards: tuple[str, ...] = ()
+    #: 농작업 갈래 — ('웃거름','물주기','배수' …)
+    stage_tasks: tuple[str, ...] = ()
     # 씨뿌림→수확 총 목표 GDD. 역산이 안 끝난 숙기는 None(리포트 화면의 진행 게이지는
     # 이때 숨긴다 — 분모 없는 진행률은 거짓 숫자다).
-    gdd_target: int | None
+    gdd_target: int | None = None
     # 현재 단계가 끝나는(=다음 단계가 시작하는) 누적 GDD. stage_name 이 None 이면 같이 None.
-    stage_gdd_to: int | None
+    stage_gdd_to: int | None = None
+    # 심는 법('씨뿌림'·'아주심기' …). 작업카드가 **거둬도 밭에 남는 작물**을 가르는
+    # 데 쓴다 — 나무는 한 번 심고 두는 것이라 이 칸이 빈다(task_rules 주석).
+    sow_method: str | None = None
+    # 지금 단계가 단계표의 마지막인가. '수확' 이라는 낱말을 믿어도 되는지 가른다 —
+    # 여러 번 거두는 작물은 수확이 중간에 온다(고추: 풋고추 → 붉은고추).
+    is_last_stage: bool = False
+    # 이 품종의 단계 수. 하나뿐이면 단계 이름에 시기 정보가 없다(상추: '수확' 한 칸)
+    stage_count: int = 0
+
+
+def _split(value: str | None) -> tuple[str, ...]:
+    """쉼표로 이은 칸을 튜플로. 빈 칸·None 은 빈 튜플이다.
+
+    ⚠ 빈 조각을 버린다 — 'a,,b' 나 끝의 쉼표가 빈 문자열을 만들면 `'' in hazards` 같은
+      검사가 엉뚱하게 참이 된다.
+    """
+    if not value:
+        return ()
+    return tuple(x.strip() for x in value.split(",") if x.strip())
 
 
 def nearest_station(db: Session, plot: Plot) -> StationRow | None:
@@ -157,6 +189,19 @@ def compute_plot_growth(db: Session, plot: Plot, station: StationRow) -> PlotGro
     stage = stage_at_gdd(db, cultivation.variant_id, accumulated)
     variant = variant_by_id(db, cultivation.variant_id)
 
+    # 지금 단계가 **단계표의 마지막인가.**
+    #
+    # ⚠ 이것이 있어야 '수확' 이라는 낱말을 믿을 수 있다. 여러 번 거두는 작물은
+    #   수확이 중간에 온다 — 고추가 `풋고추 수확 → 붉은고추 수확` 이고, 그동안
+    #   나무는 계속 자란다. 마지막인지 안 보고 '수확' 만으로 "익어 가는 중" 이라
+    #   판정하면, **여름 가뭄으로 잎이 마르는 것을 자연스러운 변화라고 덮는다.**
+    #   (2026-09-19 실측: 단계표에 '수확' 이 마지막이 아닌 품종이 여럿이다)
+    #
+    # ⚠ 개수도 같이 센다. **단계가 하나뿐이면 이름에 시기 정보가 없다** — 상추가
+    #   '수확' 한 칸(GDD 0~573)이라 심은 날부터 '마지막 수확 단계' 가 된다.
+    #   그대로 두면 32% 자란 상추가 "익어 가는 중" 으로 읽힌다(vegetation_text 주석).
+    stage_count, last_order = stage_count_and_last_order(db, cultivation.variant_id)
+
     return PlotGrowth(
         cultivation_id=cultivation.id,
         crop_name_ko=crop.name,
@@ -164,8 +209,18 @@ def compute_plot_growth(db: Session, plot: Plot, station: StationRow) -> PlotGro
         accumulated_gdd=round(accumulated, 1),
         stage_name=stage.stage_name if stage else None,
         guide_text=stage.guide_text if stage else None,
-        water_need_mm=float(stage.water_need_mm) if stage and stage.water_need_mm is not None else None,
+        water_need_mm=float(stage.water_need_mm)
+        if stage and stage.water_need_mm is not None
+        else None,
         fertilize_needed=bool(stage.fertilize_needed) if stage else False,
+        irrigate_needed=bool(stage.irrigate_needed) if stage else False,
+        # ⚠ CSV 가 쉼표로 이은 한 칸이다('가뭄,과습'). 쪼개는 것은 **여기 한 곳**에서만 한다 —
+        #   시더는 통째로 넣고(master_seed_farm_db 주석), 읽는 쪽이 푼다.
+        stage_hazards=_split(stage.stage_hazards) if stage else (),
+        stage_tasks=_split(stage.stage_tasks) if stage else (),
         gdd_target=variant.gdd_target if variant else None,
+        sow_method=variant.sow_method if variant else None,
         stage_gdd_to=stage.gdd_to if stage else None,
+        is_last_stage=bool(stage and last_order is not None and stage.stage_order == last_order),
+        stage_count=int(stage_count or 0),
     )

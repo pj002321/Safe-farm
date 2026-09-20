@@ -10,7 +10,7 @@
 - 격자변환(nph-dfs_xy_lonlat) → JSON 아님, 고정폭 텍스트(실측 확인)
 """
 import math
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 
 import requests
 
@@ -254,3 +254,86 @@ def normalize_alerts(records):
             }
         )
     return out
+
+
+TYPHOON_URL = f"{TYP01_URL}/typ_now.php"
+
+# 응답이 EUC-KR 이다. requests 가 UTF-8 로 짐작해 LOC("괌 북동쪽 …")가 깨진다.
+# 다른 기상청 API 는 _get 이 JSON 으로 받아 문제가 없었는데, 이 엔드포인트만 평문이라
+# 여기서 인코딩을 못박는다. 실제로 UnicodeDecodeError 로 한 번 터졌다.
+TYPHOON_ENCODING = "euc-kr"
+
+# 출력 19칸의 순서. disp=1 이면 이 순서로 쉼표 구분돼 온다(help=0 헤더는 '#' 로 시작).
+_TYPHOON_COLS = (
+    "ft", "yy", "typ", "seq", "tmd", "typ_tm", "ft_tm", "lat", "lon",
+    "dir", "sp", "ps", "ws", "rad15", "rad25", "rad", "ed15", "er15", "loc",
+)
+
+
+def fetch_typhoon_track(api_key, tm=None):
+    """
+    # summary
+    지금 진행 중인 태풍의 과거 분석 경로 + 최신 예측 경로를 한 번에 받는다.
+
+    ⚠ tm 은 **UTC** 다. KST 를 넣으면 9시간 뒤를 묻는 꼴이라 빈손으로 온다 —
+      _kst_day_utc_range 와 같은 함정이다.
+    ⚠ mode=1 이 "과거 분석 + 가장 최근 예측" 이다. 0 은 예보가 빠져 지도에 점선이 안 생긴다.
+    ⚠ 태풍이 없으면 **빈 리스트가 정상**이다. 문서의 보유기간이 "현재 진행 중인 태풍에 한하여" 다.
+
+    # params
+    api_key: KMA_API_KEY<br>
+    tm: 기준시각(UTC, datetime). None 이면 지금<br>
+
+    # returns
+    dict 목록. ft=0 분석 · 1 예측이 시각 순으로 섞여 온다. 없으면 빈 리스트
+
+    # examples
+        fetch_typhoon_track(key)
+        -> [{'ft': 0, 'typ_no': '25', 'lat': 16.5, 'lon': 149.3, 'pressure_hpa': 998, ...}, ...]
+    """
+    when = tm or datetime.now(timezone.utc)
+    resp = requests.get(
+        TYPHOON_URL,
+        params={
+            "tm": when.strftime("%Y%m%d%H%M"),
+            "mode": 1,
+            "disp": 1,  # 0 은 포트란 고정폭이라 자릿수로 잘라야 한다. 쓰지 말 것
+            "help": 0,
+            "authKey": api_key,
+        },
+        timeout=20,
+    )
+    resp.raise_for_status()
+    resp.encoding = TYPHOON_ENCODING
+    return parse_typhoon_rows(resp.text)
+
+
+def parse_typhoon_rows(text):
+    """쉼표 평문 → dict 목록. '#' 로 시작하는 헤더와 칸 수가 모자란 줄은 버린다."""
+    rows = []
+    for line in text.splitlines():
+        if not line or line.startswith("#"):
+            continue
+        cells = [c.strip() for c in line.split(",")]
+        if len(cells) < len(_TYPHOON_COLS):
+            continue
+        row = dict(zip(_TYPHOON_COLS, cells))
+        rows.append(
+            {
+                "ft": int(row["ft"]),
+                "typ_no": row["typ"],
+                "ft_tm": row["ft_tm"],
+                "lat": float(row["lat"]),
+                "lon": float(row["lon"]),
+                "dir": row["dir"],
+                # -999 는 결측이다. clean 이 이미 그 규칙을 안다(missing_below=-900)
+                "speed_kmh": clean(row["sp"]),
+                "pressure_hpa": clean(row["ps"]),
+                "wind_ms": clean(row["ws"]),
+                "rad15_km": clean(row["rad15"]),
+                "rad25_km": clean(row["rad25"]),
+                "forecast_radius_km": clean(row["rad"]),
+                "location_ko": row["loc"],
+            }
+        )
+    return rows

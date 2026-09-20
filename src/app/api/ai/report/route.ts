@@ -31,7 +31,10 @@ export async function GET(request: Request): Promise<Response> {
     const { viewer } = await requireConsent();
     viewerId = viewer.id;
   } catch {
-    return NextResponse.json({ error: "로그인이 필요합니다." }, { status: 401 });
+    return NextResponse.json(
+      { error: "로그인이 필요합니다." },
+      { status: 401 },
+    );
   }
 
   const plotId = parsePlotId(new URL(request.url).searchParams.get("plotId"));
@@ -41,7 +44,11 @@ export async function GET(request: Request): Promise<Response> {
 
   const result = await aiService.plotReport(viewerId, plotId);
   if (!result.ok) {
-    console.error("[report] ai-service 호출 실패", result.reason, result.detail);
+    console.error(
+      "[report] ai-service 호출 실패",
+      result.reason,
+      result.detail,
+    );
     return NextResponse.json({ error: UNAVAILABLE_MESSAGE }, { status: 502 });
   }
 

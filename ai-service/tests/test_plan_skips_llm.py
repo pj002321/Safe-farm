@@ -56,3 +56,15 @@ def test_plot_question_still_asks_the_llm(monkeypatch):
 
     assert called, "밭이 있는 질문인데 LLM 을 안 불렀다"
     assert result["route"] == "tool"
+
+
+def test_topic_question_skips_llm_and_goes_straight_to_tool(no_llm):
+    """비·태풍 같은 갈래 낱말이 걸리면 "이 밭 전제" 여부를 LLM에게 묻지 않는다.
+
+    "태풍25호는 어디쯤 있어?" 는 PLAN_SYSTEM 의 "이 밭 전제" 기준으로는 rag 로
+    빠지는데, extra_context_lines 는 이미 답을 갖고 있다 — LLM 라우터가
+    topics_in 과 다르게 갈라 그 답을 버리는 사고가 실제로 있었다(2026-09-20).
+    """
+    result = nodes.plan({"question": "태풍25호는 어디쯤 있어?", "plot_id": "밭-1"})
+
+    assert result == {"route": "tool", "tool_calls": []}

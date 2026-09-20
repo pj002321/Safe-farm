@@ -61,7 +61,9 @@ def plot_report(plot_id: uuid.UUID, user_id: uuid.UUID, db: Session = Depends(ge
         if report_input is None:
             return {"available": False, "reason": "NO_GROWTH_DATA"}
 
-        payload = get_cached_or_generate_report(db, report_input)
+        # plot 을 같이 넘긴다 — 캐시가 빗나갔을 때만 위성을 부르기 위해서다.
+        # build_report_input 에 넣으면 탭을 열 때마다 왕복이 붙는다(report.py 주석).
+        payload = get_cached_or_generate_report(db, report_input, plot)
         if payload is None:
             return {"available": False, "reason": "GENERATION_FAILED"}
 

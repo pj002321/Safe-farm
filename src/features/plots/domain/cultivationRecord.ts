@@ -5,18 +5,19 @@
  * [Description]
  * - 끝난 재배 사이클 한 건이 한 행이다. "다음 시즌에 뭘 언제 심었더라"를 되짚는
  *   자료라 **끝난 것만** 담는다. 진행 중인 재배는 대시보드가 맡는다.
- * - ⚠️ **저장소가 아직 없다.** 이 기능은 화면만 만들기로 한 범위라 값은
- *   `sampleRecords.ts` 의 고정 데이터에서 온다. 여기에는 **타입과 계산만** 둔다 —
- *   조회가 붙으면 고정 데이터만 갈아 끼우면 되도록.
- * - `features/plots` 에 두는 이유: 재배 기록은 밭에 딸린 것이고, 별도 도메인으로
- *   빼면 밭 이름을 쓰려고 features 끼리 import 하게 된다(AGENTS.md 금지).
+ * - 조회는 `plotStore.ts` 의 `listCultivationRecords()` 가 한다. `cultivations`
+ *   는 features/cultivations 소관이지만 여기서 직접 읽는다 — 이 도메인 타입
+ *   자체가 밭 이름을 들고 있어, 따로 빼면 features 끼리 import 하게 된다
+ *   (AGENTS.md 금지, `softDeletePlot` 과 같은 방침).
+ * - `yieldKg`·`noteKo` 는 지금 DB 에 자리가 없다(수확량·메모 컬럼 없음) — 항상
+ *   `null` 이다. 그 컬럼이 생기면 `toCultivationRecord()` 만 고치면 된다.
  * - 날짜는 `Date` 가 아니라 ISO 문자열이다. 서버 → 클라이언트 경계에서 Date 는
  *   어차피 문자열이 되므로 타입이 거짓말하지 않게 처음부터 문자열로 맞춘다
  *   (`profile.ts` 와 같은 방침).
  *
  * [Usage]
  * ```ts
- * const years = groupByYear(SAMPLE_RECORDS);
+ * const years = groupByYear(records);
  * years[0].year;          // 2026 — 최신이 먼저
  * years[0].records;       // 그 해 기록, 파종일 늦은 순
  * ```
@@ -44,6 +45,46 @@ export interface RecordYear {
   records: readonly CultivationRecord[];
   /** 그 해 수확량 합계(kg). 적어 둔 것이 하나도 없으면 null. */
   totalYieldKg: number | null;
+}
+
+/** PostgREST 중첩 select 는 다대일도 배열로 추론될 때가 있다(plotSummary.ts 참고). */
+type Embedded<T> = T | T[] | null;
+
+function one<T>(value: Embedded<T> | undefined): T | null {
+  if (Array.isArray(value)) return value[0] ?? null;
+  return value ?? null;
+}
+
+/** `listCultivationRecords()` 가 조인해 온 재배 한 행. */
+export interface CultivationRecordRow {
+  id: string;
+  sowing_date: string | null;
+  harvested_at: string | null;
+  plots: Embedded<{ name: string | null }>;
+  crop_variants: Embedded<{ crops: Embedded<{ name: string | null }> }>;
+}
+
+/**
+ * DB 행 → `CultivationRecord`. 파종일을 모르는 재배(모종으로 시작해
+ * `start_stage_order` 만 있는 경우)는 재배 기간을 낼 수 없어 `null` 로 걸러진다
+ * — 호출부가 `filter` 로 뺀다.
+ */
+export function toCultivationRecord(
+  row: CultivationRecordRow,
+): CultivationRecord | null {
+  if (!row.sowing_date || !row.harvested_at) return null;
+
+  const crop = one(one(row.crop_variants)?.crops);
+
+  return {
+    id: row.id,
+    plotKo: one(row.plots)?.name ?? "이름 없는 밭",
+    cropKo: crop?.name ?? "이름 없는 작물",
+    sowingDate: row.sowing_date,
+    harvestDate: row.harvested_at,
+    yieldKg: null,
+    noteKo: null,
+  };
 }
 
 /**

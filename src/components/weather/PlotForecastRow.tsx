@@ -7,6 +7,7 @@ import { ForecastAlerts } from "./ForecastAlerts";
 import { GrowthSeriesBars } from "./GrowthSeriesBars";
 import { HourlyStrip } from "./HourlyStrip";
 import { StaleNotice } from "./StaleNotice";
+import { SunTimes } from "./SunTimes";
 import { WeatherNow } from "./WeatherNow";
 import { WeekBand } from "./WeekBand";
 
@@ -23,9 +24,9 @@ import { WeekBand } from "./WeekBand";
  * - 상세는 `<details name="plot">` 이 한 번에 하나만 펼친다. **JS 가 0줄이다** —
  *   브라우저 기능이고, 지원하지 않는 브라우저는 `name` 을 무시해 여러 개가
  *   동시에 열릴 뿐 깨지지 않는다.
- * - **접힌 줄에 보이는 것**: 밭 얼굴색 · 이름 · 작물/단계 · 지금 기온 · 가장 급한
- *   판단 · (보관된 값이면) 그 표시. 전부 `<summary>` 안에 있다 — 밖에 두면 닫힌
- *   `<details>` 가 안 그린다.
+ * - **접힌 줄에 보이는 것**: 밭 얼굴색 · 이름 · 작물/단계 · 오늘 해 뜸·해 짐 ·
+ *   지금 기온 · 가장 급한 판단 · (보관된 값이면) 그 표시. 전부 `<summary>` 안에
+ *   있다 — 밖에 두면 닫힌 `<details>` 가 안 그린다.
  *   얼굴색은 홈의 텃밭 띠·텃밭 관리와 **같은 밭이면 같은 색**이다(`plotIdentity`).
  * - ⚠️ 판단 줄은 `alerts[0]` 을 쓴다. `buildForecastAlerts` 가 심각도 내림차순을
  *   보장한다는 전제이고, 그 전제는 테스트로 박아 두었다.
@@ -123,6 +124,11 @@ export function PlotForecastRow({
             </span>
           )}
         </span>
+
+        {/* 해 뜸·해 짐. 기온 바로 왼쪽 — 아침에 밭에 나갈 때 기온과 같이 읽는
+            값이라, 줄을 펴지 않아도 보이는 자리에 둔다.
+            days[0] 이 오늘이다(서버가 오늘부터 준다). */}
+        {forecast.days[0] && <SunTimes today={forecast.days[0]} />}
 
         <span className="shrink-0 text-right">
           <span

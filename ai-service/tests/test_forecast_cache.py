@@ -1,145 +1,109 @@
-"""Open-Meteo 예보 캐시. 같은 자리를 잠깐 동안 다시 묻지 않는다.
+"""예보 TTL 캐시. 네트워크 없이 `fetch_forecast` 를 가로채 본다.
 
-`/weather` 화면은 밭마다 `/v1/weather/plot` 을 부르고, 밭 총평은 사용자의 밭을
-차례로 돌며 예보를 받는다. 밭 셋이 같은 동네면 셋 다 같은 예보를 받아 오는데
-예보는 시간 단위로만 바뀐다 — 그 셋을 하나로 줄인다.
-
-캐시가 낼 수 있는 사고 둘을 여기서 막는다.
-  · 받은 dict 를 부르는 쪽이 고치면 다음 요청까지 같이 틀어진다(사본을 준다).
-  · 실패한 응답을 담으면 TTL 동안 장애가 고정된다(성공만 담는다).
+★ 이 파일의 절반은 **자정**이다. 예보 응답은 받을 때 '오늘' 을 정해 tomorrow 와
+  과거 14일 창을 잘라 둔다. 자정을 넘겨 그대로 쓰면 tomorrow 가 사실은 오늘이 되어
+  서리·폭염 카드가 하루 어긋난 예보로 나간다 — 그런데 **할 일 배치가 00시에 돈다.**
 """
 
-from types import SimpleNamespace
+from datetime import timedelta
+from unittest.mock import patch
 
 import pytest
 
-from pipeline import open_meteo_client as client
-
-
-class _FakeResponse:
-    def __init__(self, payload, fail=False):
-        self._payload = payload
-        self._fail = fail
-
-    def raise_for_status(self):
-        if self._fail:
-            raise RuntimeError("502")
-
-    def json(self):
-        return self._payload
+from app.service import forecast_cache as fc
 
 
 @pytest.fixture(autouse=True)
-def _clean_cache():
-    client.clear_forecast_cache()
+def _빈_캐시():
+    """모듈 수준 사전이라 **테스트끼리 샌다.** 앞뒤로 비운다 —
+    안 비우면 여기서 담은 가짜 응답이 다른 파일의 테스트로 넘어가고,
+    그때는 실행 차례에 따라 붙었다 떨어졌다 한다."""
     yield
-    client.clear_forecast_cache()
+    fc.clear()
 
 
-def _counting_get(payload, fail=False):
-    calls = SimpleNamespace(n=0)
+def _센다(응답=None):
+    """부른 횟수를 적어 두는 대역."""
+    호출 = []
 
-    def get(*_args, **_kwargs):
-        calls.n += 1
-        return _FakeResponse(payload, fail=fail)
+    def 대역(lat, lon, past_days=0):
+        호출.append((lat, lon, past_days))
+        return 응답 if 응답 is not None else {"daily": {"time": []}}
 
-    return get, calls
-
-
-def test_same_coordinate_is_fetched_once(monkeypatch):
-    get, calls = _counting_get({"daily": {"time": ["2026-09-19"]}})
-    monkeypatch.setattr(client.requests, "get", get)
-
-    client.fetch_forecast(37.5665, 126.9780)
-    client.fetch_forecast(37.5665, 126.9780)
-
-    assert calls.n == 1
+    return 호출, 대역
 
 
-def test_neighbouring_coordinates_share_one_call(monkeypatch):
-    """반올림 자릿수가 캐시 적중률을 정한다. 좌표가 소수점 끝자리만 달라도 따로
-    세면 캐시가 사실상 안 먹는다.
-
-    칸 경계에 걸친 두 점은 여전히 따로 센다 — 반올림 방식의 대가이고, 그래도
-    같은 밭을 반복해 부르는 화면에서는 늘 같은 칸이라 목적을 달성한다.
-    """
-    get, calls = _counting_get({"daily": {}})
-    monkeypatch.setattr(client.requests, "get", get)
-
-    client.fetch_forecast(37.56601, 126.97801)
-    client.fetch_forecast(37.56649, 126.97849)
-
-    assert calls.n == 1
+def test_같은_좌표를_다시_물으면_안_부른다():
+    호출, 대역 = _센다()
+    with patch.object(fc, "fetch_forecast", 대역):
+        a = fc.forecast(36.41, 128.16, past_days=14)
+        b = fc.forecast(36.41, 128.16, past_days=14)
+    assert len(호출) == 1
+    assert a is b
 
 
-def test_different_places_do_not_share(monkeypatch):
-    get, calls = _counting_get({"daily": {}})
-    monkeypatch.setattr(client.requests, "get", get)
-
-    client.fetch_forecast(37.5665, 126.9780)
-    client.fetch_forecast(35.1796, 129.0756)
-
-    assert calls.n == 2
+def test_1km_안쪽_좌표는_한_항목으로_묶인다():
+    호출, 대역 = _센다()
+    with patch.object(fc, "fetch_forecast", 대역):
+        fc.forecast(36.4117806052, 128.1579312345)
+        fc.forecast(36.4100000000, 128.1600000000)
+    assert len(호출) == 1
 
 
-def test_expired_entry_is_fetched_again(monkeypatch):
-    """시계를 TTL 너머로 옮긴다. 진짜로 기다리면 테스트가 10분 걸린다."""
-    get, calls = _counting_get({"daily": {}})
-    monkeypatch.setattr(client.requests, "get", get)
-
-    now = [1000.0]
-    monkeypatch.setattr(client.time, "monotonic", lambda: now[0])
-
-    client.fetch_forecast(37.5665, 126.9780)
-    now[0] += client.FORECAST_CACHE_TTL + 1
-    client.fetch_forecast(37.5665, 126.9780)
-
-    assert calls.n == 2
+def test_past_days_가_다르면_다른_항목이다():
+    # 섞이면 배열 길이가 달라 **날짜가 밀린다**
+    호출, 대역 = _센다()
+    with patch.object(fc, "fetch_forecast", 대역):
+        fc.forecast(36.41, 128.16, past_days=0)
+        fc.forecast(36.41, 128.16, past_days=14)
+    assert len(호출) == 2
 
 
-def test_cache_can_be_turned_off(monkeypatch):
-    """예보가 이상할 때 캐시 탓인지 가르는 스위치. 0 이면 매번 받아 온다."""
-    get, calls = _counting_get({"daily": {}})
-    monkeypatch.setattr(client.requests, "get", get)
-    monkeypatch.setattr(client, "FORECAST_CACHE_TTL", 0)
-
-    client.fetch_forecast(37.5665, 126.9780)
-    client.fetch_forecast(37.5665, 126.9780)
-
-    assert calls.n == 2
+def test_TTL_이_지나면_다시_받는다():
+    호출, 대역 = _센다()
+    with patch.object(fc, "fetch_forecast", 대역):
+        fc.forecast(36.41, 128.16)
+        _늙히기(지난시간=fc.CACHE_TTL + timedelta(seconds=1))
+        fc.forecast(36.41, 128.16)
+    assert len(호출) == 2
 
 
-def test_caller_cannot_corrupt_the_cache(monkeypatch):
-    """돌려준 dict 를 고쳐도 다음 사람이 받는 값은 그대로여야 한다."""
-    get, _ = _counting_get({"daily": {"temperature_2m_max": [21.0]}})
-    monkeypatch.setattr(client.requests, "get", get)
-
-    first = client.fetch_forecast(37.5665, 126.9780)
-    first["daily"]["temperature_2m_max"][0] = 999.0
-    second = client.fetch_forecast(37.5665, 126.9780)
-
-    assert second["daily"]["temperature_2m_max"] == [21.0]
+def test_자정을_넘기면_TTL_이_남아도_다시_받는다():
+    # ★ 00시 배치가 23:30 에 담긴 것을 집으면 tomorrow 가 오늘이 된다
+    호출, 대역 = _센다()
+    with patch.object(fc, "fetch_forecast", 대역):
+        fc.forecast(36.41, 128.16)
+        _늙히기(지난시간=timedelta(minutes=30), 지난날=1)
+        fc.forecast(36.41, 128.16)
+    assert len(호출) == 2, "자정을 넘긴 예보를 그대로 썼다"
 
 
-def test_failure_is_not_cached(monkeypatch):
-    """장애 응답을 담으면 TTL 이 끝날 때까지 복구돼도 계속 실패로 보인다."""
-    get, calls = _counting_get({}, fail=True)
-    monkeypatch.setattr(client.requests, "get", get)
-
-    for _ in range(2):
-        with pytest.raises(RuntimeError):
-            client.fetch_forecast(37.5665, 126.9780)
-
-    assert calls.n == 2
+def test_실패는_담지_않는다():
+    # 잠깐 죽은 것을 한 시간 붙들면 복구된 뒤에도 카드가 계속 얇게 나간다
+    with patch.object(fc, "fetch_forecast", side_effect=OSError("죽음")):
+        try:
+            fc.forecast(36.41, 128.16)
+        except OSError:
+            pass
+    assert fc._cache == {}
 
 
-def test_cache_does_not_grow_without_bound(monkeypatch):
-    """배치가 전국을 돌면 좌표가 수천 개다. 오래된 것부터 버린다."""
-    get, _ = _counting_get({"daily": {}})
-    monkeypatch.setattr(client.requests, "get", get)
-    monkeypatch.setattr(client, "CACHE_MAX_ENTRIES", 5)
+def test_지난_항목은_쓸_때_치워진다():
+    # 좌표가 늘어도 사전이 안 불어나야 한다
+    _, 대역 = _센다()
+    with patch.object(fc, "fetch_forecast", 대역):
+        fc.forecast(36.41, 128.16)
+        _늙히기(지난시간=fc.CACHE_TTL + timedelta(seconds=1))
+        fc.forecast(35.10, 129.00)   # 다른 좌표를 담으면서 쓸어낸다
+    assert len(fc._cache) == 1
 
-    for i in range(20):
-        client.fetch_forecast(35.0 + i / 100, 127.0)
 
-    assert len(client._cache) == 5
+def _늙히기(지난시간=timedelta(0), 지난날=0):
+    """사전에 든 항목들을 과거로 밀어 둔다."""
+    with fc._lock:
+        for 열쇠, 항목 in list(fc._cache.items()):
+            fc._cache[열쇠] = fc._Entry(
+                payload=항목.payload,
+                made_at=항목.made_at - 지난시간,
+                made_on=항목.made_on - timedelta(days=지난날),
+            )

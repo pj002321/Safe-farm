@@ -15,6 +15,7 @@ from langgraph.config import get_stream_writer
 from langgraph.graph import END
 
 from app.core.config import OPENAI_MODEL
+from app.domain.ask_topics import topics_in
 from app.domain.suitability import CropProfile, WeatherWindow, rank_crops
 from app.graph.state import GraphState, RecommendationState
 from app.knowledge.embedder import get_client
@@ -220,6 +221,13 @@ def plan(state: GraphState) -> GraphState:
     if state.get("plot_id") is None:
         return {"route": "rag", "tool_calls": []}
 
+    # topics_in 이 갈래를 잡는 질문(비·태풍 …)은 LLM 라우터에 묻지 않고 곧장
+    # 조회한다. "태풍25호는 어디쯤 있어?" 처럼 "이 밭 전제"로 안 읽히는 질문도
+    # extra_context_lines 가 답을 갖고 있는데, PLAN_SYSTEM 의 "이 밭 전제" 기준으로는
+    # rag 로 빠져 그 답이 통째로 버려졌다(2026-09-20 실측).
+    if topics_in(state["question"]):
+        return {"route": "tool", "tool_calls": []}
+
     messages = [{"role": "system", "content": PLAN_SYSTEM}]
     if state.get("history_context"):
         messages.append({"role": "user", "content": f"지난 대화:\n{state['history_context']}"})
@@ -251,7 +259,11 @@ def run_tools(state: GraphState) -> GraphState:
         run_tools({"db": db, "plot_id": uuid(...), "user_id": uuid(...)})
         -> {'tool_result': '이 밭은 서울에 있고...'}
     """
-    result = build_plot_context(state["db"], state["plot_id"], state["user_id"])
+    # question 을 같이 넘긴다 — 물어본 갈래(위성·병해충·재해)만 컨텍스트에 붙는다.
+    # 안 넘기면 예전 그대로다(ask_context.build_plot_context 주석).
+    result = build_plot_context(
+        state["db"], state["plot_id"], state["user_id"], state["question"]
+    )
     return {"tool_result": result}
 
 

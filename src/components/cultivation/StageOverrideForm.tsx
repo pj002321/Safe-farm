@@ -1,4 +1,4 @@
-import { Button } from "@/components/shared/Button";
+import { SubmitButton } from "@/components/shared/SubmitButton";
 import type { StageRow } from "@/features/cultivations/domain/growthGauge";
 
 /**
@@ -71,9 +71,9 @@ export function StageOverrideForm({
           />
         </label>
 
-        <Button size="sm" type="submit" variant="secondary">
+        <SubmitButton pendingKo="고치는 중" size="sm" variant="secondary">
           단계 고치기
-        </Button>
+        </SubmitButton>
       </form>
 
       <p className="mt-2 text-fg-muted text-xs">

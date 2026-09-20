@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { kstDateString } from "./kstDate";
+import { kstDateString, kstStampString } from "./kstDate";
 
 describe("kstDateString", () => {
   it("UTC 자정 직후에도 한국 날짜를 낸다", () => {
@@ -14,5 +14,30 @@ describe("kstDateString", () => {
 
   it("두 자리로 채운다", () => {
     expect(kstDateString(new Date("2026-01-05T03:00:00Z"))).toBe("2026-01-05");
+  });
+});
+
+describe("kstStampString", () => {
+  it("UTC 로 온 값을 한국 날짜·시각으로 바꾼다", () => {
+    expect(kstStampString("2026-09-19T11:41:00Z")).toBe("2026-09-19 20:41");
+  });
+
+  it("자정은 00 시다 — 24 시로 새면 서버마다 다른 글자가 저장된다", () => {
+    // `hour12: false` 는 로케일에 따라 h24 로 풀려 "24:00" 이 나온다.
+    expect(kstStampString("2026-09-19T15:00:00Z")).toBe("2026-09-20 00:00");
+  });
+
+  it("한국 시간 자정 직후면 날짜가 하루 넘어간다", () => {
+    // UTC 그대로 잘라 쓰면 09-19 로 남아 "언제 적었나" 가 하루 어긋난다.
+    expect(kstStampString("2026-09-19T15:10:00Z")).toBe("2026-09-20 00:10");
+  });
+
+  it("24시간 꼴로 적는다 — 오후가 13시 이상으로 나온다", () => {
+    expect(kstStampString("2026-09-19T04:00:00Z")).toBe("2026-09-19 13:00");
+  });
+
+  it("값이 없거나 읽을 수 없으면 null", () => {
+    expect(kstStampString(null)).toBeNull();
+    expect(kstStampString("어제")).toBeNull();
   });
 });

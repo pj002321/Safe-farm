@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from sqlalchemy.orm import Session
 
 from app.domain.gdd import daily_gdd
+from app.service.ask_extras import extra_context_lines
 from app.models.farm import Crop, CropStage, Cultivation
 from app.repo.crop import stage_at_gdd, stage_by_order
 from app.repo.cultivation import growing_with_crop
@@ -173,7 +174,7 @@ def plot_crop_names(db: Session, plot_id: uuid.UUID, user_id: uuid.UUID) -> set[
 
 
 def build_plot_context(
-    db: Session, plot_id: uuid.UUID, user_id: uuid.UUID
+    db: Session, plot_id: uuid.UUID, user_id: uuid.UUID, question: str | None = None
 ) -> str | None:
     """밭 하나를 조회해 LLM 프롬프트에 붙일 한글 문장을 만든다.
 
@@ -184,9 +185,14 @@ def build_plot_context(
     if plot is None:
         return None
 
+    # 질문이 물어본 갈래(비·태풍 …)는 재배 중인 작물과 무관하다 — 아래 growing
+    # 조회 뒤에서 부르면, 작물을 등록 안 한 밭은 이 갈래 질문에도 답을 못 받는다
+    # (ask_extras.extra_context_lines 를 gate 만 옮긴 것과 같은 이유의 버그였다).
+    추가 = extra_context_lines(db, plot, question=question)
+
     growing = _growing(db, plot.id)
     if not growing:
-        return None
+        return " ".join(추가) if 추가 else None
 
     # 심은 것은 전부 말한다. 생육단계는 대표 한 건으로만 낸다 — 작물마다 파종일도
     # 목표 GDD 도 달라서 한 문장으로 합칠 수 없다.
@@ -195,7 +201,7 @@ def build_plot_context(
 
     station = nearest_station(db, plot)
     if station is None:
-        return " ".join(lines)
+        return " ".join(lines + 추가)
 
     cultivation, crop = _lead(growing)
     lines += _growth_stage_lines(db, cultivation, crop, station)
@@ -204,4 +210,5 @@ def build_plot_context(
     if weather_line:
         lines.append(weather_line)
 
+    lines += 추가
     return " ".join(lines)

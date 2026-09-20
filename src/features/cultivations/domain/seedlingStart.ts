@@ -15,7 +15,7 @@
  * ---------------------------------------------
  */
 
-const TRANSPLANT = /아주심기|정식|이식|모내기|옮겨/;
+import { hasTransplantWord } from "@/shared/growth/transplant";
 
 /** 한살이의 몇 %까지를 '육묘' 로 인정하나. 실측에서 35.8%(셀러리)와 57.8%(아스파라거스) 사이가 비어 있다 */
 const MAX_SKIP_RATIO = 0.4;
@@ -38,7 +38,7 @@ export function seedlingStartStage(
   stages: readonly SeedlingStageRow[],
 ): number | null {
   const sorted = [...stages].sort((a, b) => a.stage_order - b.stage_order);
-  const hit = sorted.find((s) => TRANSPLANT.test(s.stage_name));
+  const hit = sorted.find((s) => hasTransplantWord(s.stage_name));
   // 마지막 단계의 gdd_to 가 곧 그 품종의 gdd_target 이다(crop-data verify 가 맞춰 둔다).
   // crop_variants 를 또 조회하지 않는 까닭 — 같은 질의로 이미 손에 있다
   const total = sorted.at(-1)?.gdd_to ?? 0;
