@@ -10,7 +10,7 @@ from typing import TypedDict
 
 from sqlalchemy.orm import Session
 
-from app.domain.suitability import CropProfile, SuitabilityResult, WeatherWindow
+from app.domain.crop_fit import CropCandidate, DailyWeather, FitResult
 
 
 class GraphState(TypedDict):
@@ -30,9 +30,16 @@ class GraphState(TypedDict):
 
 
 class RecommendationState(TypedDict, total=False):
-    field_id: str  # 대상 농지 id. 입력.
-    weather: WeatherWindow  # 수집된 기상 요약. collect_weather 가 채운다.
-    candidates: list[CropProfile]  # 평가 대상 작물 후보. load_candidates 가 채운다.
-    ranked: list[SuitabilityResult]  # 점수 계산 결과. rank 가 채운다.
+    """텃밭 등록 중(밭 좌표만 있고 plot_id 는 아직 없다) 작물 추천용.
+
+    `suitability.py` 의 WeatherWindow/CropProfile 대신 `crop_fit.py` 의 실제
+    DB 필드 기반 타입을 쓴다 — 이상 온도·강수 범위는 DB에 없어 흉내만 내게 된다.
+    """
+
+    lat: float  # 입력. 밭 위치
+    lon: float
+    weather: tuple[DailyWeather, ...]  # 수집된 최근 일별 기상. collect_weather 가 채운다.
+    candidates: list[CropCandidate]  # 평가 대상 작물 후보. load_candidates 가 채운다.
+    ranked: list[FitResult]  # 점수 계산 결과. rank 가 채운다.
     explanation: str  # 사용자에게 보여줄 자연어 설명. explain 이 채운다.
     error: str  # 복구 불가능한 실패 사유. 있으면 그래프를 조기 종료한다.

@@ -14,7 +14,7 @@ import {
 } from "@/features/monitoring/domain/plotLocation";
 import { parsePlotRegistration } from "@/features/plots/domain/registerPlot";
 import { insertPlot } from "@/features/plots/plotStore";
-import { aiService } from "@/shared/aiService/client";
+import { aiService, type RecommendResult } from "@/shared/aiService/client";
 import { requireUser } from "@/shared/auth/session";
 import { kstDateString } from "@/shared/utils/kstDate";
 /**
@@ -42,6 +42,25 @@ import { kstDateString } from "@/shared/utils/kstDate";
  * ```
  * ---------------------------------------------
  */
+/**
+ * 3단계(작물 선택)에서 좌표만으로 "지금 심기 좋은 작물" 을 미리 본다(V1-51).
+ * 폼 제출이 아니라 화면이 버튼으로 직접 부르는 액션이라 값을 그대로 돌려준다.
+ *
+ * 실패·후보 없음·좌표 미선택은 전부 null 로 뭉갠다 — 그때 화면은 패널을
+ * 숨긴다(ai-service `api/recommend.py` 와 같은 원칙).
+ */
+export async function recommendCrops(
+  lat: number,
+  lon: number,
+): Promise<RecommendResult | null> {
+  await requireUser();
+
+  if (validatePlotLocation({ lat, lon })) return null;
+
+  const result = await aiService.recommend(lat, lon);
+  return result.ok ? result.data : null;
+}
+
 export async function registerPlot(formData: FormData): Promise<void> {
   const viewer = await requireUser();
 

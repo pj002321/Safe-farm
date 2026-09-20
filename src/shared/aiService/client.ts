@@ -338,6 +338,26 @@ export interface FarmSummary {
   plotCount?: number;
 }
 
+/**
+ * 작물 하나의 추천 판정. 점수·등급·근거는 전부 ai-service `crop_fit.score_fit` 이
+ * 실제 마스터 데이터(파종창·기준온도·재해 기준)로 낸 값이다.
+ */
+export interface CropRecommendation {
+  cropId: number;
+  nameKo: string;
+  score: number;
+  grade: "good" | "caution" | "unsuitable";
+  inSowingWindow: boolean;
+  risks: string[];
+  note: string;
+}
+
+/** `/v1/recommend` 응답. 후보가 없거나 기상 조회가 실패하면 `ranked` 가 빈 배열이다. */
+export interface RecommendResult {
+  ranked: CropRecommendation[];
+  explanation: string | null;
+}
+
 export type AiResult<T> =
   | { ok: true; data: T }
   | { ok: false; reason: AiFailure; detail?: string };
@@ -555,6 +575,9 @@ const REPORT_TIMEOUT_MS = 30_000;
 /** 사진 진단 한 건의 한계. vision 호출은 텍스트만 보낼 때보다 오래 걸린다. */
 const DIAGNOSE_TIMEOUT_MS = 30_000;
 
+/** 작물 추천 한 건의 한계. 안에서 Open-Meteo 조회(10초) + 비스트리밍 LLM 호출이 순차로 돈다. */
+const RECOMMEND_TIMEOUT_MS = 20_000;
+
 export const aiService = {
   /** 서비스가 살아 있는지, 무엇을 할 수 있는지. */
   status: () => call<AiServiceStatus>("/v1/status"),
@@ -677,6 +700,14 @@ export const aiService = {
       ? { ok: true, data: normalizePlotForecast(result.data) }
       : result;
   },
+  /**
+   * 이 좌표에서 지금 심기 좋은 작물 순위(V1-51). `plot_id` 가 아직 없는 등록
+   * 마법사 3단계(작물 선택)에서 좌표만으로 부른다.
+   */
+  recommend: (lat: number, lon: number) =>
+    call<RecommendResult>(`/v1/recommend?lat=${lat}&lon=${lon}`, {
+      timeoutMs: RECOMMEND_TIMEOUT_MS,
+    }),
   /**
    * 그 좌표 그 날짜 하루치 날씨. **영농일지가 저장할 때 한 번 부른다.**
    *

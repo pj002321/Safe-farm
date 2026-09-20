@@ -9,14 +9,14 @@
 import json
 from collections.abc import Awaitable, Callable
 from dataclasses import asdict
+from datetime import date
 
-from langchain_core.language_models import BaseChatModel
 from langgraph.config import get_stream_writer
 from langgraph.graph import END
 
 from app.core.config import OPENAI_MODEL
 from app.domain.ask_topics import topics_in
-from app.domain.suitability import CropProfile, WeatherWindow, rank_crops
+from app.domain.crop_fit import CropCandidate, DailyWeather, rank_fits
 from app.graph.state import GraphState, RecommendationState
 from app.knowledge.embedder import get_client
 from app.knowledge.generator import stream_answer
@@ -25,17 +25,30 @@ from app.knowledge.vector_store import neighbors
 from app.service.ask_context import build_plot_context, plot_crop_names
 from app.tools.tools import TOOL_SPECS
 
-WeatherFetcher = Callable[[str], Awaitable[WeatherWindow]]
-"""농지 id로 기상 요약을 가져오는 함수. 구현은 호스트가 주입한다."""
+WeatherFetcher = Callable[[float, float], Awaitable[tuple[DailyWeather, ...]]]
+"""위경도로 최근 일별 기상을 가져오는 함수. 구현은 호스트가 주입한다."""
 
-CandidateLoader = Callable[[], Awaitable[list[CropProfile]]]
+CandidateLoader = Callable[[], Awaitable[list[CropCandidate]]]
 """평가할 작물 후보를 가져오는 함수. 구현은 호스트가 주입한다."""
+
+ExplainLLM = Callable[[list[dict]], Awaitable[str]]
+"""메시지 목록을 받아 설명 텍스트를 돌려주는 함수. `plan` 처럼 raw OpenAI 클라이언트를
+그대로 부르지 않고 함수로 감싼 이유는 하나다 — 여기만 API 비용 없이 가짜로 갈아
+끼워 그래프 흐름을 본다(examples/fakes.py). langchain 의 BaseChatModel 은 이
+프로젝트 다른 곳에서 안 쓰는 별도 의존이라 여기서도 걷어냈다."""
 
 AsyncNode = Callable[[RecommendationState], Awaitable[RecommendationState]]
 
 EXPLAIN_SYSTEM_PROMPT = (
-    "너는 농업 컨설턴트다. 주어진 적합도 점수와 위험 요인을 근거로, "
-    "농민이 바로 행동할 수 있게 3문장 이내로 설명하라. 점수를 지어내지 마라."
+    "너는 농업 컨설턴트다. 주어진 적합도 점수·파종 창 여부·위험 요인을 근거로, "
+    "농민이 바로 행동할 수 있게 3문장 이내로 설명하라. 가능하면 지금 심었을 때 "
+    "생육이 어떻게 진행될지 한 문장으로 예측해도 좋다. 다만 주어진 값 밖의 숫자는 "
+    "새로 지어내지 마라.\n\n"
+    "weather 각 항목에는 그날의 실측(tmaxC/tminC)과 같은 날짜의 평년값"
+    "(tmaxNormalC/tminNormalC)이 같이 있다. 온도를 근거로 들 때는 실측 하나만 "
+    "말하지 말고 평년값과 비교해 '평년보다 몇 도 높다/낮다' 식으로 말하라 — "
+    "그날만의 일시적인 수치가 아니라 이 지역의 역대 평균 대비로 판단해야 한다. "
+    "평년값이 없는(null) 날뿐이면 실측만으로 설명하라."
 )
 PLAN_SYSTEM = (
     "너는 텃밭 관리 앱의 질의응답 라우터다. 질문을 보고 이 밭의 현재 상태를 "
@@ -65,7 +78,7 @@ def make_collect_weather_node(fetch_weather: WeatherFetcher) -> AsyncNode:
 
     async def collect_weather(state: RecommendationState) -> RecommendationState:
         try:
-            return {"weather": await fetch_weather(state["field_id"])}
+            return {"weather": await fetch_weather(state["lat"], state["lon"])}
         except Exception as cause:
             # 네트워크 경계라 여기서 잡는다. 삼키지 않고 실패 상태로 바꿔 정상 종료시킨다.
             return {"error": f"기상 데이터를 가져오지 못했습니다: {cause}"}
@@ -97,7 +110,7 @@ def make_load_candidates_node(load_candidates: CandidateLoader) -> AsyncNode:
 def rank_candidates(state: RecommendationState) -> RecommendationState:
     """
     # summary
-    점수 계산 노드. 로직은 suitability.py 에 있고 테스트도 거기서 덮는다 —
+    점수 계산 노드. 로직은 crop_fit.py 에 있고 테스트도 거기서 덮는다 —
     여기에 복제하지 않는다.
 
     # params
@@ -108,16 +121,18 @@ def rank_candidates(state: RecommendationState) -> RecommendationState:
     candidates 가 비면 ranked 도 빈 리스트
 
     # examples
-        rank_candidates({"weather": w, "candidates": [crop]})
-        -> {'ranked': [SuitabilityResult(...)]}
+        rank_candidates({"weather": (d1, d2), "candidates": [crop]})
+        -> {'ranked': [FitResult(...)]}
     """
     weather = state.get("weather")
-    if weather is None:
+    if not weather:
         return {"error": "기상 데이터가 없어 점수를 낼 수 없습니다."}
-    return {"ranked": rank_crops(state.get("candidates", []), weather)}
+    today = date.today()
+    ranked = rank_fits(state.get("candidates", []), today.strftime("%m-%d"), today, weather)
+    return {"ranked": ranked}
 
 
-def make_explain_node(llm: BaseChatModel) -> AsyncNode:
+def make_explain_node(llm: ExplainLLM) -> AsyncNode:
     """
     # summary
     설명 생성 노드를 만든다. 앞 노드들이 쌓아 둔 state 를 JSON 으로 정리해 프롬프트로
@@ -136,17 +151,14 @@ def make_explain_node(llm: BaseChatModel) -> AsyncNode:
 
     async def explain(state: RecommendationState) -> RecommendationState:
         payload = {
-            "weather": asdict(state["weather"]),
+            "weather": [asdict(d) for d in state["weather"]],
             "top": [asdict(r) for r in state["ranked"][:3]],
         }
-        response = await llm.ainvoke(
-            [
-                ("system", EXPLAIN_SYSTEM_PROMPT),
-                ("user", json.dumps(payload, ensure_ascii=False)),
-            ]
-        )
-        # content 는 블록 리스트일 수 있다. .text 는 텍스트 블록만 이어 붙인다.
-        return {"explanation": response.text}
+        messages = [
+            {"role": "system", "content": EXPLAIN_SYSTEM_PROMPT},
+            {"role": "user", "content": json.dumps(payload, ensure_ascii=False)},
+        ]
+        return {"explanation": await llm(messages)}
 
     return explain
 
