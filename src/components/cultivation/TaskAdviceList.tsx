@@ -13,6 +13,10 @@ import type { TaskAdvice } from "@/shared/growth/taskAdvice";
  *   작물이 죽고, 우리는 그 책임을 질 위치가 아니다.
  * - "했음" 버튼은 기록만 남긴다(`TASK_DONE`). 추천은 매번 다시 계산되는 값이라
  *   체크 상태를 저장할 대상 자체가 없다.
+ * - 누른 카드는 **그날 목록에서 빠진다**(`domain/doneTasks.ts`). 제목으로 맞추므로
+ *   버튼이 제목을 그대로 넘긴다. 다음날에는 조건이 여전하면 다시 뜬다.
+ * - 단계 번호를 같이 넘긴다. 눌린 기록도 영농일지의 한 줄이라 날씨·단계가 붙어야
+ *   관찰 기록과 같은 모양이 된다. 화면이 이미 계산해 둔 값이라 조회가 안 늘어난다.
  * ---------------------------------------------
  */
 
@@ -22,6 +26,8 @@ export interface TaskAdviceListProps {
   cultivationId: string;
   /** 끝난 재배는 버튼을 숨긴다. 기록할 작업이 더 없다. */
   readOnly?: boolean;
+  /** 지금 판정된 생육단계. 눌린 기록에 같이 박힌다. 판정 못 했으면 null. */
+  currentStageOrder: number | null;
   onDone: (formData: FormData) => Promise<void>;
 }
 
@@ -36,6 +42,7 @@ export function TaskAdviceList({
   plotId,
   cultivationId,
   readOnly = false,
+  currentStageOrder,
   onDone,
 }: TaskAdviceListProps) {
   if (tasks.length === 0) {
@@ -70,6 +77,13 @@ export function TaskAdviceList({
               <input name="plotId" type="hidden" value={plotId} />
               <input name="cultivationId" type="hidden" value={cultivationId} />
               <input name="titleKo" type="hidden" value={task.titleKo} />
+              {currentStageOrder !== null && (
+                <input
+                  name="stageOrder"
+                  type="hidden"
+                  value={currentStageOrder}
+                />
+              )}
               <SubmitButton
                 pendingKo="기록하는 중"
                 size="sm"

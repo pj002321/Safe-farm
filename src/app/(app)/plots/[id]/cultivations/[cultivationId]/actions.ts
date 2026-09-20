@@ -136,9 +136,13 @@ function positiveInt(raw: unknown): number | null {
 }
 
 /** 폼의 두 id 를 좁히고 밭 소유까지 확인한다. 하나라도 어긋나면 되돌린다. */
-async function openContext(
-  formData: FormData,
-): Promise<{ plotId: string; cultivationId: string; path: string }> {
+async function openContext(formData: FormData): Promise<{
+  plotId: string;
+  cultivationId: string;
+  path: string;
+  /** 이미 읽은 밭. 날씨를 박을 때 좌표가 필요해 버리지 않고 같이 돌려준다. */
+  plot: { latitude: number; longitude: number };
+}> {
   const { viewer } = await requireConsent();
 
   const plotId = readText(formData, "plotId");
@@ -151,6 +155,7 @@ async function openContext(
   return {
     plotId,
     cultivationId,
+    plot,
     path: `/plots/${plotId}/cultivations/${cultivationId}`,
   };
 }
@@ -209,20 +214,27 @@ export async function addObservation(formData: FormData): Promise<void> {
  * 만드는 값이라 id 를 저장해도 나중에 가리킬 대상이 없다.
  */
 export async function completeTask(formData: FormData): Promise<void> {
-  const { plotId, cultivationId, path } = await openContext(formData);
+  const { plotId, cultivationId, plot, path } = await openContext(formData);
 
   const titleKo = readText(formData, "titleKo");
   if (!titleKo) fail(path, "작업 이름이 비어 있습니다.");
 
   const today = kstDateString();
-  const adviceText = await dayFirstAdvice(cultivationId, today);
+  // 관찰 기록과 같은 일지 줄이다. 한쪽만 날씨가 비면 꺼내 볼 때 들쭉날쭉하다.
+  const [adviceText, weather] = await Promise.all([
+    dayFirstAdvice(cultivationId, today),
+    diaryWeather(plot, today),
+  ]);
 
   try {
     await insertCultivationEvent(cultivationId, {
       kind: "TASK_DONE",
       occurredOn: today,
       body: titleKo.slice(0, 100),
+      // 한 일은 카드 제목이 곧 그것이라 work_kind 를 따로 받지 않는다.
+      stageOrder: positiveInt(formData.get("stageOrder")),
       adviceText,
+      weather,
     });
   } catch {
     fail(path, "기록하지 못했습니다. 새로 고친 뒤 다시 시도해 주세요.");

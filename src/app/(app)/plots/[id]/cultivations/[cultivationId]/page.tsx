@@ -180,6 +180,7 @@ export default async function Page({
         <Card title="이번 주 할 일">
           <TaskAdviceList
             cultivationId={card.id}
+            currentStageOrder={gauge?.stage?.stageOrder ?? null}
             onDone={completeTask}
             plotId={plot.id}
             tasks={detail.tasks}

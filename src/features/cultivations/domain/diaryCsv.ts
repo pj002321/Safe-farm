@@ -45,14 +45,22 @@ export interface DiaryCsvContext {
 }
 
 /**
+ * 이 글자로 시작하면 엑셀이 칸을 **수식으로** 연다.
+ *
+ * 탭·캐리지리턴이 끼어 있는 까닭은 그 뒤에 수식을 숨기는 수법이 있어서다.
+ * 정규식으로 쓰면 `\t` 가 편집기·도구를 거치며 진짜 탭으로 바뀌어 식이 깨진다 —
+ * 실제로 한 번 그랬다. 첫 글자만 보면 되는 일이라 집합으로 둔다.
+ */
+const RISKY_FIRST = new Set(["=", "+", "-", "@", "\t", "\r"]);
+
+/**
  * 엑셀이 글자를 수식으로 읽지 않게 막는다.
  *
- * ⚠️ `=` `+` `-` `@` 로 시작하는 칸을 엑셀은 **수식으로** 연다. 자기 파일이면
- *    별일 아니지만 이 파일은 조합·공무원에게 건네질 수 있다. 앞에 작은따옴표를
- *    붙이면 엑셀이 글자로 읽는다.
+ * ⚠️ 자기 파일이면 별일 아니지만 이 파일은 조합·공무원에게 건네질 수 있다.
+ *    앞에 작은따옴표를 붙이면 엑셀이 글자로 읽는다.
  */
 function defuse(value: string): string {
-  return /^[=+\-@]/.test(value) ? `'${value}` : value;
+  return RISKY_FIRST.has(value[0] ?? "") ? `'${value}` : value;
 }
 
 /** 큰따옴표·쉼표·줄바꿈이 들어 있으면 감싸고, 안의 큰따옴표는 두 개로. */
@@ -98,9 +106,11 @@ export function buildDiaryCsv(
   ctx: DiaryCsvContext,
 ): string {
   const BOM = String.fromCharCode(0xfeff);
-  const ascending = [...entries].toSorted((a, b) =>
-    a.occurredOn.localeCompare(b.occurredOn),
-  );
+  // ⚠️ 날짜로 다시 세우지 않고 **뒤집는다.** `buildTimeline` 이 날짜뿐 아니라 같은
+  //    날 안의 차례(SAME_DAY_ORDER)까지 정해서 준다. 날짜만 보고 다시 정렬하면
+  //    정렬이 안정적이라 **그날 줄만 최신순으로 남아** 오름차순 파일 안에서 거꾸로
+  //    선다. 뒤집기는 둘을 한꺼번에 뒤집는다.
+  const ascending = [...entries].reverse();
 
   return (
     BOM +

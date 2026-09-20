@@ -49,6 +49,21 @@ describe("buildDiaryCsv", () => {
     expect(second.startsWith("2026-09-19")).toBe(true);
   });
 
+  it("같은 날 안의 차례까지 뒤집는다 — 날짜만 다시 정렬하면 그날만 거꾸로 선다", () => {
+    // buildTimeline 이 준 순서: 그날 나중 일이 위(최신순)
+    const csv = buildDiaryCsv(
+      [
+        note("2026-09-19", { id: "b", bodyKo: "나중" }),
+        note("2026-09-19", { id: "a", bodyKo: "먼저" }),
+      ],
+      CTX,
+    );
+    const [, first, second] = lines(csv);
+
+    expect(first).toContain("먼저");
+    expect(second).toContain("나중");
+  });
+
   it("단계 번호를 이름으로 바꾼다", () => {
     expect(lines(buildDiaryCsv([note("2026-09-19")], CTX))[1]).toContain(
       "줄기비대기",
@@ -61,10 +76,12 @@ describe("buildDiaryCsv", () => {
   });
 
   it("수식으로 시작하는 메모는 글자로 묶는다", () => {
-    const row = lines(
-      buildDiaryCsv([note("2026-09-19", { bodyKo: "=1+1" })], CTX),
-    )[1];
-    expect(row).toContain("'=1+1");
+    for (const bodyKo of ["=1+1", "+1", "-1", "@SUM(A1)", "	=1+1"]) {
+      const row = lines(
+        buildDiaryCsv([note("2026-09-19", { bodyKo })], CTX),
+      )[1];
+      expect(row).toContain("'");
+    }
   });
 
   it("쉼표·큰따옴표가 든 메모를 감싼다", () => {
