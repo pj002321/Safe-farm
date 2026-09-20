@@ -304,7 +304,9 @@ def load(db, data: dict[str, list[dict]]) -> dict[str, int]:
     rows = [
         {
             "crop_name": r["crop_name"],
-            "cultivation_type": r["cultivation_type"] or "",   # read_csv 가 빈 칸을 None 으로 준다. UNIQUE 때문에 빈 문자열로
+            # read_csv 가 빈 칸을 None 으로 준다. UNIQUE 가 NULL 끼리를 서로 다르게
+            # 보므로 빈 문자열로 맞춘다 (아래 crop_disaster_rules 와 같은 까닭)
+            "cultivation_type": r["cultivation_type"] or "",
             "section": r["section"],
             "topic": r["topic"],
             "body": r["body"],
@@ -314,8 +316,17 @@ def load(db, data: dict[str, list[dict]]) -> dict[str, int]:
         }
         for r in data["crop_guides"]
     ]
-    done["crop_guides"] = upsert(db, CropGuide, rows,
-                                 ["crop_name", "cultivation_type", "section", "topic"])
+    열쇠 = ["crop_name", "cultivation_type", "section", "topic"]
+    done["crop_guides"] = upsert(db, CropGuide, rows, 열쇠)
+    # ⚠ **여기도 지워야 한다** — crop_stages 와 같은 까닭이다(위 ⚠). crop-data 가
+    #   작형을 버리면 CSV 에서는 빠지는데 upsert 는 DB 의 옛 행을 그대로 둔다.
+    #   2026-09-21 실측: `고추/꽈리고추 반촉성` 5행이 CSV 에서 빠진 뒤에도 DB 에
+    #   남았고, **그대로 임베딩까지 올라가 검색에 걸렸다**(documents 659 vs CSV 654).
+    #
+    #   ⚠ crop_stages 와 달리 열쇠가 전부 문자열이라 자료형을 맞출 것이 없다.
+    지움 = prune(db, CropGuide, rows, 열쇠)
+    if 지움:
+        print(f"  crop_guides: CSV 에서 사라진 {지움}행을 지웠습니다")
 
     rows = [
         {
