@@ -223,7 +223,9 @@ export function PlotLocationStep() {
 
     const next = !skyview;
     setSkyview(next);
-    map.setMapTypeId(next ? sdk.maps.MapTypeId.HYBRID : sdk.maps.MapTypeId.ROADMAP);
+    map.setMapTypeId(
+      next ? sdk.maps.MapTypeId.HYBRID : sdk.maps.MapTypeId.ROADMAP,
+    );
   }
 
   return (

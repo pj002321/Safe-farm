@@ -54,6 +54,7 @@ export function interpolateDeg(
     weightSum += weight;
   }
   if (weightSum === 0) return null;
-  const deg = (Math.atan2(sinSum / weightSum, cosSum / weightSum) * 180) / Math.PI;
+  const deg =
+    (Math.atan2(sinSum / weightSum, cosSum / weightSum) * 180) / Math.PI;
   return (deg + 360) % 360;
 }

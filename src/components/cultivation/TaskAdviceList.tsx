@@ -70,7 +70,11 @@ export function TaskAdviceList({
               <input name="plotId" type="hidden" value={plotId} />
               <input name="cultivationId" type="hidden" value={cultivationId} />
               <input name="titleKo" type="hidden" value={task.titleKo} />
-              <SubmitButton pendingKo="기록하는 중" size="sm" variant="secondary">
+              <SubmitButton
+                pendingKo="기록하는 중"
+                size="sm"
+                variant="secondary"
+              >
                 했음
               </SubmitButton>
             </form>
