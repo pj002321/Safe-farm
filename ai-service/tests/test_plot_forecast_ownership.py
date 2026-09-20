@@ -23,7 +23,10 @@ PLOT = uuid.UUID("33333333-3333-3333-3333-333333333333")
 
 
 class _Plot:
-    """밭 객체는 그대로 흘려보내기만 하므로 속이 비어 있어도 된다."""
+    """밭 객체는 그대로 흘려보내기만 한다. 격자만 있으면 된다 — 예보 캐시 키로 쓴다."""
+
+    grid_x = 52
+    grid_y = 67
 
 
 @pytest.fixture
@@ -34,7 +37,7 @@ def wired(monkeypatch):
     monkeypatch.setattr(
         weather,
         "fetch_forecast",
-        lambda lat, lon: {
+        lambda lat, lon, cache_key=None: {
             "current": {"time": "2026-09-19T08:00", "temperature_2m": 20.0},
             "hourly": {"time": [], "temperature_2m": []},
             "daily": {"time": []},
@@ -113,3 +116,27 @@ def test_missing_plot_looks_the_same_as_someone_elses(wired):
 
     for key in ("growthSeries", "cropImpact", "alert"):
         assert mine_but_gone[key] == no_plot_at_all[key]
+
+
+def test_owned_plot_is_resolved_before_the_forecast_is_fetched(wired, monkeypatch):
+    """예보 캐시를 격자로 묶으려면 **예보를 부르기 전에** 밭을 찾아야 한다.
+
+    밭을 나중에 찾는 순서로 되돌리면 격자를 모르는 채로 예보를 부르게 되고, 키가
+    조용히 좌표로 떨어진다. 답은 그대로라 아무도 모르고, 같은 격자의 밭이 저마다
+    외부를 친다 — 실제로 그 상태였다(격자 52,67 의 밭 4개가 전부 1.4초).
+    """
+    keys: list = []
+    monkeypatch.setattr(
+        weather,
+        "fetch_forecast",
+        lambda lat, lon, cache_key=None: keys.append(cache_key)
+        or {"current": None, "hourly": {}, "daily": {"time": []}},
+    )
+
+    _call(plot_id=PLOT, user_id=MINE)
+    assert keys == [("grid", 52, 67)]
+
+    # 밭이 없으면(지도에서 좌표만 찍은 경우) 예전처럼 좌표로 묶는다.
+    keys.clear()
+    _call()
+    assert keys == [None]

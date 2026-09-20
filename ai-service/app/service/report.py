@@ -32,7 +32,11 @@ from app.service.plot_growth import (
     rainfall_totals,
 )
 from app.service.warn_region import plot_warning
-from pipeline.open_meteo_client import fetch_daily_forecast, normalize_daily_forecast
+from pipeline.open_meteo_client import (
+    fetch_daily_forecast,
+    grid_cache_key,
+    normalize_daily_forecast,
+)
 
 SYSTEM_PROMPT = (
     "너는 농업 컨설턴트다. 아래 수치는 이 밭을 DB·기상 예보에서 실측·계산한 값이다 — "
@@ -91,7 +95,13 @@ def build_report_input(db: Session, plot: Plot) -> ReportInput | None:
     tomorrow = None
     forecast_week: list[dict] | None = None
     try:
-        daily = fetch_daily_forecast(float(plot.latitude), float(plot.longitude))
+        # 밭을 차례로 도는 경로라 여기서 예보 캐시가 제일 많이 듣는다. 좌표로 묶으면
+        # 한 칸에 한 밭씩 갈려 사실상 안 걸린다 — 격자로 묶는다(open_meteo_client).
+        daily = fetch_daily_forecast(
+            float(plot.latitude),
+            float(plot.longitude),
+            cache_key=grid_cache_key(plot.grid_x, plot.grid_y),
+        )
         forecast = normalize_daily_forecast(daily)
         # index 0 = 오늘, 1 = 내일(open_meteo_client.py 의 순서).
         tomorrow = forecast[1] if len(forecast) > 1 else None

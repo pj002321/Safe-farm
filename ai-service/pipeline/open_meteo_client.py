@@ -82,7 +82,7 @@ def _store(key, payload):
             _cache.popitem(last=False)
 
 
-def fetch_forecast(lat, lon, days=7):
+def fetch_forecast(lat, lon, days=7, *, cache_key=None):
     """현재 실황 + 시간별 + 일별 예보를 한 번에. days 는 오늘 포함 조회 일수(최대 16).
 
     같은 좌표(`COORD_DIGITS` 자리 반올림)·같은 days 면 `FORECAST_CACHE_TTL` 초
@@ -90,11 +90,35 @@ def fetch_forecast(lat, lon, days=7):
     막으려면 잠금을 HTTP 까지 넓혀야 하는데, 그러면 외부 API 가 느릴 때 뒷 요청이
     전부 거기 매달린다.
 
+    **`cache_key` 를 주면 좌표 대신 그것으로 묶는다.** 좌표 반올림은 거리가 아니라
+    고정 격자에 찍는 것이라, 2m 떨어진 두 밭이 칸 경계를 사이에 두면 갈린다. 실제로
+    개발 DB 의 밭 23개가 좌표 칸 23개로 전부 갈려 **밭 사이 적중이 한 건도 없었다**
+    (같은 밭을 새로고침할 때만 걸렸다). 기상청 예보 격자(`plots.grid_x/grid_y`)로
+    묶으면 사용자 단위 왕복이 23 → 11 회가 된다.
+
+    쓰는 쪽이 알아야 할 것 둘:
+
+    - **셀을 먼저 데운 밭의 좌표가 그 셀의 기준점이 된다.** 격자→좌표 역변환이
+      없어서 호출은 여전히 넘어온 lat/lon 으로 나간다. 예보 격자는 5km 이고
+      Open-Meteo 모델 해상도가 1~11km 라 평지에서는 모델 아래로 묻히지만,
+      산지는 셀 안에서 갈린다.
+    - **좌표 키와 격자 키는 서로 다른 칸이다.** 같은 자리를 한쪽은 좌표로, 한쪽은
+      격자로 부르면 외부 왕복이 두 번 난다. 지금 격자를 쓰는 건 밭을 차례로 도는
+      `service/report.py` 뿐이다 — `/v1/weather/plot` 은 `plot_id` 없이도 불려서
+      격자가 없을 수 있으므로 좌표 키로 둔다.
+
     시간별은 `forecast_days` 만큼 통째로 오고, 그중 지금 이후 구간만 쓴다
     (`normalize_hourly`). Open-Meteo 는 hourly 를 **오늘 00시부터** 주기 때문에
     그냥 앞에서 자르면 이미 지난 시간을 보여주게 된다.
     """
-    key = (round(lat, COORD_DIGITS), round(lon, COORD_DIGITS), days)
+    # `days` 는 여기서만 붙인다. 부르는 쪽이 키에 같이 넣으면 days 를 바꿨을 때
+    # 키만 옛날 값으로 남아 **다른 기간의 응답을 캐시에서 꺼내 준다.**
+    # 좌표 키는 3-튜플, 격자 키는 태그가 붙은 4-튜플이라 섞이지 않는다.
+    key = (
+        (*cache_key, days)
+        if cache_key is not None
+        else (round(lat, COORD_DIGITS), round(lon, COORD_DIGITS), days)
+    )
     hit = _cached(key)
     if hit is not None:
         return hit
@@ -126,9 +150,21 @@ def fetch_forecast(lat, lon, days=7):
     return copy.deepcopy(payload)
 
 
-def fetch_daily_forecast(lat, lon, days=7):
+def fetch_daily_forecast(lat, lon, days=7, *, cache_key=None):
     """일별만 필요한 호출자를 위한 얇은 래퍼. 요청은 위와 같은 한 번이다(캐시 포함)."""
-    return fetch_forecast(lat, lon, days)["daily"]
+    return fetch_forecast(lat, lon, days, cache_key=cache_key)["daily"]
+
+
+def grid_cache_key(grid_x, grid_y):
+    """기상청 예보 격자 기준 캐시 키. `plots.grid_x/grid_y` 를 그대로 넣는다.
+
+    `days` 는 넣지 않는다 — `fetch_forecast` 가 붙인다(그쪽 주석 참고).
+
+    격자 값은 밭 등록 때 위경도에서 계산해 박아 둔 것이고, 밭 수정 화면은 이름과
+    넓이만 고치게 막아 뒀다(`src/components/plot/PlotManageList.tsx`). 그래서
+    좌표만 바뀌고 격자가 남는 일이 없다 — 키가 좌표와 어긋나지 않는다.
+    """
+    return ("grid", grid_x, grid_y)
 
 
 def normalize_daily_forecast(daily):

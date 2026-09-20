@@ -133,6 +133,54 @@ def test_failure_is_not_cached(monkeypatch):
     assert calls.n == 2
 
 
+def test_grid_key_groups_plots_that_coordinates_split(monkeypatch):
+    """격자 키를 넣은 이유 그 자체. 좌표로는 갈리는 두 밭이 한 번으로 준다.
+
+    아래 두 점은 2m 떨어져 있는데 반올림 칸 경계를 사이에 둬서 좌표 키로는 따로
+    센다. 개발 DB 에서 밭 23개가 좌표 칸 23개로 전부 갈린 것이 이 모양이었다.
+    """
+    get, calls = _counting_get({"daily": {}})
+    monkeypatch.setattr(client.requests, "get", get)
+
+    client.fetch_forecast(35.12149, 126.98700)
+    client.fetch_forecast(35.12151, 126.98700)
+    assert calls.n == 2
+
+    client.clear_forecast_cache()
+    key = client.grid_cache_key(62, 115)
+    client.fetch_forecast(35.12149, 126.98700, cache_key=key)
+    client.fetch_forecast(35.12151, 126.98700, cache_key=key)
+    assert calls.n == 3
+
+
+def test_grid_key_and_coordinate_key_do_not_collide(monkeypatch):
+    """같은 자리를 한쪽은 좌표로, 한쪽은 격자로 부르면 왕복이 두 번 난다.
+
+    막지 않는다 — 막으려면 좌표에서 격자를 되짚어야 하고 그 변환이 없다.
+    대신 **서로 다른 칸**이라는 것은 고정한다. 섞이면 `/v1/weather/plot` 의
+    좌표 호출이 격자 칸의 값을 받아 기준점이 조용히 어긋난다.
+    """
+    get, calls = _counting_get({"daily": {}})
+    monkeypatch.setattr(client.requests, "get", get)
+
+    client.fetch_forecast(35.1215, 126.9870)
+    client.fetch_forecast(35.1215, 126.9870, cache_key=client.grid_cache_key(62, 115))
+
+    assert calls.n == 2
+
+
+def test_grid_key_still_separates_by_days(monkeypatch):
+    """`days` 는 `fetch_forecast` 가 붙인다. 안 붙이면 7일치 캐시를 14일치 자리에 준다."""
+    get, calls = _counting_get({"daily": {}})
+    monkeypatch.setattr(client.requests, "get", get)
+
+    key = client.grid_cache_key(62, 115)
+    client.fetch_forecast(35.1215, 126.9870, days=7, cache_key=key)
+    client.fetch_forecast(35.1215, 126.9870, days=14, cache_key=key)
+
+    assert calls.n == 2
+
+
 def test_cache_does_not_grow_without_bound(monkeypatch):
     """배치가 전국을 돌면 좌표가 수천 개다. 오래된 것부터 버린다."""
     get, _ = _counting_get({"daily": {}})
