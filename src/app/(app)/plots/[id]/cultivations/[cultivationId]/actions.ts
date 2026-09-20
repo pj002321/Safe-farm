@@ -20,6 +20,7 @@ import {
 import { getPlotDetail } from "@/features/plots/plotStore";
 import { aiService } from "@/shared/aiService/client";
 import { requireConsent } from "@/shared/auth/consentGate";
+import { hourMinuteOf } from "@/shared/utils/format";
 import { kstDateString } from "@/shared/utils/kstDate";
 
 /**
@@ -38,17 +39,6 @@ import { kstDateString } from "@/shared/utils/kstDate";
  *   흔해서 입력을 받지만, 앞날짜는 `parseNote()` 가 거른다.
  * ---------------------------------------------
  */
-
-/**
- * `"2026-09-19T06:19"` → `"06:19"`. 형태가 다르면 null 이다.
- *
- * ⚠️ 자리로 자르지 않는다(`slice(11, 16)`). 형식이 바뀌면 **엉뚱한 글자가 조용히**
- *    저장된다. `SunTimes.tsx` 의 `hhmm` 과 같은 방식.
- */
-function hhmm(iso: string | null): string | null {
-  const time = iso?.split("T")[1];
-  return time?.slice(0, 5) ?? null;
-}
 
 /**
  * 그날 날씨를 가져와 행에 박을 모양으로 돌려준다. 못 가져오면 `null`.
@@ -85,8 +75,8 @@ async function diaryWeather(
     windDirDeg: day.windDirDeg,
     // "2026-09-19T06:19" 에서 시각만. 날짜는 occurred_on 에 이미 있고, 시간대
     // 변환이 끼면 하루 어긋날 여지만 생긴다.
-    sunriseAt: hhmm(day.sunrise),
-    sunsetAt: hhmm(day.sunset),
+    sunriseAt: hourMinuteOf(day.sunrise),
+    sunsetAt: hourMinuteOf(day.sunset),
   };
 }
 
@@ -166,16 +156,7 @@ async function openContext(formData: FormData): Promise<{
  * 사진은 받지 않는다. 업로드는 AI 사진 분석과 한 묶음이라 그 브랜치로 미뤘다.
  */
 export async function addObservation(formData: FormData): Promise<void> {
-  const { viewer } = await requireConsent();
-
-  const plotId = readText(formData, "plotId");
-  const cultivationId = readText(formData, "cultivationId");
-  if (!plotId || !cultivationId) redirect("/plots");
-
-  const plot = await getPlotDetail(viewer.id, plotId);
-  if (!plot) redirect("/plots");
-
-  const path = `/plots/${plotId}/cultivations/${cultivationId}`;
+  const { cultivationId, path, plot } = await openContext(formData);
 
   const occurredOn = readText(formData, "occurredOn") || kstDateString();
   const parsed = parseNote({

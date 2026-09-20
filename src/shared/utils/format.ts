@@ -34,6 +34,23 @@ export function formatRainfall(mm: number | null | undefined): string {
   return `${Math.round(mm)}mm`;
 }
 
+/**
+ * `"2026-09-19T06:19"` → `"06:19"`. 꼴이 다르면 null.
+ *
+ * ⚠️ **시간대를 바꾸지 않는다.** Open-Meteo 요청에 `timezone=Asia/Seoul` 을 주므로
+ *    받은 글자가 이미 한국 시각이다. `new Date()` 로 감싸면 UTC 로 한 번 더 돌아
+ *    아홉 시간이 어긋난다.
+ *
+ * ⚠️ **자리로 자르지 않는다**(`slice(11, 16)`). 꼴이 바뀌면 엉뚱한 글자가
+ *    **조용히** 나간다. `T` 로 가른 뒤 앞 다섯 글자만 쓴다.
+ *
+ * 날씨 탭(`SunTimes`)과 영농일지(기록 저장)가 같이 쓴다.
+ */
+export function hourMinuteOf(iso: string | null | undefined): string | null {
+  const time = iso?.split("T")[1];
+  return time?.slice(0, 5) ?? null;
+}
+
 /** 적합도 점수. 0~100 정수 전제. */
 export function formatScore(score: number): string {
   return `${Math.round(score)}점`;

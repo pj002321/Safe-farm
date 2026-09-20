@@ -43,18 +43,25 @@ export type WorkKind = (typeof WORK_KINDS)[number];
 export const SKY_KINDS = ["맑음", "흐림", "비", "눈"] as const;
 export type SkyKind = (typeof SKY_KINDS)[number];
 
-/** 목록에 있는 값만 통과. 없으면 null — 빈칸으로 저장된다. */
-export function pickWorkKind(raw: unknown): WorkKind | null {
-  return typeof raw === "string" &&
-    (WORK_KINDS as readonly string[]).includes(raw)
-    ? (raw as WorkKind)
+/**
+ * 목록에 있는 값만 통과. 없으면 null — 빈칸으로 저장된다.
+ *
+ * 폼이 깨졌거나 남이 보낸 값을 여기서 끊는다. DB 에 CHECK 가 없으므로
+ * (위 [Description] 참조) **이 함수가 유일한 문지기다.**
+ */
+function pickFrom<T extends string>(
+  allowed: readonly T[],
+  raw: unknown,
+): T | null {
+  return typeof raw === "string" && (allowed as readonly string[]).includes(raw)
+    ? (raw as T)
     : null;
 }
 
-/** 목록에 있는 값만 통과. 없으면 null — 빈칸으로 저장된다. */
-export function pickSkyKind(raw: unknown): SkyKind | null {
-  return typeof raw === "string" &&
-    (SKY_KINDS as readonly string[]).includes(raw)
-    ? (raw as SkyKind)
-    : null;
-}
+/** 활동유형 하나. 목록 밖이면 null. */
+export const pickWorkKind = (raw: unknown): WorkKind | null =>
+  pickFrom(WORK_KINDS, raw);
+
+/** 하늘 하나. 목록 밖이면 null. */
+export const pickSkyKind = (raw: unknown): SkyKind | null =>
+  pickFrom(SKY_KINDS, raw);
