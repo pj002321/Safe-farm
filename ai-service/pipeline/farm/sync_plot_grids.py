@@ -32,6 +32,11 @@
   돌려준다는 것뿐이다 — **적재 배치가 들어올 자리를 여는 일이다.**
   (도달 예측은 `weatherStore.loadForecastTemps` 가 ai-service 를 보게 바뀌어 이미 산다.)
 
+언제 도나:
+    ★ **자정 배치가 자동으로 부른다**(`service.plot_tasks.generate_daily_tasks`).
+      밭은 언제든 새로 생기므로 손으로 돌릴 수 없다. 아래 실행은 **지금 당장 채우고
+      싶을 때·무엇이 들어갈지 보고 싶을 때**를 위한 것이다.
+
 실행:
     py -m pipeline.farm.sync_plot_grids
     py -m pipeline.farm.sync_plot_grids --check    # 넣지 않고 무엇이 들어갈지만 본다
@@ -57,6 +62,57 @@ NY_RANGE = (1, 253)
 
 def _in_range(nx: int, ny: int) -> bool:
     return NX_RANGE[0] <= nx <= NX_RANGE[1] and NY_RANGE[0] <= ny <= NY_RANGE[1]
+
+
+def sync(db, plots=None) -> int:
+    """
+    # summary
+    밭의 격자를 `grids` 에 없으면 넣는다. **넣은 행 수**를 돌려준다.
+
+    ★ **자정 배치(`service.plot_tasks.generate_daily_tasks`)가 이것을 부른다.**
+      밭은 언제든 새로 생기므로 손으로 돌릴 수 없다. 배치가 이미 `all_live_plots`
+      를 부르니 그 목록을 넘기면 조회도 안 는다.
+
+    ⚠ **밭 등록 때 바로 못 넣는다.** `20260918010000_table_grants_tighten.sql` 이
+      anon·authenticated 에 `grids` **select 만** 준다. 권한을 열면 누구나 이 표에
+      쓸 수 있게 되므로, service role 인 ai-service 쪽에서 뒤늦게 채운다.
+
+    ⚠ **새 밭은 다음 날에야 격자가 생긴다.** 그래도 괜찮다 — 격자가 있어야 보이는
+      것은 `weather_forecast`(차트 점선)뿐이고 그 표는 아직 비어 있다. 예보 숫자·
+      작업카드·도달 예측은 격자 없이도 돈다(Open-Meteo 를 좌표로 직접 부른다).
+
+    # params
+    db: 세션. **커밋은 부르는 쪽이 한다** — 배치의 다른 일과 한 트랜잭션에 묶는다<br>
+    plots: 이미 읽어 둔 밭 목록. 없으면 여기서 읽는다<br>
+
+    # returns
+    upsert 가 영향 준 행 수. 새 격자가 없으면 0
+
+    # examples
+        sync(db, plots)  -> 2
+    """
+    if plots is None:
+        rows = db.execute(
+            text(
+                """
+                select distinct grid_x, grid_y
+                  from plots
+                 where deleted_at is null and grid_x is not null and grid_y is not null
+                """
+            )
+        ).fetchall()
+        칸 = {(int(x), int(y)) for x, y in rows}
+    else:
+        칸 = {
+            (int(p.grid_x), int(p.grid_y))
+            for p in plots
+            if p.grid_x is not None and p.grid_y is not None
+        }
+
+    쓸것 = [{"nx": x, "ny": y} for x, y in sorted(칸) if _in_range(x, y)]
+    if not 쓸것:
+        return 0
+    return upsert(db, Grid, 쓸것, ["nx", "ny"])
 
 
 def main() -> None:
@@ -120,7 +176,9 @@ def main() -> None:
             print("  넣을 것이 없습니다")
             return
 
-        n = upsert(db, Grid, 쓸것, ["nx", "ny"])
+        # ⚠ 넣는 일은 `sync()` 한 곳이 한다 — 자정 배치도 같은 함수를 쓴다.
+        #   여기서 upsert 를 또 부르면 두 벌이 되어 조건이 갈린다.
+        n = sync(db)
         db.commit()
 
         총 = db.execute(text("select count(*) from grids")).scalar()

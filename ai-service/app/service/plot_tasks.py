@@ -45,6 +45,7 @@ from app.service.plot_growth import cultivation_growth, nearest_station
 from app.service.satellite_cache import stored_observations
 from app.service.typhoon_cache import track as typhoon_track
 from app.service.warn_region import plot_warning
+from pipeline.farm.sync_plot_grids import sync as sync_plot_grids
 from pipeline.open_meteo_client import (
     daily_index_of,
     hourly_value_at,
@@ -551,6 +552,28 @@ def generate_daily_tasks(db: Session) -> int:
        걷어내지 않으면 격리해도 나머지 밭이 줄줄이 실패한다.
     """
     plots = all_live_plots(db)
+
+    # ★ 밭의 격자를 `grids` 에 채운다 — 2026-09-21
+    #
+    #   밭 등록이 `plots.grid_x`·`grid_y` 만 넣고 `grids` 표에는 행을 안 만든다.
+    #   그러면 화면이 `grid_id` 를 못 찾아 예보가 영영 안 붙는다
+    #   (실측 2026-09-20: 밭 23개 중 매칭 0개).
+    #
+    #   ⚠ **밭 등록 때 바로 못 넣는다.** `grants_tighten.sql` 이 anon·authenticated 에
+    #     `grids` select 만 준다. 권한을 열면 누구나 이 표에 쓸 수 있게 된다.
+    #     그래서 service role 로 도는 이 배치가 뒤늦게 채운다.
+    #
+    #   ⚠ **여기가 맨 앞이다.** 아래 판정이 실패해도 격자는 들어가야 한다 — 둘은
+    #     서로 상관이 없다. 실패해도 배치를 막지 않는다(밭 하나의 결손이 나머지를
+    #     막지 않는다는 이 함수의 원칙과 같다).
+    try:
+        새격자 = sync_plot_grids(db, plots)
+        if 새격자:
+            db.commit()
+            print(f"[tasks] grids 에 격자 {새격자}칸을 넣었습니다", flush=True)
+    except Exception:  # noqa: BLE001 — 격자 적재 실패가 할 일 판정을 막지 않는다
+        db.rollback()
+        traceback.print_exc()
 
     created = 0
     # 같은 마을의 밭들이 같은 예보를 거듭 받아 오지 않게 한다. 이 배치가 끝나면

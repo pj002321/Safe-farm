@@ -351,6 +351,17 @@ def load(db, data: dict[str, list[dict]]) -> dict[str, int]:
     )
 
     # 컬럼이 nx, ny 뿐이라 갱신할 것이 없다. 충돌하면 건너뛴다
+    # ⚠ **이 표는 출처가 둘이다**(2026-09-21). 여기(grids.csv 8행)와
+    #   `pipeline/farm/sync_plot_grids.sync`(밭에서 뽑은 격자)가 같은 표를 채운다.
+    #
+    #   grids.csv 8행은 더미에서 갈라져 나온 **예시값**이다(72717a3 · 첫 줄 60,127 은
+    #   기상청 문서의 서울 예시). 어느 밭과도 안 맞는다 — 실측 2026-09-20 에 밭 23개 중
+    #   매칭 0개였다. **정본은 밭 쪽**이고 이쪽은 잔해다.
+    #
+    #   ⚠ 지우지 않는 까닭 — `weather_forecast.grid_id` 가 FK CASCADE 라 지우면 붙어
+    #     있던 예보(12행)도 같이 사라진다. 충돌 키가 (nx,ny) 로 같아 서로 덮어쓰지도
+    #     않는다. 예보 적재를 켤 때 HO-Vic 님과 같이 정리한다
+    #     (`교안_기상청예보_적재.md` §7 · ②-ㄹ).
     done["grids"] = upsert(db, Grid, data["grids"], ["nx", "ny"])
     done["stations"] = upsert(db, Station, data["stations"], ["station_code"])
 
