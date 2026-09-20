@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict
+from datetime import date
 
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
@@ -16,8 +17,14 @@ from sqlalchemy.orm import Session
 from app.core.db import get_db
 from app.core.security import require_service_token
 from app.graph.graph import GraphDeps, create_graph
-from app.schemas.recommend import RecommendResponse
+from app.schemas.recommend import (
+    RecommendResponse,
+    VariantRecommendationOut,
+    VariantRecommendRequest,
+    VariantRecommendResponse,
+)
 from app.service.recommend import explain_with_llm, make_candidate_loader, make_weather_fetcher
+from app.service.variant import recommend_maturities
 
 router = APIRouter(prefix="/v1/recommend", tags=["recommend"])
 
@@ -39,4 +46,22 @@ async def recommend(lat: float, lon: float, db: Session = Depends(get_db)) -> Re
     return RecommendResponse(
         ranked=[asdict(r) for r in result.get("ranked", [])],
         explanation=result.get("explanation"),
+    )
+
+
+@router.post("/variant", dependencies=[Depends(require_service_token)])
+def recommend_variant(
+    body: VariantRecommendRequest, db: Session = Depends(get_db)
+) -> VariantRecommendResponse:
+    """사용자가 숙기를 안 고른 작물의 조·중·만생 추천. 파종일부터 평년 기후로
+    쌓이는 GDD가 숙기별 목표를 채우는지로 정한다(`variant_fit.pick_maturity`).
+    판단 근거가 없는 작물은 결과에서 빠진다 — 프론트가 기존 기본값을 쓴다.
+    """
+    crops = [(c.crop_id, c.sow_date or date.today()) for c in body.crops]
+    picked = recommend_maturities(db, body.lat, body.lon, crops)
+    return VariantRecommendResponse(
+        recommendations=[
+            VariantRecommendationOut(crop_id=crop_id, maturity_type=maturity)
+            for crop_id, maturity in picked.items()
+        ]
     )

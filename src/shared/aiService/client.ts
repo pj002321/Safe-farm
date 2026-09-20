@@ -358,6 +358,12 @@ export interface RecommendResult {
   explanation: string | null;
 }
 
+/** `/v1/recommend/variant` 응답 한 건. */
+export interface VariantRecommendation {
+  cropId: number;
+  maturityType: "EARLY" | "MID" | "LATE";
+}
+
 export type AiResult<T> =
   | { ok: true; data: T }
   | { ok: false; reason: AiFailure; detail?: string };
@@ -706,6 +712,24 @@ export const aiService = {
    */
   recommend: (lat: number, lon: number) =>
     call<RecommendResult>(`/v1/recommend?lat=${lat}&lon=${lon}`, {
+      timeoutMs: RECOMMEND_TIMEOUT_MS,
+    }),
+  /**
+   * 사용자가 숙기를 안 고른 작물들의 조·중·만생 추천. 판단 근거가 있는
+   * crop_id 만 결과에 담긴다 — 나머지는 부르는 쪽의 기존 기본값을 쓴다.
+   */
+  recommendVariant: (
+    lat: number,
+    lon: number,
+    crops: { cropId: number; sowDate: string | null }[],
+  ) =>
+    call<{ recommendations: VariantRecommendation[] }>("/v1/recommend/variant", {
+      method: "POST",
+      body: JSON.stringify({
+        lat,
+        lon,
+        crops: crops.map((c) => ({ crop_id: c.cropId, sow_date: c.sowDate })),
+      }),
       timeoutMs: RECOMMEND_TIMEOUT_MS,
     }),
   /**

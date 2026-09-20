@@ -1,5 +1,7 @@
 """작물 추천 응답 모양. `/v1/recommend` 가 돌려주는 계약이다."""
 
+from datetime import date
+
 from pydantic import BaseModel, ConfigDict
 from pydantic.alias_generators import to_camel
 
@@ -29,3 +31,30 @@ class RecommendResponse(BaseModel):
     ranked: list[RecommendationOut]
     # 후보가 없거나 기상 조회가 실패하면 비어 있다 — 그때 화면은 이 패널을 숨긴다
     explanation: str | None = None
+
+
+class VariantQuery(BaseModel):
+    """요청 바디는 다른 POST 엔드포인트(ask, diagnose)와 같이 snake_case 그대로 받는다."""
+
+    crop_id: int
+    sow_date: date | None = None  # 안 주면 오늘로 본다
+
+
+class VariantRecommendRequest(BaseModel):
+    lat: float
+    lon: float
+    crops: list[VariantQuery]
+
+
+class VariantRecommendationOut(BaseModel):
+    model_config = _CAMEL
+
+    crop_id: int
+    maturity_type: str  # EARLY | MID | LATE
+
+
+class VariantRecommendResponse(BaseModel):
+    model_config = _CAMEL
+
+    # 판단 근거가 있는 작물만 담긴다 — 나머지는 프론트의 기존 기본값(중생 우선)에 맡긴다
+    recommendations: list[VariantRecommendationOut]

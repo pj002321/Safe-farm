@@ -13,12 +13,9 @@ from sqlalchemy.orm import Session
 
 from app.core.config import OPENAI_MODEL
 from app.domain.crop_fit import CropCandidate, DailyWeather, HazardRule, SowWindow
-from app.domain.geo import nearest
 from app.knowledge.embedder import get_client
 from app.repo.crop import all_crops, disaster_rules_of, variants_of
-from app.repo.normal import normals_of
-from app.repo.station import all_stations
-from app.service.gdd_region import NORMAL_SOURCES
+from app.service.climate_normals import normals_by_day_near
 from pipeline.open_meteo_client import fetch_forecast, normalize_daily_forecast
 
 # 최근 실측만 본다 — "지금 심어도 되나" 는 최근 추세면 충분하고, 영농일지 배치가
@@ -73,21 +70,6 @@ def make_candidate_loader(db: Session):
     return load
 
 
-def _station_normals(db: Session, station_code: str) -> dict[tuple[int, int], tuple[float, float]]:
-    """이 관측소의 (월,일)별 평년 최고·최저기온. `NORMAL_SOURCES` 순서로 한 번만 찾는다
-    (관측소가 하나뿐이라 `gdd_region._normal_gdd_by_station` 의 잔여-재질의는 필요 없다)."""
-    for source in NORMAL_SOURCES:
-        rows = normals_of(db, [station_code], source)
-        by_day = {
-            (m, d): (tmax, tmin)
-            for _stn, m, d, tmax, tmin in rows
-            if tmax is not None and tmin is not None
-        }
-        if by_day:
-            return by_day
-    return {}
-
-
 def make_weather_fetcher(db: Session):
     """`WeatherFetcher` 시그니처에 맞춘 클로저. 평년값 조회에 DB 세션이 필요해
     `make_candidate_loader` 와 같은 이유로 감싼다."""
@@ -116,8 +98,7 @@ async def fetch_recent_weather(db: Session, lat: float, lon: float) -> tuple[Dai
     today = date.today().isoformat()
     rows = normalize_daily_forecast(payload["daily"])
 
-    station = nearest(lat, lon, all_stations(db))
-    normals = _station_normals(db, station.station_code) if station else {}
+    normals = normals_by_day_near(db, lat, lon)
 
     result = []
     for r in rows:
