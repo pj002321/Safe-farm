@@ -175,6 +175,20 @@ variant_by_id           ×2
 `Session.info` 에 붙는 캐시다. `repo/crop.py` 의 `variant_by_id` ·
 `usable_crop_of_variant` · `stage_by_order` 가 쓴다. 17회 → 13회.
 
+> **2026-09-20 추가 — `stage_count_and_last_order` · `hazard_temp_limits` 도 쓴다.**
+> 작업카드 배치가 밭의 **작물마다** 판정하게 바뀌면서(교안 §2-B) 이 둘이 밭 수만큼
+> 되풀이됐다. 구조를 더한 게 아니라 위 셋과 같은 자리에 빠져 있던 것을 채웠다 —
+> 둘 다 정적 마스터(`crop_stages` · `crop_disaster_rules`)이고 돌려주는 값도 불변
+> 튜플이다(`hazard_temp_limits` 는 알맹이를 `_hazard_temp_limits` 로 떼어 감쌌다).
+>
+> 자정 배치 한 번(밭 23개 · 재배 20건) 실측:
+>
+> ```
+> 쿼리 143건 → 127건        되풀이 29건 → 13건        약 0.5초 → 0.21초
+> ```
+>
+> (왕복 1회가 16ms다 — 데이터 양이 아니라 **지연**이라 건수가 곧 시간이다.)
+
 세션이 닫히면 같이 사라지므로 **비우는 코드가 없다.** 지키는 선 둘:
 
 - **정적 마스터만 담는다**(`crops` · `crop_variants` · `crop_stages`). 사용자
@@ -219,6 +233,19 @@ variant_by_id           ×2
 고치려면 `daily_gdd_series` · `crop_interpretation` · `compute_plot_growth` 가
 재배 건을 **인자로 받게** 바꿔야 한다 — 서비스 셋의 시그니처와 호출부 전부가
 움직이는 일이라 따로 잡는다.
+
+**`pest_bulletins_for` 8회 중복** (2026-09-20 발견 · `feature/cultivation-detail`).
+
+작업카드가 작물마다 판정하게 되면서 드러났다. 자정 배치 한 번에 **같은 인자로 8번**
+더 나간다 — 상추 4밭 · 고추 3밭처럼 **같은 작물을 기르는 밭이 많아서**다. 약 0.13초.
+
+담아도 될 조건은 갖췄다. `pest_bulletins` 는 발생정보(2023~2026) 정적 마스터이고,
+`pest_names_for` 가 돌려주는 값은 `tuple[str, ...]` 이라 ORM 객체가 아니다.
+
+**그런데 안 했다.** 조회가 `repo/bulletin.py` 에 있고 그 파일엔 아직 `memo` 를 쓴
+자리가 없다 — 이 절의 판단(무엇을 담고 무엇을 안 담나)을 세운 사람이 정하는 게 맞다고
+보아 넘긴다. 하게 되면 **열쇠에 `today` 를 넣어야 한다**: 이 조회는 월·일로 구간을
+맞추는데, 자정을 넘겨 도는 배치에서 날짜가 바뀐다.
 
 **같은 기간을 두 번 읽는 `temps_since`.** `compute_plot_growth` 는 파종일부터,
 `daily_gdd_series` 는 최근 14일부터 읽는다. 뒤가 앞의 꼬리라 한 번에 읽어 나눌 수
