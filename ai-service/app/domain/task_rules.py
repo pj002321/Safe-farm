@@ -30,6 +30,7 @@ DB·LLM 의존 없음 — app/service/plot_tasks.py 가 값을 모아 여기 함
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 
 from app.domain.korean import 조사
@@ -214,6 +215,39 @@ def harvest_clears_field(crop_name_ko: str, sow_method: str | None) -> bool:
     return sow_method in _PLANTING_METHODS
 
 
+#: 과수인지 가르는 `sow_method` 값. `service/plot_growth.FRUIT_METHODS` 와 같다.
+#:
+#: ⚠ **domain 은 DB 를 안 보므로 여기에도 적는다.** 두 벌이지만 값이 둘뿐이고
+#:   `_PLANTING_METHODS` 와 나란히 있어야 "심는 말 / 기점 낱말" 의 대비가 보인다.
+_FRUIT_METHODS = frozenset({"발아", "개화"})
+
+#: 단계 이름이 이것을 품으면 **거둘 때**다.
+#:
+#: ⚠ `수확보`(체리의 '착과수확보')는 수확이 아니다 — `cropping.수확아님` 과 같은 함정이라
+#:   여기서도 뺀다.
+_수확단계말 = ("수확", "성숙", "착색")
+_수확아님 = ("수확보", "수확확보", "수확예정")
+
+
+def 과수수확중(inputs: PlotTaskInputs) -> bool:
+    """과수가 지금 **거둘 단계**인가.
+
+    ⚠ 한해살이의 수확 판정(`gdd_target_passed` + 밭이 비나 + 위성)을 과수에 쓸 수
+      없어서 따로 둔다 — 위 ★ 참고. 여기서는 **단계 이름 하나**만 본다.
+    """
+    if (inputs.sow_method or "").strip() not in _FRUIT_METHODS:
+        return False
+    # ⚠ **괄호 안 설명을 떼고 본다.** 단계 이름에 원본의 풀이가 붙어 오는 작물이 있다 —
+    #   참다래 `과실 2차 비대기 (재배환경에 따라 30~40% 비대성숙)` 의 **'비대성숙'** 이
+    #   `성숙` 에 걸려 비대기인데 수확 카드가 떴다(2026-09-21 실측).
+    #   괄호를 떼는 것은 crop-data 쪽 숙제다(`이슈/과수_원본자료_공백_다섯.md` ③).
+    #   여기서는 **읽는 쪽이 방어**한다 — 마스터가 고쳐져도 이 줄은 해롭지 않다.
+    이름 = re.sub(r"\s*[(（].*", "", inputs.stage_name or "").strip()
+    if any(w in 이름 for w in _수확아님):
+        return False
+    return any(w in 이름 for w in _수확단계말)
+
+
 # ─────────────────────────────────────────────────────────────────────
 # 농작업 갈래 → 카드 한 장.
 #
@@ -237,6 +271,35 @@ _작업문구: dict[str, tuple[str, str]] = {
     "수확후": ("거둔 뒤 정리", "남은 줄기와 뿌리를 걷어 내면 이듬해 병이 줄어듭니다."),
 }
 
+#: **과수일 때 갈아 끼우는 문구.** 없는 갈래는 위 표를 그대로 쓴다.
+#:
+#: ★ 2026-09-21 — crop-data 의 갈래는 **한해살이 기준으로 묶여 있다.**
+#:   과수에서 흔한 일이 엉뚱한 이름으로 나왔다 (실측: 전정 25건 · 봉지 6건 · 유인 11건).
+#:
+#:       원본 '전정'   → 갈래 `순지르기`("순지르기|적심|정지|전정|눈솎기|곁순")
+#:                      → 화면 "사과 순 지르기"   ⚠ 순 지르기는 곁순 따기다. 가지치기가 아니다
+#:       원본 '봉지'   → 갈래 `솎기`("…|꽃솎|봉지|열매양")
+#:                      → 화면 "사과 솎아 주기"   ⚠ 뜻이 아예 다르다
+#:       원본 '유인'   → 갈래 `지주`("받침대|지주|네트|유인")
+#:                      → 화면 "사과 지주 세우기" ⚠ 나무는 세우는 게 아니라 가지를 눕힌다
+#:
+#: ⚠ **갈래를 새로 파지 않는다.** crop-data 에 갈래를 더하면 CSV 계약이 바뀌고
+#:   재빌드·재시딩·재임베딩이 따라온다. 갈래는 그대로 두고 **읽는 쪽에서 말만** 고른다.
+#:
+#: ⚠ 한 갈래에 둘이 섞여 있다(`전정`+`적심` · `봉지`+`솎기`). 과수에서는 앞쪽이
+#:   압도적이라 그쪽으로 말한다 — **둘을 가를 자료가 없다.** 가르려면 crop-data 가
+#:   갈래를 쪼개야 한다(`이슈/과수_원본자료_공백_다섯.md` 에 남긴다).
+_작업문구_과수: dict[str, tuple[str, str]] = {
+    "순지르기": ("가지 치기", "묵은 가지와 웃자란 가지를 쳐 주면 볕과 바람이 듭니다."),
+    "솎기": (
+        "열매 솎기·봉지 씌우기",
+        "너무 많이 달리면 알이 잘아집니다. 봉지를 씌울 때이기도 합니다.",
+    ),
+    "지주": ("가지 유인·받치기", "열매 무게로 가지가 찢어지지 않게 묶거나 받쳐 주세요."),
+    "수확후": ("거둔 뒤 정리", "떨어진 열매와 잎을 걷어 내면 이듬해 병이 줄어듭니다."),
+    "피복": ("덮어 주기", "뿌리 언 피해를 막게 밑동을 덮어 주세요."),
+}
+
 #: 병해충 카드가 대신 내는 갈래
 _방제 = "방제"
 
@@ -249,9 +312,12 @@ def _work_candidates(inputs: PlotTaskInputs) -> list[TaskCandidate]:
       카드가 묻힌다.
     """
     머리 = f"{inputs.stage_name} 때 하는 일이에요. " if inputs.stage_name else ""
+    # 과수는 같은 갈래라도 하는 일이 다르다 — `_작업문구_과수` 의 ★ 참고
+    과수 = (inputs.sow_method or "").strip() in _FRUIT_METHODS
     나온것: list[TaskCandidate] = []
     for 갈래 in inputs.stage_tasks:
-        if (문구 := _작업문구.get(갈래)) is None:
+        문구 = (_작업문구_과수.get(갈래) if 과수 else None) or _작업문구.get(갈래)
+        if 문구 is None:
             continue
         제목, 까닭 = 문구
         나온것.append(TaskCandidate(f"{inputs.crop_name_ko} {제목}", f"{머리}{까닭}", "low"))
@@ -547,7 +613,30 @@ def build_task_candidates(inputs: PlotTaskInputs) -> list[TaskCandidate]:
     #       목표 넘음 + 아직 푸름  →  다 익었는데 밭에 있다   ← 여기만 낸다
     #       목표 넘음 + 안 푸름   →  이미 거뒀다             → 침묵
     #       목표 아직  + 푸름     →  자라는 중               → 침묵
-    if (
+    #   ★ 2026-09-21 — **과수는 다른 길로 낸다.** 위 셋을 그대로 대면 영영 안 나온다:
+    #     `harvest_clears_field` 가 거짓이고(나무는 거둬도 밭에 남는다),
+    #     `crop_is_standing` 은 늘 참이다(잎이 그대로라 거둔 뒤를 못 가른다).
+    #     그 둘은 **한해살이용 자**다 — 밭이 비는지로 수확을 재는 방식이라
+    #     과수에는 쓸 수가 없다.
+    #
+    #     대신 **단계 이름**을 본다. 과수 단계표는 기점~수확까지만 담고(교안 §3-2)
+    #     마지막이 수확류다 — 지금 그 단계에 있다는 것이 곧 "딸 때" 다.
+    #
+    #     ⚠ `gdd_target_passed` 를 안 쓴다. 감귤은 수확기가 11-05~12-25 로 7주인데
+    #       목표를 11월 10일에 다 채운다. 그걸로 내면 45일 내내 같은 카드가 뜬다
+    #       (`이슈/과수_GDD모델의_한계_셋.md` ①).
+    if 과수수확중(inputs):
+        candidates.append(
+            TaskCandidate(
+                title=f"{inputs.crop_name_ko} 거둘 때 살펴보기",
+                reason=(
+                    f"{inputs.stage_name} 때예요. 나무마다 익는 속도가 달라 "
+                    "한 번에 다 거두지 않습니다. 밭에 나가 여문 것부터 살펴보세요."
+                ),
+                priority="high",
+            )
+        )
+    elif (
         inputs.gdd_target_passed
         and harvest_clears_field(inputs.crop_name_ko, inputs.sow_method)
         and crop_is_standing(inputs.vegetation.ndvi)
