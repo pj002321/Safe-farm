@@ -723,15 +723,18 @@ export const aiService = {
     lon: number,
     crops: { cropId: number; sowDate: string | null }[],
   ) =>
-    call<{ recommendations: VariantRecommendation[] }>("/v1/recommend/variant", {
-      method: "POST",
-      body: JSON.stringify({
-        lat,
-        lon,
-        crops: crops.map((c) => ({ crop_id: c.cropId, sow_date: c.sowDate })),
-      }),
-      timeoutMs: RECOMMEND_TIMEOUT_MS,
-    }),
+    call<{ recommendations: VariantRecommendation[] }>(
+      "/v1/recommend/variant",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          lat,
+          lon,
+          crops: crops.map((c) => ({ crop_id: c.cropId, sow_date: c.sowDate })),
+        }),
+        timeoutMs: RECOMMEND_TIMEOUT_MS,
+      },
+    ),
   /**
    * 그 좌표 그 날짜 하루치 날씨. **영농일지가 저장할 때 한 번 부른다.**
    *

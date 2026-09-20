@@ -70,23 +70,53 @@ const ACCOUNTS = [
     email: "poc1@safefarm.app",
     nameKo: "상주 배추 농가",
     plots: [
-      { name: "윗배추밭", crop: "배추", maturity: "MID", daysAgo: 55, ...at("상주") },
-      { name: "아랫배추밭", crop: "배추", maturity: "LATE", daysAgo: 30, ...at("상주") },
+      {
+        name: "윗배추밭",
+        crop: "배추",
+        maturity: "MID",
+        daysAgo: 55,
+        ...at("상주"),
+      },
+      {
+        name: "아랫배추밭",
+        crop: "배추",
+        maturity: "LATE",
+        daysAgo: 30,
+        ...at("상주"),
+      },
     ],
   },
   {
     email: "poc2@safefarm.app",
     nameKo: "김제 벼 농가",
     plots: [
-      { name: "너른논", crop: "벼", maturity: "MID", daysAgo: 120, ...at("김제") },
-      { name: "다락논", crop: "벼", maturity: "LATE", daysAgo: 100, ...at("김제") },
+      {
+        name: "너른논",
+        crop: "벼",
+        maturity: "MID",
+        daysAgo: 120,
+        ...at("김제"),
+      },
+      {
+        name: "다락논",
+        crop: "벼",
+        maturity: "LATE",
+        daysAgo: 100,
+        ...at("김제"),
+      },
     ],
   },
   {
     email: "poc3@safefarm.app",
     nameKo: "제천 밭작물 농가",
     plots: [
-      { name: "유채밭", crop: "유채", maturity: "MID", daysAgo: 70, ...at("제천") },
+      {
+        name: "유채밭",
+        crop: "유채",
+        maturity: "MID",
+        daysAgo: 70,
+        ...at("제천"),
+      },
       { name: "팥밭", crop: "팥", maturity: "MID", daysAgo: 60, ...at("제천") },
     ],
   },
@@ -94,16 +124,40 @@ const ACCOUNTS = [
     email: "poc4@safefarm.app",
     nameKo: "안동 보리 농가",
     plots: [
-      { name: "앞보리밭", crop: "보리", maturity: "MID", daysAgo: 90, ...at("안동") },
-      { name: "뒷배추밭", crop: "배추", maturity: "EARLY", daysAgo: 40, ...at("안동") },
+      {
+        name: "앞보리밭",
+        crop: "보리",
+        maturity: "MID",
+        daysAgo: 90,
+        ...at("안동"),
+      },
+      {
+        name: "뒷배추밭",
+        crop: "배추",
+        maturity: "EARLY",
+        daysAgo: 40,
+        ...at("안동"),
+      },
     ],
   },
   {
     email: "poc5@safefarm.app",
     nameKo: "나주 복합 농가",
     plots: [
-      { name: "벼논", crop: "벼", maturity: "EARLY", daysAgo: 110, ...at("나주") },
-      { name: "유채밭", crop: "유채", maturity: "LATE", daysAgo: 80, ...at("나주") },
+      {
+        name: "벼논",
+        crop: "벼",
+        maturity: "EARLY",
+        daysAgo: 110,
+        ...at("나주"),
+      },
+      {
+        name: "유채밭",
+        crop: "유채",
+        maturity: "LATE",
+        daysAgo: 80,
+        ...at("나주"),
+      },
       { name: "팥밭", crop: "팥", maturity: "MID", daysAgo: 45, ...at("나주") },
     ],
   },
@@ -112,11 +166,46 @@ const ACCOUNTS = [
 /** 시군구 좌표·격자·행정코드. 관측소가 가까운 곳으로 골랐다. */
 function at(regionKo) {
   const REGIONS = {
-    상주: { latitude: 36.41, longitude: 128.16, grid_x: 81, grid_y: 102, region_code: "47250", region_ko: "경상북도 상주시" },
-    김제: { latitude: 35.80, longitude: 126.88, grid_x: 59, grid_y: 89, region_code: "45210", region_ko: "전라북도 김제시" },
-    제천: { latitude: 37.13, longitude: 128.19, grid_x: 81, grid_y: 123, region_code: "43150", region_ko: "충청북도 제천시" },
-    안동: { latitude: 36.57, longitude: 128.73, grid_x: 91, grid_y: 106, region_code: "47170", region_ko: "경상북도 안동시" },
-    나주: { latitude: 35.02, longitude: 126.71, grid_x: 56, grid_y: 71, region_code: "46170", region_ko: "전라남도 나주시" },
+    상주: {
+      latitude: 36.41,
+      longitude: 128.16,
+      grid_x: 81,
+      grid_y: 102,
+      region_code: "47250",
+      region_ko: "경상북도 상주시",
+    },
+    김제: {
+      latitude: 35.8,
+      longitude: 126.88,
+      grid_x: 59,
+      grid_y: 89,
+      region_code: "45210",
+      region_ko: "전라북도 김제시",
+    },
+    제천: {
+      latitude: 37.13,
+      longitude: 128.19,
+      grid_x: 81,
+      grid_y: 123,
+      region_code: "43150",
+      region_ko: "충청북도 제천시",
+    },
+    안동: {
+      latitude: 36.57,
+      longitude: 128.73,
+      grid_x: 91,
+      grid_y: 106,
+      region_code: "47170",
+      region_ko: "경상북도 안동시",
+    },
+    나주: {
+      latitude: 35.02,
+      longitude: 126.71,
+      grid_x: 56,
+      grid_y: 71,
+      region_code: "46170",
+      region_ko: "전라남도 나주시",
+    },
   };
   const r = REGIONS[regionKo];
   if (!r) throw new Error(`좌표를 모르는 지역: ${regionKo}`);
@@ -132,17 +221,21 @@ function daysAgoIso(days) {
 async function findOrCreateUser(email) {
   // listUsers 는 페이지 단위다. POC 계정은 앞쪽에 몰려 있지 않을 수 있어
   // 넉넉히 받는다 — 못 찾고 createUser 로 가면 중복 이메일로 실패한다.
-  const { data, error } = await supabase.auth.admin.listUsers({ page: 1, perPage: 1000 });
+  const { data, error } = await supabase.auth.admin.listUsers({
+    page: 1,
+    perPage: 1000,
+  });
   if (error) throw error;
 
   const existing = data.users.find((u) => u.email === email);
   if (existing) return { id: existing.id, created: false };
 
-  const { data: made, error: createError } = await supabase.auth.admin.createUser({
-    email,
-    password: PASSWORD,
-    email_confirm: true,
-  });
+  const { data: made, error: createError } =
+    await supabase.auth.admin.createUser({
+      email,
+      password: PASSWORD,
+      email_confirm: true,
+    });
   if (createError) throw createError;
   return { id: made.user.id, created: true };
 }
@@ -229,14 +322,26 @@ try {
     for (const spec of account.plots) {
       const made = await upsertPlot(id, spec);
       plots.push(made);
-      console.log(`    밭 ${made.name} (${made.crop}/${made.maturity}, 파종 ${made.sowingDate})`);
+      console.log(
+        `    밭 ${made.name} (${made.crop}/${made.maturity}, 파종 ${made.sowingDate})`,
+      );
     }
-    summary.push({ email: account.email, nameKo: account.nameKo, userId: id, plots });
+    summary.push({
+      email: account.email,
+      nameKo: account.nameKo,
+      userId: id,
+      plots,
+    });
   }
 
-  console.log("\n완료. 계정 " + summary.length + "개 / 밭 " +
-    summary.reduce((n, a) => n + a.plots.length, 0) + "곳");
-  console.log("비밀번호: " + PASSWORD);
+  console.log(
+    "\n완료. 계정 " +
+      summary.length +
+      "개 / 밭 " +
+      summary.reduce((n, a) => n + a.plots.length, 0) +
+      "곳",
+  );
+  console.log(`비밀번호: ${PASSWORD}`);
 } catch (error) {
   console.error("실패:", error.message);
   process.exit(1);
