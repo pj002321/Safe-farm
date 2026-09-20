@@ -1,8 +1,8 @@
 import { GoogleIcon, MailIcon } from "@/components/icons";
 import { Badge } from "@/components/shared/Badge";
-import { Button } from "@/components/shared/Button";
 import { Checkbox } from "@/components/shared/Checkbox";
 import { Field } from "@/components/shared/Field";
+import { SubmitButton } from "@/components/shared/SubmitButton";
 import type { Profile } from "@/shared/auth/profile";
 import { formatFarmDate } from "@/shared/utils/format";
 import { WithdrawPanel } from "./WithdrawPanel";
@@ -112,9 +112,9 @@ export function AccountPanel({
         />
 
         <div className="flex flex-wrap items-center gap-3">
-          <Button size="sm" type="submit">
+          <SubmitButton pendingKo="저장하는 중" size="sm">
             저장
-          </Button>
+          </SubmitButton>
           {/* 저장 결과. role 로 알려 스크린리더가 옮겨 가지 않아도 읽게 한다.
               사라지는 토스트를 쓰지 않는 것은 이 저장소의 방침이다. */}
           {saved && (

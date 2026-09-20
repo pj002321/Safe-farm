@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 
 from app.core.db import get_db
 from app.core.security import require_service_token
-from app.models.farm import Plot
+from app.repo.plot import count_plots_of_user, owned_plot
 from app.service.report import (
     build_farm_summary_inputs,
     build_report_input,
@@ -31,7 +31,7 @@ def farm_summary(user_id: uuid.UUID, db: Session = Depends(get_db)) -> dict:
     """사용자의 밭 전체를 아우르는 하루 한 번짜리 AI 총평. 밭이 없으면 NO_PLOTS,
     밭은 있는데 어디서도 생육 근거를 못 만들면 NO_GROWTH_DATA다."""
     try:
-        plot_count = db.query(Plot).filter(Plot.user_id == user_id, Plot.deleted_at.is_(None)).count()
+        plot_count = count_plots_of_user(db, user_id)
         if plot_count == 0:
             return {"available": False, "reason": "NO_PLOTS"}
 
@@ -49,20 +49,11 @@ def farm_summary(user_id: uuid.UUID, db: Session = Depends(get_db)) -> dict:
         return {"available": False, "reason": "GENERATION_FAILED"}
 
 
-def _owned_plot(db: Session, plot_id: uuid.UUID, user_id: uuid.UUID) -> Plot | None:
-    """ask_context.py 의 `_owned_plot` 과 같은 기준 — 남의 밭이거나 지운 밭이면 None."""
-    return (
-        db.query(Plot)
-        .filter(Plot.id == plot_id, Plot.user_id == user_id, Plot.deleted_at.is_(None))
-        .first()
-    )
-
-
 @router.get("/{plot_id}", dependencies=[Depends(require_service_token)])
 def plot_report(plot_id: uuid.UUID, user_id: uuid.UUID, db: Session = Depends(get_db)) -> dict:
     """없는 밭과 남의 밭을 구분해 알리지 않는다 — 둘 다 PLOT_NOT_FOUND 다."""
     try:
-        plot = _owned_plot(db, plot_id, user_id)
+        plot = owned_plot(db, plot_id, user_id)
         if plot is None:
             return {"available": False, "reason": "PLOT_NOT_FOUND"}
 
@@ -70,7 +61,9 @@ def plot_report(plot_id: uuid.UUID, user_id: uuid.UUID, db: Session = Depends(ge
         if report_input is None:
             return {"available": False, "reason": "NO_GROWTH_DATA"}
 
-        payload = get_cached_or_generate_report(db, report_input)
+        # plot 을 같이 넘긴다 — 캐시가 빗나갔을 때만 위성을 부르기 위해서다.
+        # build_report_input 에 넣으면 탭을 열 때마다 왕복이 붙는다(report.py 주석).
+        payload = get_cached_or_generate_report(db, report_input, plot)
         if payload is None:
             return {"available": False, "reason": "GENERATION_FAILED"}
 

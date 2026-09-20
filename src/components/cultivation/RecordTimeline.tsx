@@ -1,4 +1,4 @@
-import { Button } from "@/components/shared/Button";
+import { SubmitButton } from "@/components/shared/SubmitButton";
 import type { TimelineEntry } from "@/features/cultivations/domain/timeline";
 
 /**
@@ -74,9 +74,9 @@ export function RecordTimeline({
                   value={cultivationId}
                 />
                 <input name="eventId" type="hidden" value={entry.id} />
-                <Button size="sm" type="submit" variant="ghost">
+                <SubmitButton pendingKo="지우는 중" size="sm" variant="ghost">
                   지우기
-                </Button>
+                </SubmitButton>
               </form>
             )}
           </li>

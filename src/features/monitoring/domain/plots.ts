@@ -117,26 +117,6 @@ export const PLOTS: readonly PlotProfile[] = [
   },
 ];
 
-/**
- * 오늘 상주의 실측값과 경보.
- *
- * `alertBodyKo` 의 기관명은 시안에 "농진축산진흥청"으로 적혀 있었으나 그런 기관은
- * 없어 **농촌진흥청**으로 고쳤다. 문장의 나머지는 원문 그대로다.
- */
-export const SANGJU_TODAY = {
-  dateKo: "2026-09-13",
-  stationKo: "경북 상주 · 관측소 137",
-  tempMinC: 15.0,
-  tempMaxC: 28.8,
-  rain7dMm: 0.1,
-  gddToday: 15.8,
-  daysToHeading: "8일",
-  harvestKo: "10월 중순",
-  alertKo: "가을가뭄",
-  alertBodyKo:
-    "농촌진흥청 배추 재배 지침의 가을가뭄 대책은 이동식 스프링클러 물주기, 짚 덮기, 살충제 살포입니다. 이레 동안 비가 0.1mm에 그쳤고 낮 기온이 아직 28℃를 넘고 있어 결구적온 15~16℃보다 높습니다. 오늘내일 중 물을 주시는 편이 좋습니다.",
-} as const;
-
 /** 푸터에 밝히는 데이터 출처. 라이선스 표기가 필요한 것은 상세에 적었다. */
 export const DATA_SOURCES: readonly { nameKo: string; detailKo: string }[] = [
   { nameKo: "기상청 API허브", detailKo: "지상관측 / 절기별 작물재해" },

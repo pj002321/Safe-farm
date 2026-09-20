@@ -1,9 +1,5 @@
 import Link from "next/link";
-import {
-  AlertTriangleIcon,
-  ArrowUpRightIcon,
-  CheckIcon,
-} from "@/components/icons";
+import { AlertTriangleIcon, ArrowUpRightIcon } from "@/components/icons";
 import { Badge } from "@/components/shared/Badge";
 import type {
   EmptyTaskReason,
@@ -15,6 +11,7 @@ import type {
   TaskCardData,
 } from "@/features/dashboard/domain/taskSummary";
 import { EmptyTasks } from "./EmptyTasks";
+import { TaskDoneToggle } from "./TaskDoneToggle";
 
 /**
  * ---------------------------------------------
@@ -73,9 +70,13 @@ export function TaskBoard({
   emptyReason,
   toggleTaskAction,
 }: TaskBoardProps) {
-  // 밭은 있는데 오늘 할 일이 하나도 없는 경우. 밭별로 "없음"을 늘어놓으면
-  // 화면만 길어지므로 한 장으로 합쳐서 알린다.
-  if (groups.every((group) => group.open.length + group.done.length === 0)) {
+  // 밭이 하나뿐이고 오늘 할 일도 없는 경우에만 한 장으로 합쳐 알린다. 밭이
+  // 둘 이상이면 밭마다 사정(할 일 없음 vs 판정 못 함)이 다를 수 있어, 하나로
+  // 합치면 다른 밭 얘기가 화면에서 통째로 사라진다 — 밭별 섹션을 그대로 둔다.
+  if (
+    groups.length <= 1 &&
+    groups.every((group) => group.open.length + group.done.length === 0)
+  ) {
     return <EmptyTasks reason={emptyReason} />;
   }
 
@@ -215,14 +216,7 @@ export function TaskCard({
         <form action={toggleTaskAction} className="mt-0.5 shrink-0">
           <input name="taskId" type="hidden" value={task.id} />
           <input name="done" type="hidden" value={(!task.done).toString()} />
-          <button
-            aria-pressed={task.done}
-            className={`grid size-[1.375rem] place-items-center rounded-full border transition-colors duration-150 focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-2 ${task.done ? "border-telemetry bg-telemetry text-accent-on" : "border-border-strong bg-surface text-transparent"}`}
-            type="submit"
-          >
-            <span className="sr-only">{task.titleKo} 완료 표시</span>
-            <CheckIcon className="size-3.5" strokeWidth={3} />
-          </button>
+          <TaskDoneToggle done={task.done} titleKo={task.titleKo} />
         </form>
 
         <div className="min-w-0 flex-1">

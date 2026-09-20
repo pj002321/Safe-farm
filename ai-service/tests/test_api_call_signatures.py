@@ -32,6 +32,7 @@ from app.api import (
     satellite,
     status,
     tasks,
+    typhoon,
     variety,
     weather,
 )
@@ -47,6 +48,7 @@ API_MODULES = (
     satellite,
     status,
     tasks,
+    typhoon,
     variety,
     weather,
 )

@@ -81,7 +81,7 @@ export async function ForecastPanel({
   const result = await aiService.plotForecast(
     selected.latitude,
     selected.longitude,
-    selected.id,
+    { id: selected.id, userId },
   );
 
   if (!result.ok) {

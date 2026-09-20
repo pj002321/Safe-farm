@@ -9,12 +9,11 @@ import csv
 from datetime import datetime
 from functools import lru_cache
 
-from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.config import DATA_DIR
 from app.domain.warn_region import active_wrn_kinds, ancestors, classify_warning
-from app.models.alert import OfficialAlert
+from app.repo.alert import active_in_snapshot, latest_snapshot_at
 from app.service.sigungu_ref import sigungu_code_at
 
 # 참조 CSV. 예전엔 api/map.py 가 들고 있었는데, 특보를 보는 곳이 지도 말고
@@ -45,15 +44,11 @@ def _latest_active_alerts(db: Session) -> tuple[list[dict], datetime | None]:
     official_alerts 는 append-only 라 예전 스냅샷이 계속 쌓인다 — 최신 한 번만 봐야
     해제된 특보가 계속 잡히지 않는다.
     """
-    latest = db.execute(select(func.max(OfficialAlert.fetched_at))).scalar()
+    latest = latest_snapshot_at(db)
     if latest is None:
         return [], None
 
-    rows = db.execute(
-        select(OfficialAlert.reg_id, OfficialAlert.wrn).where(
-            OfficialAlert.fetched_at == latest, OfficialAlert.cmd != "해제"
-        )
-    ).all()
+    rows = active_in_snapshot(db, latest)
     return [{"reg_id": reg_id, "wrn": wrn} for reg_id, wrn in rows], latest
 
 

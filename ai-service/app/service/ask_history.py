@@ -13,6 +13,8 @@ from sqlalchemy.orm import Session
 
 from app.domain.history_context import HISTORY_TURNS, Turn
 from app.models.farm.ask_history import AskHistory
+from app.repo.ask_history import add as add_question
+from app.repo.ask_history import count_since, recent_answered, set_feedback
 
 #: 몇 분 안의 질문까지 같은 대화로 볼지. `ask_history` 에 세션 컬럼이 없어
 #: 시간으로 근사한다 — 없으면 어제 물어본 것이 오늘 질문의 맥락으로 끼어든다.
@@ -22,19 +24,14 @@ SESSION_WINDOW_MINUTES = 30
 def today_ask_count(db: Session, user_id: uuid.UUID) -> int:
     """이 사용자가 오늘(UTC 자정 기준) 보낸 질문 수. 일일 한도 계산용."""
     start_of_day = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
-    return (
-        db.query(AskHistory)
-        .filter(AskHistory.user_id == user_id, AskHistory.created_at >= start_of_day)
-        .count()
-    )
+    return count_since(db, user_id, start_of_day)
 
 
 def record_question(
     db: Session, user_id: uuid.UUID, question: str, message: str | None = None
 ) -> AskHistory:
     """질문 한 건을 이력에 남긴다. message 가 있으면(가드레일 차단 등) 그걸로 답을 대신한다."""
-    history = AskHistory(user_id=user_id, question=question, message=message)
-    db.add(history)
+    history = add_question(db, user_id, question, message)
     db.commit()
     return history
 
@@ -62,11 +59,7 @@ def submit_feedback(
         cleaned = reason.strip()
         values["feedback_reason"] = cleaned or None
 
-    updated = (
-        db.query(AskHistory)
-        .filter(AskHistory.id == history_id, AskHistory.user_id == user_id)
-        .update(values)
-    )
+    updated = set_feedback(db, history_id, user_id, values)
     db.commit()
     return bool(updated)
 
@@ -88,15 +81,5 @@ def recent_turns(
     (ix_ask_history_user_created)를 타므로, 뒤집는 건 여기서 한다.
     """
     since = datetime.now(timezone.utc) - timedelta(minutes=within_minutes)
-    rows = (
-        db.query(AskHistory)
-        .filter(
-            AskHistory.user_id == user_id,
-            AskHistory.created_at >= since,
-            AskHistory.message.is_(None),
-        )
-        .order_by(AskHistory.created_at.desc())
-        .limit(limit)
-        .all()
-    )
+    rows = recent_answered(db, user_id, since, limit)
     return [Turn(question=row.question, answer=row.answer) for row in reversed(rows)]

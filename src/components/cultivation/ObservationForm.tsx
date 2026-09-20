@@ -1,4 +1,4 @@
-import { Button } from "@/components/shared/Button";
+import { SubmitButton } from "@/components/shared/SubmitButton";
 import { NOTE_MAX_LENGTH } from "@/features/cultivations/domain/observationNote";
 
 /**
@@ -54,9 +54,9 @@ export function ObservationForm({
         />
       </label>
 
-      <Button size="sm" type="submit">
+      <SubmitButton pendingKo="남기는 중" size="sm">
         기록 남기기
-      </Button>
+      </SubmitButton>
     </form>
   );
 }

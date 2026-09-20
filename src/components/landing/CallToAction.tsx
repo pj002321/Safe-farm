@@ -1,7 +1,11 @@
 import { ArrowRightIcon } from "@/components/icons";
 import { ButtonLink } from "@/components/shared/Button";
 import { Reveal } from "@/components/shared/Reveal";
-import { SANGJU_TODAY } from "@/features/monitoring/domain/plots";
+import { summarizeWeather } from "@/features/monitoring/domain/weatherSeries";
+import { loadWeatherSeries } from "@/features/monitoring/weatherStore";
+import { getDemoPlot } from "@/features/plots/plotStore";
+import { weatherTasks } from "@/shared/growth/taskAdvice";
+import { kstDateString } from "@/shared/utils/kstDate";
 
 /**
  * ---------------------------------------------
@@ -10,9 +14,10 @@ import { SANGJU_TODAY } from "@/features/monitoring/domain/plots";
  * [Description]
  * - 페이지의 끝. 앞에서 계속 "상주는 이렇다"를 보여 줬으니, 여기서는 **그 화면을
  *   당신 밭으로 바꾸는 것**만 말한다. 새 정보를 얹지 않는다.
- * - 문구의 숫자를 손으로 적지 않고 `SANGJU_TODAY` 에서 가져온다. 위쪽 `#today`
- *   섹션과 같은 값을 봐야 하고, 데이터가 갱신될 때 여기만 옛 숫자로 남으면
- *   "꾸며낸 숫자가 하나도 없습니다"라는 그 위의 약속이 곧바로 거짓이 된다.
+ * - 문구의 숫자를 손으로 적지 않고 `getDemoPlot()` 이 가리키는 실제 밭에서 다시
+ *   계산한다. 위쪽 `#today` 섹션과 같은 데모 밭을 봐야 하고, 데이터가 갱신될 때
+ *   여기만 옛 숫자로 남으면 "꾸며낸 숫자가 하나도 없습니다"라는 그 위의 약속이
+ *   곧바로 거짓이 된다.
  * - 배경은 히어로와 같은 `bg-space` 다. 밤하늘로 시작해서 밤하늘로 닫는다 —
  *   라이트 모드에서도 어두운 이유는 이 두 곳이 같은 장면이기 때문이다.
  * - 강조색 대비를 위해 `space-*` 토큰만 쓴다. 일반 `fg` 계열은 라이트 모드에서
@@ -24,7 +29,13 @@ import { SANGJU_TODAY } from "@/features/monitoring/domain/plots";
  * ```
  * ---------------------------------------------
  */
-export function CallToAction() {
+export async function CallToAction() {
+  const plot = await getDemoPlot();
+  const today = kstDateString();
+  const weather = plot ? await loadWeatherSeries(plot, today, 7, 6) : null;
+  const summary = weather ? summarizeWeather(weather.series) : null;
+  const isDry = weatherTasks(summary).some((task) => task.id === "weather-dry");
+
   return (
     <section
       className="relative isolate w-full overflow-hidden bg-space"
@@ -52,18 +63,24 @@ export function CallToAction() {
               aria-hidden="true"
               className="size-1.5 rounded-full bg-telemetry"
             />
-            시범 지역 · {SANGJU_TODAY.stationKo}
+            시범 지역 ·{" "}
+            {weather?.stationNameKo ?? plot?.regionKo ?? "관측소 정보 없음"}
           </p>
 
           <h2 className="text-balance font-semibold text-3xl text-space-fg tracking-tight md:text-display">
-            이레 동안 비가 {SANGJU_TODAY.rain7dMm.toFixed(1)}mm.
+            이레 동안 비가{" "}
+            {summary?.rainfallMm != null ? summary.rainfallMm.toFixed(1) : "—"}
+            mm.
             <br />
             알고 계셨나요?
           </h2>
 
           <p className="max-w-xl text-pretty text-space-muted leading-relaxed">
-            상주의 배추밭은 오늘 물을 줘야 합니다. 밭 하나를 등록하시면 같은
-            계산을 당신의 좌표로 돌려, 내일 아침 첫 리포트를 보내 드립니다.
+            {isDry
+              ? "상주의 배추밭은 오늘 물을 줘야 합니다."
+              : "상주의 배추밭은 지금 물 걱정이 없습니다."}{" "}
+            밭 하나를 등록하시면 같은 계산을 당신의 좌표로 돌려, 내일 아침 첫
+            리포트를 보내 드립니다.
           </p>
 
           <div className="mt-2 flex flex-col items-center gap-3 sm:flex-row">

@@ -5,15 +5,20 @@
 
 ⚠ **복수로 받는다.** 작물 13개의 숙기를 하나씩 조회하면 쿼리가 14번 나간다.
   부모 id 목록을 받아 한 번에 가져오고, 묶는 것은 부르는 쪽이 한다.
+
+단수 조회(`variant_by_id` 등)는 밭 하나를 펼치는 경로용이라 복수로 못 바꾼다.
+대신 **같은 세션 안에서는 같은 인자를 다시 묻지 않는다**(`core/request_cache.memo`).
+이 표들은 정적 마스터라 요청 도중에 바뀌지 않는다 — 캐시가 낼 수 있는 문제가 없다.
 """
 
 from __future__ import annotations
 
 from collections.abc import Sequence
 
-from sqlalchemy import select
+from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
+from app.core.request_cache import memo
 from app.models.farm import Crop, CropDisasterRule, CropStage, CropVariant
 
 
@@ -137,4 +142,192 @@ def disaster_rules_of(db: Session, crop_ids: Sequence[int]) -> list[CropDisaster
             .where(CropDisasterRule.crop_id.in_(crop_ids))
             .order_by(CropDisasterRule.crop_id, CropDisasterRule.rule_kind)
         )
+    )
+
+def variant_by_id(db: Session, variant_id: int) -> CropVariant | None:
+    """
+    # summary
+    숙기(품종) 한 건. 없으면 None.
+
+    복수로 받는 `variants_of` 와 달리 **재배 건 하나를 펼칠 때** 쓴다. 밭 하나를
+    그리는 경로라 후보가 애초에 한 건이다.
+
+    # params
+    db: 세션<br>
+    variant_id: 숙기 id<br>
+
+    # returns
+    CropVariant 또는 None. 마스터를 다시 심는 중이면 None 이 날 수 있다 —
+    부르는 쪽은 그걸 "생육 근거 없음"으로 다루고 터지지 않는다
+
+    # examples
+        variant_by_id(db, 12).gdd_target  -> 1650
+    """
+    return memo(
+        db,
+        ("variant_by_id", variant_id),
+        lambda: db.scalars(select(CropVariant).where(CropVariant.variant_id == variant_id)).first(),
+    )
+
+
+def usable_crop_of_variant(db: Session, variant_id: int) -> Crop | None:
+    """
+    # summary
+    숙기가 가리키는 작물. **기준온도(base_temp)가 비어 있으면 None 이다.**
+
+    ⚠ base_temp 를 여기서 함께 거르는 이유. 이 값은 GDD 의 전제라 없으면 생육을
+      낼 수 없는데 쓰는 곳이 셋이다(daily_gdd_series · crop_interpretation ·
+      compute_plot_growth). 셋 다 이미 `crop is None` 을 검사하므로, 호출부마다
+      가드를 흩뿌리는 대신 조회 한 곳에서 "쓸 수 없는 작물"로 처리한다.
+
+      운영에서 실제로 base_temp 가 빈 작물이 있었고 `float(None)` 이 터지면서
+      자정 배치 전체가 죽었다 — 밭 하나의 결손이 모든 사용자의 할 일을 막았다.
+
+      0 이나 추정값으로 메우지 않는다. 지역 지도용 기본값(`BASE_TEMP_C`)을 끌어
+      쓰면 작물별 값인 척하는 틀린 숫자가 되고, 그 위에서 나온 생육단계와 물·비료
+      카드는 근거가 거짓이 된다.
+
+    # params
+    db: 세션<br>
+    variant_id: 숙기 id<br>
+
+    # returns
+    Crop 또는 None. 숙기가 없거나 · 작물이 없거나 · base_temp 가 비었으면 None.
+    **셋을 구분하지 않는다** — 부르는 쪽은 어느 쪽이든 판정을 보류한다
+
+    # examples
+        usable_crop_of_variant(db, base_temp_없는_숙기)  -> None
+    """
+    def lookup() -> Crop | None:
+        variant = variant_by_id(db, variant_id)
+        if variant is None:
+            return None
+        crop = db.scalars(select(Crop).where(Crop.crop_id == variant.crop_id)).first()
+        if crop is None or crop.base_temp is None:
+            return None
+        return crop
+
+    # 한 요청이 셋(daily_gdd_series · crop_interpretation · compute_plot_growth)에서
+    # 같은 숙기로 부른다. 배치는 밭마다 부르는데 같은 작물을 기르는 밭이 많다.
+    return memo(db, ("usable_crop_of_variant", variant_id), lookup)
+
+
+def stage_at_gdd(db: Session, variant_id: int, accumulated: float) -> CropStage | None:
+    """
+    # summary
+    누적 GDD 가 걸려 있는 생육단계. 단계표를 벗어났으면 None.
+
+    단계 구간은 `[gdd_from, gdd_to)` 다 — 경계값은 **다음 단계**에 든다. 양쪽을
+    닫으면 경계에서 두 단계가 동시에 잡힌다.
+
+    # params
+    db: 세션<br>
+    variant_id: 숙기 id. 작물이 아니라 숙기다 — 같은 작물도 조생·만생이 다르다<br>
+    accumulated: 파종 이후 누적 GDD<br>
+
+    # returns
+    CropStage 또는 None. 마지막 단계의 gdd_to 를 넘었으면(=수확기를 지났으면)
+    None 이다. 단계표가 아직 안 심긴 숙기도 None
+
+    # examples
+        stage_at_gdd(db, 12, 830.0).stage_name  -> '덩이줄기비대기'
+    """
+    return db.scalars(
+        select(CropStage).where(
+            CropStage.variant_id == variant_id,
+            CropStage.gdd_from <= accumulated,
+            CropStage.gdd_to > accumulated,
+        )
+    ).first()
+
+
+def stage_by_order(db: Session, variant_id: int, stage_order: int) -> CropStage | None:
+    """
+    # summary
+    단계 번호로 생육단계 하나. 없으면 None.
+
+    모종으로 심은 재배 건의 **적산 시작점**을 찾는 데 쓴다. 모종은 이미 어느
+    단계까지 자란 상태로 밭에 들어오므로 0 이 아니라 그 단계의 `gdd_from` 부터
+    쌓아야 한다.
+
+    # params
+    db: 세션<br>
+    variant_id: 숙기 id<br>
+    stage_order: 1 부터 매긴 단계 번호<br>
+
+    # returns
+    CropStage 또는 None
+
+    # examples
+        stage_by_order(db, 12, 2).gdd_from  -> 250
+    """
+    return memo(
+        db,
+        ("stage_by_order", variant_id, stage_order),
+        lambda: db.scalars(
+            select(CropStage).where(
+                CropStage.variant_id == variant_id,
+                CropStage.stage_order == stage_order,
+            )
+        ).first(),
+    )
+
+
+def stage_count_and_last_order(db: Session, variant_id: int) -> tuple[int, int | None]:
+    """
+    # summary
+    숙기의 단계 개수와 마지막 단계 번호. `service/plot_growth.py` 가 "지금 단계가
+    마지막인가"를 가리는 데 쓴다.
+
+    # params
+    db: 세션<br>
+    variant_id: 숙기 id<br>
+
+    # returns
+    (단계 개수, 마지막 stage_order). 단계표가 없으면 (0, None)
+
+    # examples
+        stage_count_and_last_order(db, 12)  -> (4, 4)
+    """
+    return db.query(func.count(CropStage.stage_order), func.max(CropStage.stage_order)).filter(
+        CropStage.variant_id == variant_id
+    ).one()
+
+
+def hazard_temp_limits(db: Session, crop_name_ko: str) -> tuple[float | None, float | None]:
+    """
+    # summary
+    작물 전체에 걸린 저온·고온 한계값. `crop_disaster_rules` 에서 단계 구분이 없는
+    (`stage_name` 이 빈) 규칙만 본다.
+
+    ⚠ 여러 규칙이 있으면 저온은 가장 높은 값, 고온은 가장 낮은 값을 고른다 —
+      늦게 알리느니 일찍 알린다.
+
+    # params
+    db: 세션<br>
+    crop_name_ko: 작물 한글명<br>
+
+    # returns
+    (frost_c, heat_c). 규칙이 없으면 (None, None)
+
+    # examples
+        hazard_temp_limits(db, "고추")  -> (2.0, 33.0)
+    """
+    row = db.execute(
+        text("""
+            select
+              max(r.threshold_c) filter (where r.metric = 'ta_min' and r.op = 'lte') as frost,
+              min(r.threshold_c) filter (where r.metric = 'ta_max' and r.op = 'gte') as heat
+              from crop_disaster_rules r
+              join crops c on c.crop_id = r.crop_id
+             where c.name = :crop
+               and coalesce(r.stage_name, '') = ''
+        """),
+        {"crop": crop_name_ko},
+    ).first()
+    if row is None:
+        return None, None
+    return (
+        float(row.frost) if row.frost is not None else None,
+        float(row.heat) if row.heat is not None else None,
     )

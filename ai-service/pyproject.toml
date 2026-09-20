@@ -35,6 +35,9 @@ dependencies = [
     # 한도 계산이 어긋나 조각 뒤가 조용히 잘린다.
     "tiktoken>=0.8",
     "langchain-text-splitters>=0.3",
+    # Windows 는 IANA 시간대 DB 를 안 들고 있어 zoneinfo.ZoneInfo("Asia/Seoul")(app/domain/kst.py)
+    # 가 ZoneInfoNotFoundError 로 죽는다. macOS/Linux 는 시스템에 이미 있어 안 깐다.
+    "tzdata>=2025.1; sys_platform == 'win32'",
 ]
 
 [project.optional-dependencies]
