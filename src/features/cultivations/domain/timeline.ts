@@ -66,6 +66,8 @@ export interface TimelineEventRow {
   createdAt: string;
   /** 농사로의 "활동유형". 고르지 않았으면 null. */
   workKind: string | null;
+  /** `TASK_DONE` 카드에 적은 한 줄. 안 적었으면 null. */
+  taskNote: string | null;
   /** 그날 AI 리포트 글. 그날 첫 `TASK_DONE` 에만 있다. */
   adviceText: string | null;
   weather: EntryWeather;
@@ -99,6 +101,13 @@ export interface TimelineEntry {
    * 무엇을 했나다. 둘을 합치면 `EVENT_TITLE` 을 보는 §6-다 쪽과 엉킨다.
    */
   workKindKo: string | null;
+  /**
+   * 담은 카드에 적은 한 줄. `TASK_DONE` 말고는 전부 null 이다.
+   *
+   * `bodyKo`(= 카드 제목)와 따로 둔다. 한 칸에 몰아넣으면 `hideDoneToday` 가
+   * 제목으로 거르지 못해 눌러 둔 카드가 다시 뜬다.
+   */
+  taskNoteKo: string | null;
   /**
    * **적은 시각**(ISO). 재배 컬럼에서 온 줄(파종·수확·중단)은 null 이다 — 그 셋은
    * 행이 아니라 상태라 "언제 적었나" 가 없다.
@@ -164,6 +173,7 @@ function fromCultivation(
       bodyKo: null,
       stageOrder: null,
       workKindKo: null,
+      taskNoteKo: null,
       createdAtIso: null,
       adviceTextKo: null,
       weather: null,
@@ -179,6 +189,7 @@ function fromCultivation(
       bodyKo: null,
       stageOrder: null,
       workKindKo: null,
+      taskNoteKo: null,
       createdAtIso: null,
       adviceTextKo: null,
       weather: null,
@@ -194,6 +205,7 @@ function fromCultivation(
       bodyKo: failureReasonKo(cultivation.failureReason),
       stageOrder: null,
       workKindKo: null,
+      taskNoteKo: null,
       createdAtIso: null,
       adviceTextKo: null,
       weather: null,
@@ -218,6 +230,7 @@ function fromEvent(event: TimelineEventRow): TimelineEntry {
         : event.body,
     stageOrder: event.stageOrder,
     workKindKo: event.workKind,
+    taskNoteKo: event.taskNote,
     createdAtIso: event.createdAt,
     adviceTextKo: event.adviceText,
     weather: event.weather,

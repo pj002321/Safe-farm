@@ -14,6 +14,7 @@ import { GrowthGauge } from "@/components/shared/GrowthGauge";
 import { SectionHeading } from "@/components/shared/SectionHeading";
 import { loadCultivationDetail } from "@/features/cultivations/detailStore";
 import { cardTitle } from "@/features/cultivations/domain/cultivationCard";
+import { pickedFromQuery } from "@/features/cultivations/domain/pickedTasks";
 import { summarizeWeather } from "@/features/monitoring/domain/weatherSeries";
 import {
   loadForecastTemps,
@@ -26,7 +27,6 @@ import { harvestCultivation } from "../../actions";
 import {
   addObservation,
   addStage,
-  completeTask,
   failCultivation,
   overrideStage,
   removeEvent,
@@ -46,6 +46,10 @@ import {
  *   각자 `new Date()` 를 읽으면 서버와 브라우저가 다른 날을 그린다.
  * - 수확은 밭 상세의 액션(`../../actions`)을 그대로 쓴다. 같은 일을 두 벌로
  *   두면 한쪽만 고쳐진다.
+ * - `했음` 으로 담아 둔 카드는 **주소(`?picked=`)에 산다.** 화면이 상태를 들면
+ *   Client Component 가 되는데, 이 화면은 JS 가 0줄인 것이 성질이다. 여기서
+ *   한 번 읽어 할 일 목록과 관찰 기록에 같이 내린다 — 두 곳이 같은 목록을
+ *   봐야 한쪽에서 사라진 카드가 다른 쪽에 나타난다.
  * ---------------------------------------------
  */
 
@@ -87,7 +91,9 @@ export default async function Page({
     detail.stages.map((stage) => [stage.stageOrder, stage.stageNameKo]),
   );
 
-  const { error, saved } = await searchParams;
+  const { error, saved, picked: pickedRaw } = await searchParams;
+  // 지금 뜨는 카드에 있는 제목만 통과시킨다. 주소를 손으로 고쳐도 안 들어온다.
+  const picked = pickedFromQuery(pickedRaw, detail.tasks);
 
   return (
     <main className="mx-auto flex max-w-2xl flex-col gap-6 px-6 py-6 sm:py-8">
@@ -178,13 +184,7 @@ export default async function Page({
 
       {!ended && (
         <Card title="이번 주 할 일">
-          <TaskAdviceList
-            cultivationId={card.id}
-            currentStageOrder={gauge?.stage?.stageOrder ?? null}
-            onDone={completeTask}
-            plotId={plot.id}
-            tasks={detail.tasks}
-          />
+          <TaskAdviceList picked={picked} tasks={detail.tasks} />
         </Card>
       )}
 
@@ -194,6 +194,7 @@ export default async function Page({
             cultivationId={card.id}
             currentStageOrder={gauge?.stage?.stageOrder ?? null}
             onSubmit={addObservation}
+            picked={picked}
             plotId={plot.id}
             today={today}
           />

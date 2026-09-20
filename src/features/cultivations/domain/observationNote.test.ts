@@ -68,4 +68,26 @@ describe("parseNote", () => {
 
     expect(result.ok).toBe(true);
   });
+
+  it("담은 할 일이 있으면 빈 메모도 통과하고 body 가 null 이다", () => {
+    const result = parseNote({
+      body: "  ",
+      occurredOn: TODAY,
+      today: TODAY,
+      bodyOptional: true,
+    });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.body).toBeNull();
+  });
+
+  it("담은 할 일이 있어도 앞날짜는 막는다", () => {
+    const result = parseNote({
+      occurredOn: "2099-01-01",
+      today: TODAY,
+      bodyOptional: true,
+    });
+
+    expect(result.ok).toBe(false);
+  });
 });

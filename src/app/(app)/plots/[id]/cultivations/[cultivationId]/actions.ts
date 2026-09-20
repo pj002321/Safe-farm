@@ -10,11 +10,16 @@ import {
 } from "@/features/cultivations/domain/diaryFields";
 import { parseFailureReason } from "@/features/cultivations/domain/failureReason";
 import { parseNote } from "@/features/cultivations/domain/observationNote";
+import {
+  TASK_NOTE_MAX_LENGTH,
+  taskNoteField,
+} from "@/features/cultivations/domain/pickedTasks";
 import { parseUserStage } from "@/features/cultivations/domain/userStage";
 import {
   type EventInput,
   hasEventOn,
   insertCultivationEvent,
+  insertCultivationEvents,
   softDeleteCultivationEvent,
 } from "@/features/cultivations/eventStore";
 import { getPlotDetail } from "@/features/plots/plotStore";
@@ -87,8 +92,12 @@ async function diaryWeather(
  * `delete from advices where advice_date = current_date` 를 돌리는데, 조인이면
  * 그 순간 과거 일지에서도 글이 사라진다.
  *
- * ⚠️ **하루에 한 번만 박는다.** 같은 날 카드를 여럿 누르면 같은 글이 여러 행에
+ * ⚠️ **하루에 한 번만 박는다.** 같은 날 카드를 여럿 담으면 같은 글이 여러 행에
  *    복사된다. 일지를 읽을 때 그날 행 중 하나에서 찾으면 된다.
+ *
+ * ⚠️ **저장 루프 안에서 부르지 말 것.** 장바구니는 `TASK_DONE` 을 한 번에 여러 줄
+ *    넣는다. 줄마다 부르면 첫 줄이 들어간 뒤로는 `hasEventOn` 이 참이 되어
+ *    판정이 줄마다 달라진다 — 한 번 묻고 그 답을 첫 줄에만 쓴다.
  *
  * ⚠️ **없으면 만들지 않는다.** 리포트를 아직 안 본 날은 그냥 빈칸이다 — 교안이
  *    말한 것은 "리포트를 출력할 경우" 같이 저장하라는 것이지, 누를 때마다
@@ -101,8 +110,14 @@ async function dayFirstAdvice(
   today: string,
 ): Promise<string | null> {
   try {
-    if (await hasEventOn(cultivationId, "TASK_DONE", today)) return null;
-    return await adviceSummaryOn(cultivationId, today);
+    // ⚠ **나란히 묻는다.** 앞의 답을 보고 뒤를 부르면 왕복이 둘로 늘어나는데,
+    //   흔한 쪽이 "그날 첫 줄"(= 둘 다 필요)이라 늘 두 번을 다 쓰게 된다.
+    //   리포트를 헛읽는 쪽은 그날 두 번째부터이고, 그때도 시간은 한 번치다.
+    const [already, summary] = await Promise.all([
+      hasEventOn(cultivationId, "TASK_DONE", today),
+      adviceSummaryOn(cultivationId, today),
+    ]);
+    return already ? null : summary;
   } catch (error) {
     console.error("[cultivation] 그날 리포트 붙이기 실패", error);
     return null;
@@ -117,6 +132,33 @@ function fail(path: string, message: string): never {
 function readText(formData: FormData, key: string): string {
   const raw = formData.get(key);
   return typeof raw === "string" ? raw.trim() : "";
+}
+
+/**
+ * 담아 온 카드 제목들. 비었거나 겹치는 것은 버린다.
+ *
+ * 폼이 주는 값이라 믿지 않는다 — 화면이 목록에 있는 제목만 담게 하지만
+ * (`pickedFromQuery`), 액션은 그 화면을 거치지 않고도 불릴 수 있다. 제목은
+ * 본문 길이(100자)로 잘리고 개수는 `MAX_PICKED` 로 막는다. 남의 재배에 넣는 것은
+ * `openContext` 가 이미 막았으므로 여기서 더 볼 것은 양뿐이다.
+ */
+const MAX_PICKED = 20;
+
+function pickedTitles(formData: FormData): readonly string[] {
+  const seen = new Set<string>();
+  for (const raw of formData.getAll("pickedTitle")) {
+    if (typeof raw !== "string") continue;
+    const title = raw.trim().slice(0, 100);
+    if (title.length > 0) seen.add(title);
+    if (seen.size >= MAX_PICKED) break;
+  }
+  return [...seen];
+}
+
+/** 그 카드에 적은 한 줄. 안 적었으면 null — 빈 문자열을 넣지 않는다. */
+function taskNoteOf(formData: FormData, titleKo: string): string | null {
+  const note = readText(formData, taskNoteField(titleKo));
+  return note.length === 0 ? null : note.slice(0, TASK_NOTE_MAX_LENGTH);
 }
 
 /** 1 이상 정수면 그 값, 아니면 null. 빠진 칸과 0 을 같이 거른다. */
@@ -151,79 +193,85 @@ async function openContext(formData: FormData): Promise<{
 }
 
 /**
- * 관찰 기록(메모)을 남긴다.
+ * 관찰 기록을 남긴다. **한 번에 메모 한 줄 + 담은 카드마다 한 줄.**
+ *
+ * `이번 주 할 일` 의 `했음` 은 저장하지 않는다(2026-09-21 뒤집음). 카드를 이
+ * 폼으로 옮겨 담기만 하고, 실제로 행이 생기는 곳은 여기 하나다.
+ *
+ * ⚠️ **메모가 비어도 담은 카드가 있으면 통과시킨다.** 그때 `NOTE` 줄은 만들지
+ *    않는다 — 전에 `했음` 한 번으로 끝나던 일에 메모를 강요하지 않기 위해서다.
+ *    둘 다 비면 `parseNote` 가 막는다.
+ *
+ * ⚠️ **`TASK_DONE` 의 `body` 에는 카드 제목만 넣는다.** `hideDoneToday` 가 그
+ *    글자로 오늘 담은 카드를 목록에서 거른다. 카드별 메모는 `task_note` 로 간다.
  *
  * 사진은 받지 않는다. 업로드는 AI 사진 분석과 한 묶음이라 그 브랜치로 미뤘다.
  */
 export async function addObservation(formData: FormData): Promise<void> {
-  const { cultivationId, path, plot } = await openContext(formData);
+  const { plotId, cultivationId, path, plot } = await openContext(formData);
 
-  const occurredOn = readText(formData, "occurredOn") || kstDateString();
+  const picked = pickedTitles(formData);
   const parsed = parseNote({
     body: readText(formData, "body"),
-    occurredOn,
+    occurredOn: readText(formData, "occurredOn") || kstDateString(),
     today: kstDateString(),
+    bodyOptional: picked.length > 0,
   });
   if (!parsed.ok) fail(path, parsed.messageKo);
 
-  const weather = await diaryWeather(plot, parsed.value.occurredOn);
+  const { body, occurredOn } = parsed.value;
+  // 화면이 계산해 둔 단계를 폼으로 받아 그대로 박는다. 여기서 다시 구하면
+  // 관측·평년값을 또 읽어야 한다. 숫자가 아니면 빈 채로 둔다.
+  const stageOrder = positiveInt(formData.get("stageOrder"));
+  const skyKo = pickSkyKind(formData.get("skyKo"));
 
-  try {
-    await insertCultivationEvent(cultivationId, {
+  // 한 번에 들어가는 줄들이라 날씨도 리포트도 **한 번만** 구한다. 줄마다 부르면
+  // 같은 값을 여러 번 받아 오고, 리포트 쪽은 답까지 달라진다.
+  const [weather, adviceText] = await Promise.all([
+    diaryWeather(plot, occurredOn),
+    picked.length === 0 ? null : dayFirstAdvice(cultivationId, occurredOn),
+  ]);
+
+  // ⚠ **한 번에 넣는다.** 줄마다 넣으면 왕복이 그 수만큼 늘고, 중간에 실패했을 때
+  //   앞 줄들이 이미 들어가 있다. 사용자는 "저장하지 못했습니다" 를 보고 다시
+  //   누르는데 그러면 앞 줄이 두 번 저장된다.
+  const rows: EventInput[] = [];
+  if (body !== null) {
+    rows.push({
       kind: "NOTE",
-      occurredOn: parsed.value.occurredOn,
-      body: parsed.value.body,
-      // 화면이 계산해 둔 단계를 폼으로 받아 그대로 박는다. 여기서 다시 구하면
-      // 관측·평년값을 또 읽어야 한다. 숫자가 아니면 빈 채로 둔다.
-      stageOrder: positiveInt(formData.get("stageOrder")),
+      occurredOn,
+      body,
+      stageOrder,
       workKind: pickWorkKind(formData.get("workKind")),
-      skyKo: pickSkyKind(formData.get("skyKo")),
+      skyKo,
       weather,
     });
+  }
+  for (const [index, titleKo] of picked.entries()) {
+    rows.push({
+      kind: "TASK_DONE",
+      occurredOn,
+      body: titleKo,
+      // 한 일은 카드 제목이 곧 그것이라 work_kind 를 따로 받지 않는다.
+      stageOrder,
+      skyKo,
+      taskNote: taskNoteOf(formData, titleKo),
+      // 그날 리포트는 첫 줄에만. 나머지에 복사하면 같은 글이 여러 번 나온다.
+      adviceText: index === 0 ? adviceText : null,
+      weather,
+    });
+  }
+
+  try {
+    await insertCultivationEvents(cultivationId, rows);
   } catch {
     fail(path, "기록을 저장하지 못했습니다. 새로 고친 뒤 다시 시도해 주세요.");
   }
 
+  // 담은 카드가 있으면 밭 목록의 카드도 달라진다(그날 할 일에서 빠진다).
+  if (picked.length > 0) revalidatePath(`/plots/${plotId}`);
   revalidatePath(path);
   redirect(`${path}?saved=note`);
-}
-
-/**
- * 추천 작업을 했다고 표시한다.
- *
- * 작업 이름을 폼에서 받아 그대로 본문에 넣는다. 추천 목록은 규칙이 매번 다시
- * 만드는 값이라 id 를 저장해도 나중에 가리킬 대상이 없다.
- */
-export async function completeTask(formData: FormData): Promise<void> {
-  const { plotId, cultivationId, plot, path } = await openContext(formData);
-
-  const titleKo = readText(formData, "titleKo");
-  if (!titleKo) fail(path, "작업 이름이 비어 있습니다.");
-
-  const today = kstDateString();
-  // 관찰 기록과 같은 일지 줄이다. 한쪽만 날씨가 비면 꺼내 볼 때 들쭉날쭉하다.
-  const [adviceText, weather] = await Promise.all([
-    dayFirstAdvice(cultivationId, today),
-    diaryWeather(plot, today),
-  ]);
-
-  try {
-    await insertCultivationEvent(cultivationId, {
-      kind: "TASK_DONE",
-      occurredOn: today,
-      body: titleKo.slice(0, 100),
-      // 한 일은 카드 제목이 곧 그것이라 work_kind 를 따로 받지 않는다.
-      stageOrder: positiveInt(formData.get("stageOrder")),
-      adviceText,
-      weather,
-    });
-  } catch {
-    fail(path, "기록하지 못했습니다. 새로 고친 뒤 다시 시도해 주세요.");
-  }
-
-  revalidatePath(`/plots/${plotId}`);
-  revalidatePath(path);
-  redirect(`${path}?saved=task`);
 }
 
 /**

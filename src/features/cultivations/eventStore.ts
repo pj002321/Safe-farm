@@ -29,7 +29,7 @@ import type { TimelineEventRow } from "./domain/timeline";
 // ⚠️ 한 줄짜리 리터럴로 둔다. 이어 붙이면 supabase-js 가 select 를 타입 수준에서
 //    못 읽어 결과가 `GenericStringError[]` 로 추론된다.
 const EVENT_SELECT =
-  "id, kind, occurred_on, body, stage_order, forecast_on, created_at, work_kind, sky_ko, advice_text, temp_max_c, temp_min_c, rainfall_mm, humidity_pct, wind_ms, wind_dir_deg, sunrise_at, sunset_at";
+  "id, kind, occurred_on, body, stage_order, forecast_on, created_at, work_kind, sky_ko, task_note, advice_text, temp_max_c, temp_min_c, rainfall_mm, humidity_pct, wind_ms, wind_dir_deg, sunrise_at, sunset_at";
 
 interface EventRow {
   id: string;
@@ -41,6 +41,7 @@ interface EventRow {
   created_at: string;
   work_kind: string | null;
   sky_ko: string | null;
+  task_note: string | null;
   advice_text: string | null;
   temp_max_c: number | null;
   temp_min_c: number | null;
@@ -101,6 +102,7 @@ export async function listCultivationEvents(
         forecastOn: row.forecast_on,
         createdAt: row.created_at,
         workKind: row.work_kind,
+        taskNote: row.task_note,
         adviceText: row.advice_text,
         weather: {
           skyKo: row.sky_ko,
@@ -155,6 +157,13 @@ export interface EventInput {
   /** 사용자가 고른 하늘. 맑음 · 흐림 · 비 · 눈. */
   skyKo?: string | null;
   /**
+   * `TASK_DONE` 카드에 사용자가 적은 한 줄. 안 적으면 빈다 — **빈 것이 정상**이다.
+   *
+   * ⚠️ **`body` 에 이어 붙이지 말 것.** 거기엔 카드 제목만 들어가고,
+   *    `domain/doneTasks.ts` 가 **그 글자로** 오늘 누른 카드를 목록에서 거른다.
+   */
+  taskNote?: string | null;
+  /**
    * 그날 AI 리포트 글. `TASK_DONE` 중 **그날 첫 줄에만** 넣는다.
    *
    * 조인하지 않고 그때 박는 까닭은 `advices` 행이 지워져도 일지에는 남아야
@@ -179,22 +188,11 @@ export interface EventInput {
   } | null;
 }
 
-/**
- * 기록 한 줄을 넣는다.
- *
- * kind 별로 있어야 할 값은 `ck_cultivation_events_payload` 가 막는다. 여기서
- * 다시 검사하지 않는 이유는 검사가 두 곳에 있으면 한쪽만 고쳐지기 때문이다 —
- * 형식 검증은 그 전에 `domain/observationNote.ts` 가 한다.
- */
-export async function insertCultivationEvent(
-  cultivationId: string,
-  input: EventInput,
-): Promise<void> {
-  const supabase = await getSupabaseServer();
-
+/** `EventInput` 하나를 DB 행으로. 한 줄짜리와 여러 줄짜리가 **같은 규칙**을 쓰게 한다. */
+function toRow(cultivationId: string, input: EventInput) {
   const weather = input.weather ?? null;
 
-  const { error } = await supabase.from("cultivation_events").insert({
+  return {
     cultivation_id: cultivationId,
     kind: input.kind,
     occurred_on: input.occurredOn,
@@ -203,6 +201,7 @@ export async function insertCultivationEvent(
     forecast_on: input.forecastOn ?? null,
     work_kind: input.workKind ?? null,
     sky_ko: input.skyKo ?? null,
+    task_note: input.taskNote ?? null,
     advice_text: input.adviceText ?? null,
     temp_max_c: weather?.tempMaxC ?? null,
     temp_min_c: weather?.tempMinC ?? null,
@@ -212,9 +211,41 @@ export async function insertCultivationEvent(
     wind_dir_deg: weather?.windDirDeg ?? null,
     sunrise_at: weather?.sunriseAt ?? null,
     sunset_at: weather?.sunsetAt ?? null,
-  });
+  };
+}
+
+/**
+ * 기록 여러 줄을 **한 번에** 넣는다.
+ *
+ * ★ 장바구니(`했음`)가 카드마다 한 줄씩 넣는다. 줄마다 부르면 왕복이 그 수만큼
+ *   늘고, 더 나쁜 것은 **중간에 실패하면 앞 줄들이 이미 들어가 있다는 것**이다.
+ *   사용자는 "저장하지 못했습니다" 를 보고 다시 누르고, 그러면 앞 줄이 **두 번**
+ *   저장된다. 한 번에 넣으면 전부 되거나 전부 안 된다.
+ *
+ * kind 별로 있어야 할 값은 `ck_cultivation_events_payload` 가 막는다. 여기서
+ * 다시 검사하지 않는 이유는 검사가 두 곳에 있으면 한쪽만 고쳐지기 때문이다 —
+ * 형식 검증은 그 전에 `domain/observationNote.ts` 가 한다.
+ */
+export async function insertCultivationEvents(
+  cultivationId: string,
+  inputs: readonly EventInput[],
+): Promise<void> {
+  if (inputs.length === 0) return;
+
+  const supabase = await getSupabaseServer();
+  const { error } = await supabase
+    .from("cultivation_events")
+    .insert(inputs.map((input) => toRow(cultivationId, input)));
 
   if (error) throw new Error(error.message);
+}
+
+/** 기록 한 줄. 여러 줄이면 `insertCultivationEvents` 를 쓸 것 — 왕복이 하나로 준다. */
+export async function insertCultivationEvent(
+  cultivationId: string,
+  input: EventInput,
+): Promise<void> {
+  await insertCultivationEvents(cultivationId, [input]);
 }
 
 /**

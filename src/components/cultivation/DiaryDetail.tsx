@@ -163,6 +163,15 @@ export function DiaryDetail({ entry }: { entry: TimelineEntry }) {
             byUser: true,
             wide: true,
           },
+          // 담은 할 일 줄에만 값이 있다. 메모와 따로 두는 것은 `bodyKo` 에
+          // 카드 제목이 들어가기 때문이다 — 합치면 그 글자로 카드를 거르는
+          // `hideDoneToday` 가 눌러 둔 카드를 다시 띄운다.
+          {
+            labelKo: "카드 메모",
+            value: entry.taskNoteKo,
+            byUser: true,
+            wide: true,
+          },
         ]}
         noteKo="사용자가 적거나 고른 값"
         titleKo="적은 것"

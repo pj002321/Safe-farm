@@ -1,5 +1,8 @@
 import { Badge } from "@/components/shared/Badge";
-import { SubmitButton } from "@/components/shared/SubmitButton";
+import {
+  pickedHref,
+  withPicked,
+} from "@/features/cultivations/domain/pickedTasks";
 import type { TaskAdvice } from "@/shared/growth/taskAdvice";
 
 /**
@@ -11,24 +14,21 @@ import type { TaskAdvice } from "@/shared/growth/taskAdvice";
  *   가 갖고, 여기는 그리기만 한다.
  * - ⚠️ **약제 이름과 희석배수는 나오지 않는다.** 규칙 쪽에서 막는다 — 틀리면
  *   작물이 죽고, 우리는 그 책임을 질 위치가 아니다.
- * - "했음" 버튼은 기록만 남긴다(`TASK_DONE`). 추천은 매번 다시 계산되는 값이라
- *   체크 상태를 저장할 대상 자체가 없다.
- * - 누른 카드는 **그날 목록에서 빠진다**(`domain/doneTasks.ts`). 제목으로 맞추므로
- *   버튼이 제목을 그대로 넘긴다. 다음날에는 조건이 여전하면 다시 뜬다.
- * - 단계 번호를 같이 넘긴다. 눌린 기록도 영농일지의 한 줄이라 날씨·단계가 붙어야
- *   관찰 기록과 같은 모양이 된다. 화면이 이미 계산해 둔 값이라 조회가 안 늘어난다.
+ * - **`했음` 은 저장하지 않는다**(2026-09-21 뒤집음). 카드를 관찰 기록으로
+ *   옮겨 담기만 하고, 실제로 남는 것은 거기서 `기록 남기기` 를 눌렀을 때다.
+ *   잘못 눌러도 그쪽의 `취소` 로 되돌아온다.
+ * - **버튼이 아니라 링크다.** 담아 둔 상태는 URL 쿼리에 산다(`?picked=`).
+ *   상태를 컴포넌트가 들면 Client Component 가 되는데, 이 화면은 **JS 가 0줄**인
+ *   것이 성질이다. 주소만 바꾸면 서버가 다시 그려 준다.
+ * - 담은 카드는 이 목록에서 빠진다 — 옮겨 갔으니 두 곳에 있으면 안 된다.
+ *   그날 이미 저장된 카드를 빼는 것은 따로다(`domain/doneTasks.ts`, 읽을 때).
  * ---------------------------------------------
  */
 
 export interface TaskAdviceListProps {
   tasks: readonly TaskAdvice[];
-  plotId: string;
-  cultivationId: string;
-  /** 끝난 재배는 버튼을 숨긴다. 기록할 작업이 더 없다. */
-  readOnly?: boolean;
-  /** 지금 판정된 생육단계. 눌린 기록에 같이 박힌다. 판정 못 했으면 null. */
-  currentStageOrder: number | null;
-  onDone: (formData: FormData) => Promise<void>;
+  /** 지금 관찰 기록에 담겨 있는 카드 제목들. 여기서는 빠진다. */
+  picked: readonly string[];
 }
 
 const TONE = {
@@ -37,14 +37,7 @@ const TONE = {
   unsuitable: "unsuitable",
 } as const;
 
-export function TaskAdviceList({
-  tasks,
-  plotId,
-  cultivationId,
-  readOnly = false,
-  currentStageOrder,
-  onDone,
-}: TaskAdviceListProps) {
+export function TaskAdviceList({ tasks, picked }: TaskAdviceListProps) {
   if (tasks.length === 0) {
     return (
       <p className="text-fg-muted text-sm">
@@ -53,12 +46,21 @@ export function TaskAdviceList({
     );
   }
 
+  const left = tasks.filter((task) => !picked.includes(task.titleKo));
+  if (left.length === 0) {
+    return (
+      <p className="text-fg-muted text-sm">
+        할 일을 모두 담았습니다. 아래 관찰 기록에서 남겨 주세요.
+      </p>
+    );
+  }
+
   return (
     <ul className="flex flex-col gap-3">
-      {tasks.map((task) => (
+      {left.map((task) => (
         <li
-          key={task.id}
           className="flex flex-wrap items-start justify-between gap-2 rounded-lg border border-border bg-surface-2 px-4 py-3"
+          key={task.id}
         >
           <div className="flex min-w-0 flex-col gap-1">
             <div className="flex items-center gap-2">
@@ -72,27 +74,12 @@ export function TaskAdviceList({
             <p className="text-fg-muted text-sm">{task.whyKo}</p>
           </div>
 
-          {!readOnly && (
-            <form action={onDone}>
-              <input name="plotId" type="hidden" value={plotId} />
-              <input name="cultivationId" type="hidden" value={cultivationId} />
-              <input name="titleKo" type="hidden" value={task.titleKo} />
-              {currentStageOrder !== null && (
-                <input
-                  name="stageOrder"
-                  type="hidden"
-                  value={currentStageOrder}
-                />
-              )}
-              <SubmitButton
-                pendingKo="기록하는 중"
-                size="sm"
-                variant="secondary"
-              >
-                했음
-              </SubmitButton>
-            </form>
-          )}
+          <a
+            className="rounded-md border border-border bg-surface px-3 py-1.5 font-medium text-fg text-sm hover:bg-surface-2"
+            href={pickedHref(withPicked(picked, task.titleKo))}
+          >
+            했음
+          </a>
         </li>
       ))}
     </ul>

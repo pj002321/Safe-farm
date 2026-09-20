@@ -38,6 +38,7 @@ export const DIARY_CSV_HEADERS = [
   "한 일",
   "날씨",
   "메모",
+  "카드 메모",
   "최고",
   "최저",
   "강수",
@@ -66,6 +67,8 @@ function rowOf(
     w?.skyKo ?? null,
     // 파종·수확·중단 줄은 제목이 곧 내용이라 제목을 싣는다. 나머지는 본문.
     entry.bodyKo ?? entry.titleKo,
+    // `했음` 줄에만 있다. 위 칸에는 카드 제목이 들어가 있어 자리를 나눈다.
+    entry.taskNoteKo,
     w?.tempMaxC ?? null,
     w?.tempMinC ?? null,
     w?.rainfallMm ?? null,

@@ -26,6 +26,7 @@ function note(occurredOn: string, over: Partial<TimelineEntry> = {}) {
     bodyKo: "잎에 구멍",
     stageOrder: 5,
     workKindKo: "방제",
+    taskNoteKo: null,
     createdAtIso: "2026-09-19T11:41:00Z",
     adviceTextKo: null,
     weather: NO_WEATHER,
@@ -62,7 +63,7 @@ describe("diaryCsvRows", () => {
   it("빈 날씨를 0 으로 채우지 않는다 — 안 온 날과 못 찾은 날이 같아진다", () => {
     const row = diaryCsvRows([note("2026-09-19")], CTX)[0];
     // 최고·최저·강수 세 칸
-    expect([row?.[6], row?.[7], row?.[8]]).toEqual([null, null, null]);
+    expect([row?.[7], row?.[8], row?.[9]]).toEqual([null, null, null]);
   });
 
   it("본문이 없으면 제목을 싣는다 — 파종·수확 줄이 그렇다", () => {
@@ -81,6 +82,23 @@ describe("diaryCsvRows", () => {
     )[0];
 
     expect(row?.[5]).toBe("양파 씨 뿌림");
+  });
+
+  it("카드 메모는 메모와 다른 칸에 싣는다 — 합치면 카드 제목이 흐려진다", () => {
+    const row = diaryCsvRows(
+      [
+        note("2026-09-19", {
+          kind: "TASK_DONE",
+          titleKo: "작업 완료",
+          bodyKo: "물주기",
+          taskNoteKo: "호스로 20분",
+        }),
+      ],
+      CTX,
+    )[0];
+
+    expect(row?.[5]).toBe("물주기");
+    expect(row?.[6]).toBe("호스로 20분");
   });
 
   it("칸 수가 머리글과 맞는다", () => {
