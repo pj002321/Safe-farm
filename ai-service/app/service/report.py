@@ -149,7 +149,10 @@ def build_report_input(db: Session, plot: Plot) -> ReportInput | None:
         # ⚠ 직접 부르지 않고 `forecast_cache` 를 지난다. 이 경로는 리포트 탭을 열
         #   때마다 도는데 Next 쪽에 `revalidateSec` 이 없어 매번 나가고 있었다.
         payload = forecast_cache.forecast(
-            float(plot.latitude), float(plot.longitude), past_days=WATER_PAST_DAYS
+            float(plot.latitude),
+            float(plot.longitude),
+            past_days=WATER_PAST_DAYS,
+            cache_key=forecast_cache.grid_cache_key(plot.grid_x, plot.grid_y),
         )
         daily = payload["daily"]
         forecast = normalize_daily_forecast(daily)

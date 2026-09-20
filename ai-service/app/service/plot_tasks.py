@@ -197,11 +197,6 @@ def _recent_rain_mm(db: Session, station_code: str) -> float | None:
 WATER_PAST_DAYS = 14
 
 
-#: 좌표를 묶는 소수점 자리. 2자리면 약 1km 다 — 예보 격자보다 촘촘해서 값이 안 흔들린다.
-#: 실측(2026-09-19): 밭 28개 중 예보가 필요한 10개가 좌표 7개로 묶인다.
-_COORD_NDIGITS = 2
-
-
 #: 미리 받을 때 동시에 나가는 갈래 수.
 #:
 #:   2026-09-19 — **호출을 동시에 내보내 배치를 6.6배 줄였다.**
@@ -231,16 +226,17 @@ class _PlotWeather:
     tomorrow: dict | None = None
 
 
-def _memo_key(plot: Plot) -> tuple[float, float]:
+def _memo_key(plot: Plot) -> tuple:
     """예보 메모의 열쇠. **미리 받는 쪽과 꺼내 쓰는 쪽이 같은 열쇠를 써야 한다** —
     한쪽만 고치면 미리 받아 놓고도 다시 부른다.
 
+    ⚠ **`forecast_cache` 와 같은 열쇠를 쓴다.** 두 층이 "같은 자리" 를 다르게 세면
+      메모는 갈라 놓고 캐시가 도로 합치는 꼴이 된다. 밖으로 나가는 횟수는 같지만
+      어느 층이 무엇을 막았는지 읽을 수 없게 된다.
+
     ⚠ 좌표가 없는 밭에는 못 쓴다. 부르는 쪽이 먼저 거른다.
     """
-    return (
-        round(float(plot.latitude), _COORD_NDIGITS),
-        round(float(plot.longitude), _COORD_NDIGITS),
-    )
+    return forecast_cache.grid_cache_key(plot.grid_x, plot.grid_y)
 
 
 def _plot_weather(plot: Plot, memo: dict | None = None) -> _PlotWeather:
@@ -269,16 +265,22 @@ def _plot_weather(plot: Plot, memo: dict | None = None) -> _PlotWeather:
     if memo is not None and 키 in memo:
         return memo[키]
 
-    결과 = _fetch_plot_weather(float(plot.latitude), float(plot.longitude))
+    결과 = _fetch_plot_weather(float(plot.latitude), float(plot.longitude), 키)
     if memo is not None:
         memo[키] = 결과
     return 결과
 
 
-def _fetch_plot_weather(lat: float, lon: float) -> _PlotWeather:
-    """실제로 부르는 쪽. 메모가 없을 때만 여기까지 온다."""
+def _fetch_plot_weather(lat: float, lon: float, cache_key: tuple) -> _PlotWeather:
+    """실제로 부르는 쪽. 메모가 없을 때만 여기까지 온다.
+
+    ⚠ 좌표와 열쇠를 **둘 다** 받는다. 열쇠는 격자라 좌표로 되돌릴 수 없는데,
+      밖으로 나가는 호출은 실제 좌표라야 한다(`forecast_cache.forecast` 의 ⚠).
+    """
     try:
-        payload = forecast_cache.forecast(lat, lon, past_days=WATER_PAST_DAYS)
+        payload = forecast_cache.forecast(
+            lat, lon, past_days=WATER_PAST_DAYS, cache_key=cache_key
+        )
         daily = payload["daily"]
         rows = normalize_daily_forecast(daily)
     except Exception:  # noqa: BLE001 — 기상이 없어도 시비 판정은 해야 한다
@@ -345,10 +347,11 @@ def _prefetch_weather(plots: Sequence[Plot], memo: dict) -> None:
         _plot_weather(plots[0], memo)   # -> 표에서 나온다. 호출 0회
     """
     # 열쇠마다 **먼저 나온 밭의 실제 좌표**를 쓴다. 루프가 혼자 돌 때와 같은 좌표라야
-    # 값이 똑같다 — 열쇠(반올림 좌표)로 부르면 300~600m 옆을 묻게 되고, 실측으로
-    # 15개 중 10개에서 수지가 최대 0.08mm 어긋났다(2026-09-19). 판정을 뒤집을 크기는
-    # 아니지만, 빨라지자고 값을 바꾸면 나중에 원인을 못 찾는다.
-    대표: dict[tuple[float, float], tuple[float, float]] = {}
+    # 값이 똑같다. 열쇠는 격자(≈5km)라 애초에 좌표로 되돌릴 수도 없다 — 예전 반올림
+    # 좌표 열쇠로 불렀을 때도 300~600m 옆을 묻게 돼 15개 중 10개에서 수지가 최대
+    # 0.08mm 어긋났다(2026-09-19). 판정을 뒤집을 크기는 아니지만, 빨라지자고 값을
+    # 바꾸면 나중에 원인을 못 찾는다.
+    대표: dict[tuple, tuple[float, float]] = {}
     for p in plots:
         if p.latitude is None or p.longitude is None:
             continue
@@ -361,7 +364,7 @@ def _prefetch_weather(plots: Sequence[Plot], memo: dict) -> None:
     차례 = list(대표)
     try:
         with ThreadPoolExecutor(max_workers=min(_PREFETCH_WORKERS, len(차례))) as ex:
-            받은것 = ex.map(lambda k: _fetch_plot_weather(*대표[k]), 차례)
+            받은것 = ex.map(lambda k: _fetch_plot_weather(*대표[k], k), 차례)
             # strict — map 은 넣은 만큼 돌려준다. 어긋나면 열쇠가 밀려
             # **다른 마을의 예보가 이 밭에 붙는다.** 조용히 넘기면 안 된다
             for 키, 값 in zip(차례, 받은것, strict=True):
