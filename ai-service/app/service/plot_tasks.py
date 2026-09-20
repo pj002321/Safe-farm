@@ -34,14 +34,14 @@ from app.domain.vegetation_text import Vegetation, summarize_points
 from app.domain.water_balance import WaterBalance, judge_water
 from app.models.farm import Plot, PlotTask, WeatherObsDaily
 from app.repo.crop import usable_crop_of_variant
-from app.repo.cultivation import lead_growing
+from app.repo.cultivation import growing_in_order
 from app.repo.plot import all_live_plots
 from app.repo.plot_task import add_task, expire_open_before, open_titles
 from app.repo.weather_obs import rainfall_since
 from app.service import forecast_cache
 from app.service.crop_hazard import temp_limits_for
 from app.service.pest_notes import pest_names_for
-from app.service.plot_growth import compute_plot_growth, nearest_station
+from app.service.plot_growth import cultivation_growth, nearest_station
 from app.service.satellite_cache import stored_observations
 from app.service.typhoon_cache import track as typhoon_track
 from app.service.warn_region import plot_warning
@@ -93,11 +93,12 @@ def _skip(plot: Plot, reason: str) -> None:
     print(f"[tasks] 밭 {plot.id} 건너뜀 — {reason}", flush=True)
 
 
-def _why_no_growth(db: Session, plot: Plot) -> str:
-    """compute_plot_growth 가 None 인 이유를 좁힌다. 사람이 고칠 수 있는 것부터."""
-    cultivation = lead_growing(db, plot.id)
-    if cultivation is None:
-        return "기르는 중인 작물이 없습니다 — 밭에 작물을 등록하세요"
+def _why_no_growth(db: Session, cultivation) -> str:
+    """`cultivation_growth` 가 None 인 이유를 좁힌다. 사람이 고칠 수 있는 것부터.
+
+    ⚠ **재배 건 단위다.** 전에는 밭을 받아 대표 한 건만 봤는데, 그러면 밭에 작물이
+      여럿일 때 **엉뚱한 작물의 사정**이 까닭으로 적힌다.
+    """
     if cultivation.sowing_date is None:
         return "파종일이 없습니다 — 밭 상세에서 파종일을 입력하세요"
 
@@ -108,6 +109,15 @@ def _why_no_growth(db: Session, plot: Plot) -> str:
             "— crops.base_temp 를 채우세요"
         )
     return "생육단계를 낼 수 없습니다 — crop_stages 와 관측 자료를 확인하세요"
+
+
+def _crop_label(db: Session, cultivation) -> str:
+    """건너뜀 기록에 적을 작물 이름. 못 찾으면 품종 id 로 대신한다.
+
+    이름을 못 읽는 것이 곧 건너뛴 까닭일 수 있어(품종 연결 끊김) 여기서 터지면 안 된다.
+    """
+    crop = usable_crop_of_variant(db, cultivation.variant_id)
+    return crop.name if crop is not None else f"품종 {cultivation.variant_id}"
 
 
 #: 관측이 이보다 오래됐으면 **없는 셈 친다**(일).
@@ -381,7 +391,7 @@ def generate_tasks_for_plot(
     water_memo: dict | None = None,
     typhoon_forecast: tuple[TyphoonPoint, ...] | None = None,
 ) -> list[PlotTask]:
-    """밭 하나를 판정해 새 카드를 만든다.
+    """밭 하나를 판정해 새 카드를 만든다. **밭의 작물을 전부 돈다**(교안 §2-B).
 
     **먼저 오래된 미완료 카드를 닫는다.** 순서가 중요하다 — 닫기 전에 판정하면
     그 카드가 아직 "열린 제목"이라 같은 카드의 재생성을 막는다. 사용자는 홈에서
@@ -389,6 +399,27 @@ def generate_tasks_for_plot(
 
     닫고 난 뒤에도 살아 있는(미완료·미만료) 같은 제목의 카드가 있으면 새로 만들지
     않는다. 배치를 하루에 여러 번 돌려도 카드가 중복 쌓이지 않게 하는 장치다.
+
+    ★ 2026-09-20 — **대표 한 건만 보던 것을 작물마다로 바꿨다.** 실측으로 작물이
+      자라는 밭 12개 중 7개가 작물 둘 이상인데, `lead_growing` 이 고른 하나만
+      판정하고 나머지는 **판정조차 하지 않았다.** 양파에 급한 일이 생겨도 홈은
+      시금치 것만 보여 줬다.
+
+      마이그레이션은 없다. 카드 제목이 `f"{작물이름}…"` 꼴이라 작물이 다르면
+      제목이 달라, 제목으로 거르는 중복 방지가 그대로 통한다.
+
+    ⚠ **밭 단위로 비싼 것은 루프 밖에서 한 번만 구한다.** 물수지·위성·특보·관측
+      강수는 밭에 딸린 값이라 작물끼리 나눠 쓴다. 안 그러면 작물 수만큼 외부
+      호출이 곱해진다(실측: 재배 1건당 148ms, 밭당 2.8초 → 4.0초로 그친 까닭).
+
+    ⚠ **재해(기상특보) 카드는 밭에 한 장이다.** 특보는 밭에 내리는 것이지 작물에
+      내리는 것이 아니다 — 첫 작물에만 `warnings` 를 넘기고 나머지에는 빈 튜플을
+      준다. 제목이 같으니 중복 방지에 걸릴 것 같지만 **그것에 기대지 않는다**:
+      `repo/plot_task.open_titles` 가 *"문구에 날짜·수치를 넣기 시작하면 이 방식이
+      깨진다"* 고 경고한다.
+
+      기온 카드(추위·더위)는 반대로 **작물마다** 낸다. 한계 온도가 작물별이라
+      같은 밤에 시금치는 멀쩡하고 방울토마토는 상한다.
     """
     expire_stale_tasks(db, plot.id)
 
@@ -400,72 +431,94 @@ def generate_tasks_for_plot(
         _skip(plot, "관측소가 배정되지 않았습니다 — stations 마스터를 확인하세요")
         return []
 
-    growth = compute_plot_growth(db, plot, station)
-    if growth is None:
+    cultivations = growing_in_order(db, plot.id)
+    if not cultivations:
         db.commit()
-        # 여기 묶이는 이유가 여럿이다(재배 없음·작물 없음·기준온도 없음·파종일 없음).
-        # 어느 쪽인지 좁혀 줘야 다음 사람이 DB 를 뒤지지 않는다.
-        _skip(plot, _why_no_growth(db, plot))
+        _skip(plot, "기르는 중인 작물이 없습니다 — 밭에 작물을 등록하세요")
         return []
 
-    # 한 번의 Open-Meteo 호출에서 물수지와 내일 예보를 같이 꺼낸다
+    # 밭 단위 값 — 작물끼리 나눠 쓴다. 한 번의 Open-Meteo 호출에서 물수지와 내일
+    # 예보를 같이 꺼낸다.
     날씨 = _plot_weather(plot, water_memo)
     내일 = 날씨.tomorrow or {}
-    한계 = temp_limits_for(db, growth.crop_name_ko)
-
-    inputs = PlotTaskInputs(
-        crop_name_ko=growth.crop_name_ko,
-        stage_name=growth.stage_name,
-        # 시기 — crop_stages. water_need_mm 자리를 이 셋이 이어받았다
-        irrigate_needed=growth.irrigate_needed,
-        stage_hazards=growth.stage_hazards,
-        stage_tasks=growth.stage_tasks,
-        fertilize_needed=growth.fertilize_needed,
-        # 사정 — 기상. 못 만들면 빈 값이라 물 카드가 안 나온다(시비는 그대로 나간다)
-        water=날씨.water,
-        recent_rain_mm=_recent_rain_mm(db, station.station_code),
-        # 수확 — GDD 가 '때'를, 위성이 '아직 있나'를 말한다(task_rules 주석)
-        gdd_target_passed=past_target(growth.accumulated_gdd, growth.gdd_target),
-        sow_method=growth.sow_method,
-        vegetation=_vegetation(db, plot),
-        # 이맘때 이 작물에 자주 나오는 병해충. DB 조회 한 번이라 배치를 안 늦춘다
-        pest_names=pest_names_for(db, growth.crop_name_ko, kst_today()),
-        # 재해 — 기상청이 판정한 것을 **받아 적기만** 한다(task_rules 주석)
-        warnings=_active_warnings(db, plot, typhoon_forecast),
-        # 기온 한계 — 작물이 몇 도부터 상하나 × 내일 예보
-        frost_limit_c=한계.frost_c,
-        heat_limit_c=한계.heat_c,
-        tomorrow_temp_min=내일.get("temp_min"),
-        tomorrow_temp_max=내일.get("temp_max"),
-    )
-    candidates = build_task_candidates(inputs)
-    if not candidates:
-        db.commit()
-        # 0건이 **정상인 유일한 경로**다 — 조건을 봤고 할 일이 없었다는 뜻이다.
-        # 위의 건너뜀들과 섞이면 "데이터가 없다"와 "할 일이 없다"를 구분할 수 없다.
-        _skip(
-            plot,
-            f"조건 미달 — 물판정 {judge_water(inputs.water)}"
-            f"(14일수지 {inputs.water.balance_14d_mm}mm · 3일비 {inputs.water.rain_3d_mm}mm"
-            f" · 7일비 {inputs.water.rain_7d_mm}mm)"
-            f" · 관수시기 {inputs.irrigate_needed} · 재해 {inputs.stage_hazards or '없음'}"
-            f" · 시비 {inputs.fertilize_needed}"
-            f" · 관측 {RAIN_WINDOW_DAYS}일 강수 {inputs.recent_rain_mm}mm"
-            f"(안전망 마름 기준 {DRY_MM}mm 이하)",
-        )
-        return []
+    식생 = _vegetation(db, plot)
+    특보 = _active_warnings(db, plot, typhoon_forecast)
+    관측비 = _recent_rain_mm(db, station.station_code)
 
     # "살아 있는" 카드만 재생성을 막는다 — 닫힌 카드(expired_at)는 세지 않는다.
     # 이 조건을 빠뜨리면 만료 처리 자체가 무의미해진다.
-    existing_open_titles = open_titles(db, plot.id)
+    #
+    # ⚠ **만든 제목을 그 자리에서 이 집합에 넣는다.** 작물 하나만 돌 때는 없던
+    #   문제다. 같은 밭에 **파종일까지 같은 재배가 실재해서**(2026-09-20 실측:
+    #   풋콩 2건 · 피망 2건) 제목이 통째로 겹치는데, DB 에 유일 제약이 없어
+    #   **조용히 두 장**이 꽂힌다.
+    open_title_set = open_titles(db, plot.id)
 
     created: list[PlotTask] = []
-    for candidate in candidates:
-        if candidate.title in existing_open_titles:
+    재해를_넘겼나 = False
+
+    for cultivation in cultivations:
+        growth = cultivation_growth(db, cultivation, station)
+        if growth is None:
+            # 그 작물 하나의 사정이다. 밭을 통째로 건너뛰지 않는다 — 전에는
+            # 막힌 한 건이 밭의 나머지 작물까지 같이 막았다(실측 2026-09-20:
+            # 디테크타워 과천의 단감 · base_temp 가 비어 있다).
+            _skip(plot, f"{_crop_label(db, cultivation)} — {_why_no_growth(db, cultivation)}")
             continue
-        created.append(
-            add_task(db, plot.id, candidate.title, candidate.reason, candidate.priority)
+
+        한계 = temp_limits_for(db, growth.crop_name_ko)
+        inputs = PlotTaskInputs(
+            crop_name_ko=growth.crop_name_ko,
+            stage_name=growth.stage_name,
+            # 시기 — crop_stages. water_need_mm 자리를 이 셋이 이어받았다
+            irrigate_needed=growth.irrigate_needed,
+            stage_hazards=growth.stage_hazards,
+            stage_tasks=growth.stage_tasks,
+            fertilize_needed=growth.fertilize_needed,
+            # 사정 — 기상. 못 만들면 빈 값이라 물 카드가 안 나온다(시비는 그대로 나간다)
+            water=날씨.water,
+            recent_rain_mm=관측비,
+            # 수확 — GDD 가 '때'를, 위성이 '아직 있나'를 말한다(task_rules 주석)
+            gdd_target_passed=past_target(growth.accumulated_gdd, growth.gdd_target),
+            sow_method=growth.sow_method,
+            vegetation=식생,
+            # 이맘때 이 작물에 자주 나오는 병해충. DB 조회 한 번이라 배치를 안 늦춘다
+            pest_names=pest_names_for(db, growth.crop_name_ko, kst_today()),
+            # 재해 — 기상청이 판정한 것을 **받아 적기만** 한다(task_rules 주석).
+            #   밭에 한 장이라 먼저 판정된 작물에만 넘긴다
+            warnings=() if 재해를_넘겼나 else 특보,
+            # 기온 한계 — 작물이 몇 도부터 상하나 × 내일 예보. **작물마다 다르다**
+            frost_limit_c=한계.frost_c,
+            heat_limit_c=한계.heat_c,
+            tomorrow_temp_min=내일.get("temp_min"),
+            tomorrow_temp_max=내일.get("temp_max"),
         )
+        # 판정까지 간 첫 작물이 특보를 가져간다. 앞 작물이 막혔으면 다음으로 물려준다
+        재해를_넘겼나 = True
+
+        candidates = build_task_candidates(inputs)
+        if not candidates:
+            # 0건이 **정상인 유일한 경로**다 — 조건을 봤고 할 일이 없었다는 뜻이다.
+            # 위의 건너뜀들과 섞이면 "데이터가 없다"와 "할 일이 없다"를 구분할 수 없다.
+            _skip(
+                plot,
+                f"{growth.crop_name_ko} — 조건 미달 · 물판정 {judge_water(inputs.water)}"
+                f"(14일수지 {inputs.water.balance_14d_mm}mm · 3일비 {inputs.water.rain_3d_mm}mm"
+                f" · 7일비 {inputs.water.rain_7d_mm}mm)"
+                f" · 관수시기 {inputs.irrigate_needed} · 재해 {inputs.stage_hazards or '없음'}"
+                f" · 시비 {inputs.fertilize_needed}"
+                f" · 관측 {RAIN_WINDOW_DAYS}일 강수 {inputs.recent_rain_mm}mm"
+                f"(안전망 마름 기준 {DRY_MM}mm 이하)",
+            )
+            continue
+
+        for candidate in candidates:
+            if candidate.title in open_title_set:
+                continue
+            open_title_set.add(candidate.title)
+            created.append(
+                add_task(db, plot.id, candidate.title, candidate.reason, candidate.priority)
+            )
 
     # 만료 처리는 새 카드가 하나도 안 나와도 반영돼야 한다 — 조건이 해소돼서
     # 후보가 없는 경우에도 오래된 카드는 닫혀야 한다. 그래서 무조건 커밋한다.
