@@ -1,3 +1,4 @@
+import { WeatherStrip } from "@/components/cultivation/WeatherStrip";
 import { SubmitButton } from "@/components/shared/SubmitButton";
 import type { TimelineEntry } from "@/features/cultivations/domain/timeline";
 
@@ -11,6 +12,9 @@ import type { TimelineEntry } from "@/features/cultivations/domain/timeline";
  *   `domain/timeline.ts` 가 하고 여기는 그리기만 한다.
  * - 재배에서 온 줄(파종·수확·중단)에는 지우기 버튼을 달지 않는다. 그건 기록이
  *   아니라 상태라서, 지우려면 재배 자체를 고쳐야 한다.
+ * - **그날 날씨 띠를 같이 그린다**(`WeatherStrip`). 저장할 때 행에 박아 둔 값을
+ *   그대로 읽는다 — 여기서 다시 조회하면 관측 정정 때 과거 일지가 바뀐다.
+ *   날씨 칸이 전부 비면 띠가 아예 안 그려진다.
  * ---------------------------------------------
  */
 
@@ -55,6 +59,7 @@ export function RecordTimeline({
             <div className="flex min-w-0 flex-1 flex-col gap-2">
               <span className="font-medium text-fg text-sm">
                 {entry.titleKo}
+                {entry.workKindKo ? ` · ${entry.workKindKo}` : ""}
                 {stageKo ? ` · ${stageKo}` : ""}
               </span>
 
@@ -63,6 +68,8 @@ export function RecordTimeline({
                   {entry.bodyKo}
                 </p>
               )}
+
+              <WeatherStrip weather={entry.weather} />
             </div>
 
             {!FROM_CULTIVATION.has(entry.kind) && (

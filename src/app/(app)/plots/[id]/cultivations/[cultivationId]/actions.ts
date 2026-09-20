@@ -3,14 +3,20 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { markFailed } from "@/features/cultivations/cultivationStore";
+import {
+  pickSkyKind,
+  pickWorkKind,
+} from "@/features/cultivations/domain/diaryFields";
 import { parseFailureReason } from "@/features/cultivations/domain/failureReason";
 import { parseNote } from "@/features/cultivations/domain/observationNote";
 import { parseUserStage } from "@/features/cultivations/domain/userStage";
 import {
+  type EventInput,
   insertCultivationEvent,
   softDeleteCultivationEvent,
 } from "@/features/cultivations/eventStore";
 import { getPlotDetail } from "@/features/plots/plotStore";
+import { aiService } from "@/shared/aiService/client";
 import { requireConsent } from "@/shared/auth/consentGate";
 import { kstDateString } from "@/shared/utils/kstDate";
 
@@ -30,6 +36,57 @@ import { kstDateString } from "@/shared/utils/kstDate";
  *   흔해서 입력을 받지만, 앞날짜는 `parseNote()` 가 거른다.
  * ---------------------------------------------
  */
+
+/**
+ * `"2026-09-19T06:19"` → `"06:19"`. 형태가 다르면 null 이다.
+ *
+ * ⚠️ 자리로 자르지 않는다(`slice(11, 16)`). 형식이 바뀌면 **엉뚱한 글자가 조용히**
+ *    저장된다 — 그게 보조금 서류로 나간다. `SunTimes.tsx` 의 `hhmm` 과 같은 방식.
+ */
+function hhmm(iso: string | null): string | null {
+  const time = iso?.split("T")[1];
+  return time?.slice(0, 5) ?? null;
+}
+
+/**
+ * 그날 날씨를 가져와 행에 박을 모양으로 돌려준다. 못 가져오면 `null`.
+ *
+ * **읽을 때 조인하지 않고 저장할 때 박는다.** 영농일지는 "그때 그랬다" 는
+ * 기록이고, 관측이 나중에 정정되면 과거 일지가 소리 없이 바뀐다 — 서류로 낸
+ * 뒤에 값이 달라지면 그건 위조가 된다.
+ *
+ * ⚠️ **실패해도 던지지 않는다.** ai-service 가 죽었다고 농민이 쓴 메모가 사라지면
+ *    안 된다. 날씨만 비우고 기록은 저장한다. 92일보다 오래된 날짜도 같은 길로
+ *    빈다 — 그건 오류가 아니라 정상이다.
+ *
+ * ⚠️ **빈 칸을 0 으로 채우지 않는다.** `rainfall_mm = 0` 은 "비가 안 왔다" 는
+ *    뜻이고, 그 일지가 보조금 서류로 나간다.
+ */
+async function diaryWeather(
+  plot: { latitude: number; longitude: number },
+  occurredOn: string,
+): Promise<EventInput["weather"]> {
+  const result = await aiService.weatherOfDay(
+    plot.latitude,
+    plot.longitude,
+    occurredOn,
+  );
+  if (!result.ok || result.data.day === null) return null;
+
+  const day = result.data.day;
+  return {
+    tempMaxC: day.tempMax,
+    tempMinC: day.tempMin,
+    rainfallMm: day.rainfallMm,
+    humidityPct: day.humidityPct,
+    windMs: day.windMax,
+    windDirDeg: day.windDirDeg,
+    // "2026-09-19T06:19" 에서 시각만. 날짜는 occurred_on 에 이미 있고, 시간대
+    // 변환이 끼면 하루 어긋날 여지만 생긴다.
+    sunriseAt: hhmm(day.sunrise),
+    sunsetAt: hhmm(day.sunset),
+  };
+}
 
 /** 사용자에게 보여줄 문장만 쿼리에 싣고 그 상세로 돌려보낸다. */
 function fail(path: string, message: string): never {
@@ -86,11 +143,16 @@ export async function addObservation(formData: FormData): Promise<void> {
   });
   if (!parsed.ok) fail(path, parsed.messageKo);
 
+  const weather = await diaryWeather(plot, parsed.value.occurredOn);
+
   try {
     await insertCultivationEvent(cultivationId, {
       kind: "NOTE",
       occurredOn: parsed.value.occurredOn,
       body: parsed.value.body,
+      workKind: pickWorkKind(formData.get("workKind")),
+      skyKo: pickSkyKind(formData.get("skyKo")),
+      weather,
     });
   } catch {
     fail(path, "기록을 저장하지 못했습니다. 새로 고친 뒤 다시 시도해 주세요.");

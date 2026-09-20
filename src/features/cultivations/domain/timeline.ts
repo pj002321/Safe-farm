@@ -34,6 +34,32 @@ export type TimelineKind =
   | "HARVESTED"
   | "FAILED";
 
+/**
+ * 저장할 때 행에 박아 둔 그날 날씨. **칸마다 비어 있을 수 있고 그게 정상이다.**
+ *
+ * ⚠️ 빈 칸을 0 으로 바꾸지 말 것. `rainfallMm = 0` 은 "비가 안 왔다" 는 뜻이라,
+ *    못 찾은 날과 안 온 날이 화면에서 같아진다.
+ */
+export interface EntryWeather {
+  skyKo: string | null;
+  tempMaxC: number | null;
+  tempMinC: number | null;
+  rainfallMm: number | null;
+  humidityPct: number | null;
+  windMs: number | null;
+  /** 그날 대표 풍향(도). **불어오는 쪽**이다. */
+  windDirDeg: number | null;
+  /** `"2026-09-19T06:19"` 꼴. 시각만 뽑는 것은 화면의 일이다. */
+  sunriseAt: string | null;
+  sunsetAt: string | null;
+}
+
+/** 날씨 칸이 하나라도 차 있나. 전부 비면 화면은 띠를 아예 안 그린다. */
+export function hasWeather(weather: EntryWeather | null): boolean {
+  if (weather === null) return false;
+  return Object.values(weather).some((value) => value !== null);
+}
+
 /** `cultivation_events` 한 행을 화면이 쓰는 이름으로 좁힌 것. */
 export interface TimelineEventRow {
   id: string;
@@ -42,6 +68,9 @@ export interface TimelineEventRow {
   body: string | null;
   stageOrder: number | null;
   forecastOn: string | null;
+  /** 농사로의 "활동유형". 고르지 않았으면 null. */
+  workKind: string | null;
+  weather: EntryWeather;
 }
 
 /** `cultivations` 에서 날짜만 뽑은 것. */
@@ -65,6 +94,18 @@ export interface TimelineEntry {
   bodyKo: string | null;
   /** `STAGE_SET` 이 가리키는 단계. 화면이 이름을 붙인다. */
   stageOrder: number | null;
+  /**
+   * 농사로의 "활동유형". 안 골랐거나 재배 컬럼에서 온 줄이면 null.
+   *
+   * `titleKo` 를 덮지 않고 따로 둔다 — 제목은 kind 가 정하는 말이고 이건 그날
+   * 무엇을 했나다. 둘을 합치면 `EVENT_TITLE` 을 보는 §6-다 쪽과 엉킨다.
+   */
+  workKindKo: string | null;
+  /**
+   * 저장할 때 박은 그날 날씨. 재배 컬럼에서 온 줄(파종·수확·중단)은 null 이다 —
+   * 그 셋은 `cultivation_events` 행이 아니라 날씨를 박을 자리가 없다.
+   */
+  weather: EntryWeather | null;
 }
 
 /**
@@ -109,6 +150,8 @@ function fromCultivation(
           : `${cultivation.cropKo} 씨 뿌림`,
       bodyKo: null,
       stageOrder: null,
+      workKindKo: null,
+      weather: null,
     });
   }
 
@@ -120,6 +163,8 @@ function fromCultivation(
       titleKo: `${cultivation.cropKo} 수확`,
       bodyKo: null,
       stageOrder: null,
+      workKindKo: null,
+      weather: null,
     });
   }
 
@@ -131,6 +176,8 @@ function fromCultivation(
       titleKo: `${cultivation.cropKo} 재배 중단`,
       bodyKo: failureReasonKo(cultivation.failureReason),
       stageOrder: null,
+      workKindKo: null,
+      weather: null,
     });
   }
 
@@ -151,6 +198,8 @@ function fromEvent(event: TimelineEventRow): TimelineEntry {
           : `${event.forecastOn} 수확 예상`
         : event.body,
     stageOrder: event.stageOrder,
+    workKindKo: event.workKind,
+    weather: event.weather,
   };
 }
 

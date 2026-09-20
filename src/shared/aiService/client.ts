@@ -294,6 +294,26 @@ export interface PlotReport {
 }
 
 /**
+ * 영농일지 한 줄에 박을 그날 날씨. `/v1/weather/day` 한 줄이다.
+ *
+ * ⚠️ **칸마다 null 이 올 수 있고, 그게 정상이다.** 관측이 비는 날은 비는 대로
+ *    저장한다 — 0 으로 채우면 "비가 안 왔다" 는 뜻이 된다.
+ */
+export interface DiaryWeather {
+  date: string;
+  tempMax: number | null;
+  tempMin: number | null;
+  rainfallMm: number | null;
+  humidityPct: number | null;
+  windMax: number | null;
+  /** 그날 대표 풍향(도). **불어오는 쪽**이다. */
+  windDirDeg: number | null;
+  /** `"2026-09-19T06:19"` 꼴. `"06:19"` 로 자르는 것은 저장하는 쪽 일이다. */
+  sunrise: string | null;
+  sunset: string | null;
+}
+
+/**
  * 사용자의 밭 전체를 아우르는 AI 종합 요약. `available` 이 false 면 밭이
  * 하나도 없거나(NO_PLOTS) 어느 밭에서도 생육 데이터를 못 만든 것이다(NO_GROWTH_DATA).
  */
@@ -643,6 +663,28 @@ export const aiService = {
       ? { ok: true, data: normalizePlotForecast(result.data) }
       : result;
   },
+  /**
+   * 그 좌표 그 날짜 하루치 날씨. **영농일지가 저장할 때 한 번 부른다.**
+   *
+   * `plotForecast` 를 쓰지 않는 까닭 — 저쪽은 `past_days` 인자가 없어 **과거가
+   * 아예 안 온다.** 사용자는 한 달 전 날짜로도 일지를 쓴다.
+   *
+   * ⚠️ **`revalidateSec` 을 주지 않는다.** 저장 순간의 값을 행에 박는 호출이라
+   *    캐시된 응답을 쓰면 다른 날짜 값이 박힌다. ai-service 쪽 1시간 캐시가
+   *    (좌표, past_days) 를 열쇠로 이미 왕복을 줄여 준다.
+   *
+   * ⚠️ **`FORECAST_TIMEOUT_MS`(15초)를 쓰지 않는다.** 화면 예보는 그게 없으면
+   *    카드가 비지만, 여기서는 **농민이 저장 버튼을 누르고 기다리는 시간**이다.
+   *    날씨는 없어도 되는 값이라 기본값(5초)에 맡기고 빨리 포기한다 — 실패해도
+   *    메모는 저장되고, 1시간 캐시 덕에 다음 저장은 대개 즉시 붙는다.
+   *
+   * ⚠️ 92일보다 오래된 날짜는 `day` 가 **null 로 온다. 오류가 아니다** —
+   *    그대로 빈 채 저장하고 화면이 "그날 날씨를 못 찾았습니다" 로 그린다.
+   */
+  weatherOfDay: (lat: number, lon: number, date: string) =>
+    call<{ day: DiaryWeather | null }>(
+      `/v1/weather/day?lat=${lat}&lon=${lon}&date=${date}`,
+    ),
   /** 좌표 하나의 `dateFrom`~`dateTo`(YYYY-MM-DD) NDVI·NDMI 일별 평균(F5). */
   satelliteObservations: (
     lat: number,

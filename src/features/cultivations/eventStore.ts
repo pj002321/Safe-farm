@@ -19,8 +19,17 @@ import type { TimelineEventRow } from "./domain/timeline";
  * ---------------------------------------------
  */
 
-/** 조회하는 컬럼. `deleted_at` 은 where 에서만 쓰고 화면에 내리지 않는다. */
-const EVENT_SELECT = "id, kind, occurred_on, body, stage_order, forecast_on";
+/**
+ * 조회하는 컬럼. `deleted_at` 은 where 에서만 쓰고 화면에 내리지 않는다.
+ *
+ * 일지 칸(`work_kind` 이하)은 **저장할 때 박아 둔 그 시점 값**이다. 읽을 때
+ * 날씨를 다시 조인하지 않는다 — 관측이 나중에 정정되면 과거 일지가 소리 없이
+ * 바뀌고, 그건 서류로 낸 뒤에는 위조가 된다.
+ */
+// ⚠️ 한 줄짜리 리터럴로 둔다. 이어 붙이면 supabase-js 가 select 를 타입 수준에서
+//    못 읽어 결과가 `GenericStringError[]` 로 추론된다.
+const EVENT_SELECT =
+  "id, kind, occurred_on, body, stage_order, forecast_on, work_kind, sky_ko, temp_max_c, temp_min_c, rainfall_mm, humidity_pct, wind_ms, wind_dir_deg, sunrise_at, sunset_at";
 
 interface EventRow {
   id: string;
@@ -29,6 +38,16 @@ interface EventRow {
   body: string | null;
   stage_order: number | null;
   forecast_on: string | null;
+  work_kind: string | null;
+  sky_ko: string | null;
+  temp_max_c: number | null;
+  temp_min_c: number | null;
+  rainfall_mm: number | null;
+  humidity_pct: number | null;
+  wind_ms: number | null;
+  wind_dir_deg: number | null;
+  sunrise_at: string | null;
+  sunset_at: string | null;
 }
 
 const KINDS = [
@@ -78,6 +97,18 @@ export async function listCultivationEvents(
         body: row.body,
         stageOrder: row.stage_order,
         forecastOn: row.forecast_on,
+        workKind: row.work_kind,
+        weather: {
+          skyKo: row.sky_ko,
+          tempMaxC: row.temp_max_c,
+          tempMinC: row.temp_min_c,
+          rainfallMm: row.rainfall_mm,
+          humidityPct: row.humidity_pct,
+          windMs: row.wind_ms,
+          windDirDeg: row.wind_dir_deg,
+          sunriseAt: row.sunrise_at,
+          sunsetAt: row.sunset_at,
+        },
       },
     ];
   });
@@ -89,6 +120,26 @@ export interface EventInput {
   body?: string | null;
   stageOrder?: number | null;
   forecastOn?: string | null;
+  /** 농사로의 "활동유형". 물주기 · 웃거름 · 방제 · 김매기 · 수확 · 기타. */
+  workKind?: string | null;
+  /** 사용자가 고른 하늘. 맑음 · 흐림 · 비 · 눈. */
+  skyKo?: string | null;
+  /**
+   * 저장 시점에 박는 그날 날씨. **없으면 넘기지 않는다.**
+   *
+   * ⚠️ 못 찾은 칸을 0 으로 채우지 말 것. `rainfall_mm = 0` 은 "비가 안 왔다" 는
+   *    뜻이고, 그 일지가 보조금 서류로 나간다.
+   */
+  weather?: {
+    tempMaxC?: number | null;
+    tempMinC?: number | null;
+    rainfallMm?: number | null;
+    humidityPct?: number | null;
+    windMs?: number | null;
+    windDirDeg?: number | null;
+    sunriseAt?: string | null;
+    sunsetAt?: string | null;
+  } | null;
 }
 
 /**
@@ -104,6 +155,8 @@ export async function insertCultivationEvent(
 ): Promise<void> {
   const supabase = await getSupabaseServer();
 
+  const weather = input.weather ?? null;
+
   const { error } = await supabase.from("cultivation_events").insert({
     cultivation_id: cultivationId,
     kind: input.kind,
@@ -111,6 +164,16 @@ export async function insertCultivationEvent(
     body: input.body ?? null,
     stage_order: input.stageOrder ?? null,
     forecast_on: input.forecastOn ?? null,
+    work_kind: input.workKind ?? null,
+    sky_ko: input.skyKo ?? null,
+    temp_max_c: weather?.tempMaxC ?? null,
+    temp_min_c: weather?.tempMinC ?? null,
+    rainfall_mm: weather?.rainfallMm ?? null,
+    humidity_pct: weather?.humidityPct ?? null,
+    wind_ms: weather?.windMs ?? null,
+    wind_dir_deg: weather?.windDirDeg ?? null,
+    sunrise_at: weather?.sunriseAt ?? null,
+    sunset_at: weather?.sunsetAt ?? null,
   });
 
   if (error) throw new Error(error.message);
