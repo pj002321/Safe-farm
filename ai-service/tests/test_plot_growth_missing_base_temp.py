@@ -83,10 +83,27 @@ def test_all_three_callers_stop_on_unusable_crop():
 
     이 가드가 공통 지점에서 도는 근거다 — 셋 중 하나라도 None 을 안 보고
     진행하면 같은 TypeError 가 그쪽에서 다시 난다.
+
+    ⚠ 2026-09-20 — `compute_plot_growth` 의 몸통이 `cultivation_growth` 로
+      갈라졌다(교안 §2-B: 작업카드가 재배마다 돈다). 가드는 그쪽으로 따라갔고,
+      대표를 고르는 쪽은 넘기기만 한다. **셋이라는 수는 그대로다.**
     """
     import inspect
 
     source = inspect.getsource(plot_growth)
-    for fn in ("daily_gdd_series", "crop_interpretation", "compute_plot_growth"):
+    for fn in ("daily_gdd_series", "crop_interpretation", "cultivation_growth"):
         body = source.split(f"def {fn}(", 1)[1].split("\ndef ", 1)[0]
         assert "if crop is None:" in body, f"{fn} 이 crop is None 을 검사하지 않는다"
+
+
+def test_lead_path_delegates_instead_of_copying_the_guard():
+    """대표를 고르는 길이 가드를 **베끼지 않고 넘기는지**.
+
+    베끼면 가드가 두 벌이 되어 한쪽만 고쳐진다 — 이 파일이 막으려는 사고가
+    바로 그 종류다.
+    """
+    import inspect
+
+    body = inspect.getsource(plot_growth.compute_plot_growth)
+    assert "cultivation_growth(" in body, "대표 경로가 공통 함수를 안 부른다"
+    assert "if crop is None:" not in body, "가드가 두 벌이 됐다"

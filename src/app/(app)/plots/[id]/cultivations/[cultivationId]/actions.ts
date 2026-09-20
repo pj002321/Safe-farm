@@ -18,7 +18,7 @@ import {
 import { parseUserStage } from "@/features/cultivations/domain/userStage";
 import {
   type EventInput,
-  hasEventOn,
+  hasAdviceOn,
   insertCultivationEvent,
   insertCultivationEvents,
   softDeleteCultivationEvent,
@@ -87,24 +87,29 @@ async function diaryWeather(
 }
 
 /**
- * 그날 첫 `TASK_DONE` 이면 그날 AI 리포트 글을, 아니면 `null`.
+ * 그날 AI 리포트 글. 이미 그날 어느 줄에 붙어 있거나 리포트가 없으면 `null`.
  *
  * 리포트를 읽을 때 조인하지 않고 **그때 텍스트로 박는다.** 개발 중
  * `delete from advices where advice_date = current_date` 를 돌리는데, 조인이면
  * 그 순간 과거 일지에서도 글이 사라진다.
  *
- * ⚠️ **하루에 한 번만 박는다.** 같은 날 카드를 여럿 담으면 같은 글이 여러 행에
- *    복사된다. 일지를 읽을 때 그날 행 중 하나에서 찾으면 된다.
+ * ⚠️ **하루에 한 줄에만 박는다.** 같은 날 여러 줄에 복사되면 일지를 읽을 때 같은
+ *    말을 되풀이해 읽는다.
  *
- * ⚠️ **저장 루프 안에서 부르지 말 것.** 장바구니는 `TASK_DONE` 을 한 번에 여러 줄
- *    넣는다. 줄마다 부르면 첫 줄이 들어간 뒤로는 `hasEventOn` 이 참이 되어
- *    판정이 줄마다 달라진다 — 한 번 묻고 그 답을 첫 줄에만 쓴다.
+ * ⚠️ **"그날 기록이 있나" 로 묻지 말 것**(2026-09-20 에 그렇게 했다가 틀렸다).
+ *    조언이 안 붙은 기록이 하나라도 먼저 있으면 그날은 **영영 못 붙는다** —
+ *    실제로 메모를 두 번 남겼는데 둘 다 빈 채로 남았다. `hasAdviceOn` 이
+ *    **"조언이 붙은 줄이 있나"** 를 묻는다.
+ *
+ * ⚠️ **저장 루프 안에서 부르지 말 것.** 장바구니는 한 번에 여러 줄을 넣는다.
+ *    줄마다 부르면 첫 줄이 들어간 뒤로 판정이 달라진다 — 한 번 묻고 그 답을
+ *    첫 줄에만 쓴다.
  *
  * ⚠️ **없으면 만들지 않는다.** 리포트를 아직 안 본 날은 그냥 빈칸이다 — 교안이
  *    말한 것은 "리포트를 출력할 경우" 같이 저장하라는 것이지, 누를 때마다
  *    생성하라는 것이 아니다.
  *
- * 조회가 실패해도 던지지 않는다. 이 값 때문에 `했음` 기록 자체가 막히면 안 된다.
+ * 조회가 실패해도 던지지 않는다. 이 값 때문에 기록 자체가 막히면 안 된다.
  */
 async function dayFirstAdvice(
   cultivationId: string,
@@ -112,13 +117,12 @@ async function dayFirstAdvice(
 ): Promise<string | null> {
   try {
     // ⚠ **나란히 묻는다.** 앞의 답을 보고 뒤를 부르면 왕복이 둘로 늘어나는데,
-    //   흔한 쪽이 "그날 첫 줄"(= 둘 다 필요)이라 늘 두 번을 다 쓰게 된다.
-    //   리포트를 헛읽는 쪽은 그날 두 번째부터이고, 그때도 시간은 한 번치다.
-    const [already, summary] = await Promise.all([
-      hasEventOn(cultivationId, "TASK_DONE", today),
+    //   흔한 쪽이 "아직 안 붙었다"(= 둘 다 필요)라 늘 두 번을 다 쓰게 된다.
+    const [이미붙음, summary] = await Promise.all([
+      hasAdviceOn(cultivationId, today),
       adviceSummaryOn(cultivationId, today),
     ]);
-    return already ? null : summary;
+    return 이미붙음 ? null : summary;
   } catch (error) {
     console.error("[cultivation] 그날 리포트 붙이기 실패", error);
     return null;
@@ -251,9 +255,12 @@ export async function addObservation(formData: FormData): Promise<void> {
 
   // 한 번에 들어가는 줄들이라 날씨도 리포트도 **한 번만** 구한다. 줄마다 부르면
   // 같은 값을 여러 번 받아 오고, 리포트 쪽은 답까지 달라진다.
+  // ⚠ **담은 카드가 없어도 부른다.** 메모만 남긴 날에도 그날 리포트를 붙인다 —
+  //   "그날 이런 조언을 받았고 나는 이걸 했다" 가 영농일지의 값이라, 카드를
+  //   담았느냐로 가를 일이 아니다.
   const [weather, adviceText] = await Promise.all([
     diaryWeather(plot, occurredOn),
-    picked.length === 0 ? null : dayFirstAdvice(cultivationId, occurredOn),
+    dayFirstAdvice(cultivationId, occurredOn),
   ]);
 
   // ⚠ **한 번에 넣는다.** 줄마다 넣으면 왕복이 그 수만큼 늘고, 중간에 실패했을 때
@@ -268,6 +275,9 @@ export async function addObservation(formData: FormData): Promise<void> {
       stageOrder,
       workKind,
       skyKo,
+      // 메모가 있으면 **여기가 그날 첫 줄**이다. 아래 카드 줄들은 비운다 —
+      // 같은 글이 여러 행에 복사되면 일지를 읽을 때 같은 말을 되풀이해 읽는다
+      adviceText,
       weather,
     });
   }
@@ -280,8 +290,10 @@ export async function addObservation(formData: FormData): Promise<void> {
       workKind,
       skyKo,
       taskNote: taskNoteOf(formData, titleKo),
-      // 그날 리포트는 첫 줄에만. 나머지에 복사하면 같은 글이 여러 번 나온다.
-      adviceText: index === 0 ? adviceText : null,
+      // 그날 리포트는 **이 저장의 첫 줄에만** 붙인다. 메모를 같이 남겼으면 그쪽이
+      // 첫 줄이므로 카드에는 안 붙는다 — 같은 글이 여러 행에 복사되면 일지를
+      // 읽을 때 같은 말을 되풀이해 읽게 된다.
+      adviceText: body === null && index === 0 ? adviceText : null,
       weather,
     });
   }
