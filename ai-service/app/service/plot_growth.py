@@ -73,8 +73,29 @@ class PlotGrowth:
     # 현재 단계가 끝나는(=다음 단계가 시작하는) 누적 GDD. stage_name 이 None 이면 같이 None.
     stage_gdd_to: int | None = None
     # 심는 법('씨뿌림'·'아주심기' …). 작업카드가 **거둬도 밭에 남는 작물**을 가르는
-    # 데 쓴다 — 나무는 한 번 심고 두는 것이라 이 칸이 빈다(task_rules 주석).
+    # 데 쓴다(task_rules.harvest_clears_field).
+    #
+    # ★ 2026-09-20 — **과수는 `발아`·`개화` 가 온다.** 전에는 빈 칸이었다. 그 해의
+    #   0일이 파종이 아니라 기점이라는 표시이고, `sow_from`~`sow_to` 도 파종 창이
+    #   아니라 **기점 창**이다(crop-data `build._파종방법`).
+    #   ⚠ `harvest_clears_field` 는 그대로 맞다 — 둘 다 `_PLANTING_METHODS` 에
+    #     없으므로 여전히 "거둬도 밭에 남는다" 로 판정된다.
     sow_method: str | None = None
+    # 나무를 심은 지 몇 해째인가. **과수만 채운다**(한해살이는 None).
+    #
+    # ⚠ 보여 주기만 한다. 어린나무에서 수확 예측을 감추려면 작물별 **결실 시작
+    #   나이**가 있어야 하는데 마스터에 없다 — 지어내지 않는다(이슈로 남김).
+    years_since_planting: int | None = None
+    # 과수가 그 해 수확을 끝내고 다음 기점을 기다리는 중인가. **과수만 참이 된다.**
+    #
+    # ★ `crop_stages` 는 기점~수확까지만 담는다(교안 §3-2). 겨울은 GDD 가 0이라
+    #   구간으로 못 재기 때문이다 — 실측으로 감귤 101일·유자 131일·단감 130일이
+    #   모두 GDD 0 이었다. 그래서 **수확 뒤는 DB 에 줄이 없고 여기서 판정한다.**
+    #
+    # ⚠ **`stage_name is None` 과 뜻이 다르다.** 저건 "단계를 못 찾았다" 이고
+    #   이건 "찾을 단계가 없는 것이 정상이다" 다. 화면이 둘을 섞으면 한 해의
+    #   절반을 "자료가 없습니다" 로 말하게 된다.
+    after_harvest: bool = False
     # 지금 단계가 단계표의 마지막인가. '수확' 이라는 낱말을 믿어도 되는지 가른다 —
     # 여러 번 거두는 작물은 수확이 중간에 온다(고추: 풋고추 → 붉은고추).
     is_last_stage: bool = False
@@ -116,6 +137,61 @@ def rainfall_totals(
         values = [mm for obs_date, mm in rows if mm is not None and (today - obs_date).days < n]
         result[n] = sum(values) if values else None
     return result
+
+
+#: 이 값이 `crop_variants.sow_method` 에 있으면 **과수**다.
+#:
+#: ⚠ 작물 이름 목록을 두지 않는다 — 마스터가 이미 표시해 준다. 이름 목록은 늘 낡는다.
+FRUIT_METHODS = frozenset({"발아", "개화"})
+
+
+def is_fruit(sow_method: str | None) -> bool:
+    """과수인가. `crop_variants.sow_method` 한 칸으로 가른다."""
+    return (sow_method or "") in FRUIT_METHODS
+
+
+def _중앙일(_from: str | None, _to: str | None) -> tuple[int, int] | None:
+    """'MM-DD' 두 개로 된 창의 **가운데 날**. 한쪽만 있으면 그쪽을 쓴다.
+
+    ⚠ **왜 가운데인가.** crop-data 가 `gdd_target` 을 만들 때 쓴 기준일이 창의
+      중앙일이다(`build._작형_일정` 의 `파종일`). 목표는 중앙일 기준인데 누적을
+      창 시작이나 끝에서 세면 **분자와 분모의 기준이 달라진다.**
+    """
+    def 읽기(md):
+        try:
+            m, d = (md or "").split("-")
+            return int(m), int(d)
+        except (ValueError, AttributeError):
+            return None
+
+    a, b = 읽기(_from), 읽기(_to)
+    if a is None:
+        return b
+    if b is None:
+        return a
+    올 = date(2000, *a)
+    끝 = date(2000, *b)
+    if 끝 < 올:                            # 해를 넘는 창. 지금 과수엔 없지만 막아 둔다
+        끝 = date(2001, *b)
+    가운데 = 올 + (끝 - 올) / 2
+    return 가운데.month, 가운데.day
+
+
+def _과수기점일(variant, 오늘: date) -> date | None:
+    """과수의 **그 해 기점일**. 아직 안 왔으면 작년 것이다.
+
+    ⚠ **해마다 0으로 되감긴다.** 나무는 몇 해 전에 심었으므로 `sowing_date` 부터
+      쌓으면 여러 해치 열이 누적된다 — 5년 전에 심은 사과가 gdd_target 을 첫해에
+      넘어 영영 '수확' 에 머문다.
+
+    ⚠ 1~3월처럼 **올해 기점이 아직 안 온 때**는 작년 기점부터 쌓는다. 그래야
+      수확이 늦은 과수(감귤 12월)가 해를 넘겨도 끊기지 않는다.
+    """
+    md = _중앙일(getattr(variant, "sow_from", None), getattr(variant, "sow_to", None))
+    if md is None:
+        return None
+    올해 = date(오늘.year, *md)
+    return 올해 if 올해 <= 오늘 else date(오늘.year - 1, *md)
 
 
 def _start_gdd(db: Session, cultivation: Cultivation) -> float:
@@ -220,14 +296,40 @@ def cultivation_growth(
     if crop is None:
         return None
 
-    obs = temps_since(db, station.station_code, cultivation.sowing_date)
+    variant = variant_by_id(db, cultivation.variant_id)
+    오늘 = date.today()
+
+    # ★ 과수는 **해마다 0에서 다시 쌓는다** — 2026-09-20 (`교안_과수를_살린다.md`)
+    #
+    #   나무는 몇 해 전에 심어서 `sowing_date` 부터 쌓으면 여러 해치 열이 누적된다.
+    #   그 해의 0일은 **기점**(발아, 없으면 개화)이고 날짜는 마스터에 있다.
+    #   `sowing_date` 는 그대로 **심은 날**로 남아 n년차를 센다.
+    #
+    #   ⚠ 기점을 못 찾으면(창이 빈 품종) 옛 길로 떨어진다. 그 작물은 어차피
+    #     gdd_target 도 비어 게이지가 안 뜬다 — 조용히 틀리는 것보다 낫다.
+    과수 = variant is not None and is_fruit(variant.sow_method)
+    기점 = _과수기점일(variant, 오늘) if 과수 else None
+    시작일 = 기점 or cultivation.sowing_date
+
+    obs = temps_since(db, station.station_code, 시작일)
     upper = float(crop.upper_temp) if crop.upper_temp is not None else None
-    accumulated = _start_gdd(db, cultivation) + sum(
+    # ⚠ 과수에는 `_start_gdd`(모종 보정)를 얹지 않는다. 그건 "씨 대신 모종으로
+    #   시작했으니 앞 단계를 건너뛴다" 는 뜻인데, 과수는 해마다 기점에서 0으로
+    #   되감기므로 건너뛸 앞 단계가 없다.
+    누적시작 = 0.0 if 과수 else _start_gdd(db, cultivation)
+    accumulated = 누적시작 + sum(
         daily_gdd(float(o.temp_max), float(o.temp_min), float(crop.base_temp), upper) for o in obs
     )
 
     stage = stage_at_gdd(db, cultivation.variant_id, accumulated)
-    variant = variant_by_id(db, cultivation.variant_id)
+
+    # 과수가 목표를 넘겨 단계표 밖으로 나갔으면 **수확 뒤**다. 다음 기점일에
+    # 되감기면 다시 1단계로 돌아온다 — 고리가 여기서 닫힌다.
+    #
+    # ⚠ `stage is None` 만으로는 못 가른다. 단계표가 아예 없는 작물도 None 이다.
+    #   목표를 넘었다는 것까지 봐야 "끝나서 없는 것" 이 된다.
+    목표 = variant.gdd_target if variant is not None else None
+    수확뒤 = bool(과수 and stage is None and 목표 is not None and accumulated >= float(목표))
 
     # 지금 단계가 **단계표의 마지막인가.**
     #
@@ -245,7 +347,12 @@ def cultivation_growth(
     return PlotGrowth(
         cultivation_id=cultivation.id,
         crop_name_ko=crop.name,
-        days_since_planting=(date.today() - cultivation.sowing_date).days,
+        # ⚠ 과수는 **기점부터** 센다. 심은 날부터 세면 "심은 지 1,825일" 이 되어
+        #   그 해의 생육을 말하지 못한다. n년차는 아래 칸이 따로 나른다.
+        days_since_planting=(오늘 - 시작일).days,
+        # 과수만. 한해살이는 None 이다 — `sowing_date` 가 곧 그 해의 시작이라 뜻이 없다
+        years_since_planting=(오늘.year - cultivation.sowing_date.year + 1) if 과수 else None,
+        after_harvest=수확뒤,
         accumulated_gdd=round(accumulated, 1),
         stage_name=stage.stage_name if stage else None,
         guide_text=stage.guide_text if stage else None,
