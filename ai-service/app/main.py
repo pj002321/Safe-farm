@@ -30,7 +30,7 @@ from app.api import tasks as tasks_api
 from app.api import typhoon as typhoon_api
 from app.api import variety as variety_api
 from app.api import weather as weather_api
-from app.core import config
+from app.core import config, measure
 
 app = FastAPI(
     title="Safe Farm AI Service",
@@ -55,6 +55,39 @@ app.include_router(reports_api.router)
 app.include_router(alerts_api.router)
 app.include_router(satellite_api.router)
 app.include_router(typhoon_api.router)
+
+# before/after 비교용. `MEASURE=1` 이 아니면 아래 둘 다 통과만 한다(`core/measure`).
+measure.install()
+
+#: SSE 응답을 가리는 기준. `api/ask.py` 가 StreamingResponse 에 주는 media_type 과
+#: 같아야 한다 — 한쪽만 바뀌면 측정이 스트림 시작 전에 닫힌다.
+STREAM_MEDIA_TYPE = "text/event-stream"
+
+
+@app.middleware("http")
+async def _measure_request(request, call_next):  # noqa: ANN001, ANN202
+    """요청 하나를 측정 한 건으로 묶는다.
+
+    ⚠ **스트리밍 응답은 여기서 닫지 않는다.** 미들웨어는 본문이 다 나가기 전에
+    돌아오므로, `/v1/ask` 를 여기서 닫으면 토큰이 하나도 안 세어진다. 그쪽은
+    `api/ask._sse` 가 끝에서 직접 `finish()` 한다.
+
+    ⚠ **스트리밍인지는 `isinstance` 로 가리지 않는다.** `BaseHTTPMiddleware` 의
+      `call_next` 는 우리가 만든 `StreamingResponse` 가 아니라 Starlette 내부의
+      `_StreamingResponse`(`Response` 상속)를 돌려준다. 그래서 `isinstance` 는
+      SSE 에서도 항상 False 이고, 실제로 이것 때문에 측정이 스트림 시작 전에
+      닫혀서 **모든 행의 LLM 호출·토큰·노드 시간이 0 으로 남았다.** 본문이
+      아니라 헤더를 본다.
+    """
+    if not measure.ENABLED:
+        return await call_next(request)
+
+    measure.start(f"{request.method} {request.url.path}")
+    response = await call_next(request)
+    if not response.headers.get("content-type", "").startswith(STREAM_MEDIA_TYPE):
+        measure.finish()
+    return response
+
 
 @app.get("/health")
 def health() -> dict[str, object]:

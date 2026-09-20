@@ -50,6 +50,57 @@ def test_1km_안쪽_좌표는_한_항목으로_묶인다():
     assert len(호출) == 1
 
 
+def test_격자가_같으면_좌표가_갈려도_한_번만_부른다():
+    """격자 열쇠를 넣은 이유 그 자체.
+
+    아래 두 밭은 1km 눈금 경계를 사이에 둬서 좌표로는 갈린다. 반올림은 거리가
+    아니라 고정 눈금이라 몇 m 만 떨어져도 이렇게 된다. 개발 DB 의 밭 23개가
+    좌표 2자리로 15칸, 격자로 10칸이었다(2026-09-20 실측).
+    """
+    calls, stub = _센다()
+    with patch.object(fc, "fetch_forecast", stub):
+        fc.forecast(36.41499, 128.16, cache_key=fc.grid_cache_key(52, 67))
+        fc.forecast(36.41501, 128.16, cache_key=fc.grid_cache_key(52, 67))
+    assert len(calls) == 1
+
+    calls2, stub2 = _센다()
+    with patch.object(fc, "fetch_forecast", stub2):
+        fc.forecast(36.41499, 128.16)
+        fc.forecast(36.41501, 128.16)
+    assert len(calls2) == 2, "좌표로는 갈리는 두 점이어야 이 테스트가 뜻이 있다"
+
+
+def test_격자_열쇠와_좌표_열쇠는_안_섞인다():
+    """파이썬은 `(52, 67, 0) == (52.0, 67.0, 0)` 을 같다고 본다.
+
+    `grid_cache_key` 의 `"grid"` 태그를 떼면 좌표가 정확히 52.00/67.00 인 밭이
+    격자 (52,67) 칸의 값을 받는다. 막지는 않고 **다른 칸**이라는 것만 고정한다.
+    """
+    calls, stub = _센다()
+    with patch.object(fc, "fetch_forecast", stub):
+        fc.forecast(52.0, 67.0)
+        fc.forecast(52.0, 67.0, cache_key=fc.grid_cache_key(52, 67))
+    assert len(calls) == 2
+
+
+def test_격자가_같아도_past_days_가_다르면_다른_항목이다():
+    """`past_days` 는 `forecast` 가 붙인다. 안 붙이면 짧은 배열을 긴 자리에 준다."""
+    calls, stub = _센다()
+    key = fc.grid_cache_key(52, 67)
+    with patch.object(fc, "fetch_forecast", stub):
+        fc.forecast(36.41, 128.16, past_days=0, cache_key=key)
+        fc.forecast(36.41, 128.16, past_days=14, cache_key=key)
+    assert len(calls) == 2
+
+
+def test_격자로_묶어도_실제_좌표로_부른다():
+    """격자→좌표 역변환이 없다. 칸을 먼저 데운 밭의 좌표가 그대로 나가야 한다."""
+    calls, stub = _센다()
+    with patch.object(fc, "fetch_forecast", stub):
+        fc.forecast(36.4117806052, 128.1579312345, cache_key=fc.grid_cache_key(52, 67))
+    assert calls == [(36.4117806052, 128.1579312345, 0)]
+
+
 def test_past_days_가_다르면_다른_항목이다():
     # 섞이면 배열 길이가 달라 **날짜가 밀린다**
     호출, 대역 = _센다()
