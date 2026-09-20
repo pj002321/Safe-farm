@@ -146,8 +146,14 @@ FRUIT_METHODS = frozenset({"발아", "개화"})
 
 
 def is_fruit(sow_method: str | None) -> bool:
-    """과수인가. `crop_variants.sow_method` 한 칸으로 가른다."""
-    return (sow_method or "") in FRUIT_METHODS
+    """과수인가. `crop_variants.sow_method` 한 칸으로 가른다.
+
+    ⚠ **앞뒤 공백을 벗긴다.** 웹의 `fruitOrigin.isFruit` 가 `.trim()` 을 하므로
+      맞춰야 한다 — 안 맞으면 `" 개화 "` 같은 값에서 **화면은 과수로 보고 서버는
+      아니라고 봐서** 게이지와 할 일 카드가 서로 다른 기준으로 돈다.
+      (2026-09-21 점검에서 실제로 갈려 있던 것을 맞춘 것이다.)
+    """
+    return (sow_method or "").strip() in FRUIT_METHODS
 
 
 def _중앙일(_from: str | None, _to: str | None) -> tuple[int, int] | None:
@@ -160,9 +166,21 @@ def _중앙일(_from: str | None, _to: str | None) -> tuple[int, int] | None:
     def 읽기(md):
         try:
             m, d = (md or "").split("-")
-            return int(m), int(d)
+            월, 일 = int(m), int(d)
         except (ValueError, AttributeError):
             return None
+        # ⚠ **여기서 달력에 물어본다.** 아래 계산이 범위를 벗어난 값에
+        #   `ValueError` 를 던지는데, 이 함수는 자정 배치가 밭마다 부르는 자리다 —
+        #   마스터에 `13-01` 같은 값이 하나 들어오면 **배치가 통째로 죽는다.**
+        #   `repo/crop.py` 가 적어 둔 사고와 같은 꼴이다("밭 하나의 결손이 모든
+        #   사용자의 할 일을 막았다").
+        #   ⚠ 숫자 범위(1~12·1~31)만 보면 `02-30` 이 새어 나간다. **달력에 물어야** 한다.
+        #   ⚠ 웹의 `fruitOrigin.parseMmDd` 도 같은 검사를 한다 — 한쪽만 고치지 말 것.
+        try:
+            date(2000, 월, 일)      # 2000 은 윤년이라 02-29 를 받는다
+        except ValueError:
+            return None
+        return 월, 일
 
     a, b = 읽기(_from), 읽기(_to)
     if a is None:

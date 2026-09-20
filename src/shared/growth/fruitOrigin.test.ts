@@ -27,6 +27,14 @@ describe("isFruit", () => {
     expect(isFruit("개화")).toBe(true);
   });
 
+  it("앞뒤 공백은 벗긴다 — 파이썬 is_fruit 도 .strip() 한다", () => {
+    // ⚠ 한쪽만 벗기면 `" 개화 "` 에서 화면은 과수로 보고 서버는 아니라고 본다.
+    //   게이지와 할 일 카드가 서로 다른 기준으로 돌게 된다 (2026-09-21 맞춤)
+    for (const m of [" 발아", "개화 ", "  발아  ", "\t개화\n"]) {
+      expect(isFruit(m)).toBe(true);
+    }
+  });
+
   it("심는 말이면 과수가 아니다", () => {
     // ⚠ '인공수분'(참다래의 옛 값)도 과수가 아니다 — 농작업이지 기점이 아니다
     for (const m of ["씨뿌림", "아주심기", "모기르기", "인공수분", "", null]) {
@@ -50,6 +58,16 @@ describe("windowMidMmDd", () => {
   it("창이 비면 없다", () => {
     expect(windowMidMmDd(null, null)).toBeNull();
     expect(windowMidMmDd("", "")).toBeNull();
+  });
+
+  it("⚠ 달력에 없는 날은 버린다 — 범위 검사만으로는 02-30 이 샌다", () => {
+    // 이 검사가 지키는 것: parseMmDd 를 `day <= 31` 로 되돌리면 02-30 이 통과해
+    // Date.UTC 가 3월 2일로 조용히 굴러간다. 마스터가 그런 값을 줄 때 화면이
+    // 엉뚱한 기점을 쓰게 된다
+    expect(windowMidMmDd("13-01", "13-05")).toBeNull();
+    expect(windowMidMmDd("04-32", "04-33")).toBeNull();
+    expect(windowMidMmDd("02-30", "03-05")).toEqual([3, 5]); // 한쪽만 버리고 남은 쪽을 쓴다
+    expect(windowMidMmDd("02-29", "03-05")).toEqual([3, 2]); // 윤년은 받는다
   });
 
   it("해를 넘는 창도 가운데를 낸다", () => {

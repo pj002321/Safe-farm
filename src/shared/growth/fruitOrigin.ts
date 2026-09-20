@@ -50,7 +50,19 @@ function parseMmDd(value: string | null): [number, number] | null {
   if (m === null) return null;
   const month = Number(m[1]);
   const day = Number(m[2]);
-  if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+  // ⚠ **달력에 물어본다.** 숫자 범위(1~12·1~31)만 보면 `02-30` 이 새어 나가고,
+  //   그 값으로 `Date.UTC` 를 부르면 3월 2일로 조용히 굴러간다. 2000 은 윤년이라
+  //   `02-29` 는 받는다. 파이썬 `plot_growth._중앙일` 도 같은 검사를 한다 —
+  //   한쪽만 고치지 말 것.
+  const probe = new Date(Date.UTC(2000, month - 1, day));
+  if (
+    probe.getUTCMonth() !== month - 1 ||
+    probe.getUTCDate() !== day ||
+    month < 1 ||
+    month > 12
+  ) {
+    return null;
+  }
   return [month, day];
 }
 
@@ -72,11 +84,14 @@ export function windowMidMmDd(
   if (a === null) return b;
   if (b === null) return a;
 
-  // 윤년이 아닌 해로 고정해 센다. 창의 가운데는 해와 무관하다
-  const start = Date.UTC(2001, a[0] - 1, a[1]);
+  // ⚠ **2000 년(윤년)으로 고정해 센다.** 파이썬 `plot_growth._중앙일` 이
+  //   `date(2000, …)` 을 쓰므로 같은 해를 써야 한다. 평년으로 세면 `02-29` 가
+  //   3월 1일로 굴러 **가운데가 하루 어긋난다**(02-29~03-05 가 3.2 vs 3.3).
+  //   2026-09-21 에 테스트가 이 갈림을 잡았다.
+  const start = Date.UTC(2000, a[0] - 1, a[1]);
   // 해를 넘는 창(12-25~01-05)은 끝을 다음 해로 민다. 지금 과수엔 없지만 막아 둔다
-  const endRaw = Date.UTC(2001, b[0] - 1, b[1]);
-  const end = endRaw < start ? Date.UTC(2002, b[0] - 1, b[1]) : endRaw;
+  const endRaw = Date.UTC(2000, b[0] - 1, b[1]);
+  const end = endRaw < start ? Date.UTC(2001, b[0] - 1, b[1]) : endRaw;
 
   const mid = new Date(start + Math.floor((end - start) / 2 / DAY_MS) * DAY_MS);
   return [mid.getUTCMonth() + 1, mid.getUTCDate()];
