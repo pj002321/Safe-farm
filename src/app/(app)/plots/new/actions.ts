@@ -14,7 +14,7 @@ import {
 } from "@/features/monitoring/domain/plotLocation";
 import { parsePlotRegistration } from "@/features/plots/domain/registerPlot";
 import { insertPlot } from "@/features/plots/plotStore";
-import { aiService } from "@/shared/aiService/client";
+import { aiService, type RecommendResult } from "@/shared/aiService/client";
 import { requireUser } from "@/shared/auth/session";
 import { kstDateString } from "@/shared/utils/kstDate";
 /**
@@ -42,6 +42,25 @@ import { kstDateString } from "@/shared/utils/kstDate";
  * ```
  * ---------------------------------------------
  */
+/**
+ * 3단계(작물 선택)에서 좌표만으로 "지금 심기 좋은 작물" 을 미리 본다(V1-51).
+ * 폼 제출이 아니라 화면이 버튼으로 직접 부르는 액션이라 값을 그대로 돌려준다.
+ *
+ * 실패·후보 없음·좌표 미선택은 전부 null 로 뭉갠다 — 그때 화면은 패널을
+ * 숨긴다(ai-service `api/recommend.py` 와 같은 원칙).
+ */
+export async function recommendCrops(
+  lat: number,
+  lon: number,
+): Promise<RecommendResult | null> {
+  await requireUser();
+
+  if (validatePlotLocation({ lat, lon })) return null;
+
+  const result = await aiService.recommend(lat, lon);
+  return result.ok ? result.data : null;
+}
+
 export async function registerPlot(formData: FormData): Promise<void> {
   const viewer = await requireUser();
 
@@ -69,12 +88,26 @@ export async function registerPlot(formData: FormData): Promise<void> {
   // 폼은 작물까지만 고른다. 재배 행은 품종을 가리키므로 여기서 한 번 바꿔 준다.
   // 작물마다 파종일·방식이 다를 수 있어(배추 8월, 무 9월) 폼도 작물별로 받는다.
   const selections = parseCultivationSelections(formData);
-  // 숙기를 고른 작물만 담는다. 안 고른 작물은 resolveVariantIds 가 중생 우선으로 정한다
+  // 숙기를 고른 작물만 담는다. 안 고른 작물은 아래 AI 추천 → 그래도 없으면
+  // resolveVariantIds 가 중생 우선으로 정한다
   const maturityByCropId = new Map(
     selections.flatMap((s) =>
       s.maturity ? [[s.cropId, s.maturity] as const] : [],
     ),
   );
+  const unresolved = selections.filter((s) => !maturityByCropId.has(s.cropId));
+  if (unresolved.length > 0) {
+    const suggested = await aiService.recommendVariant(
+      parsed.value.latitude,
+      parsed.value.longitude,
+      unresolved.map((s) => ({ cropId: s.cropId, sowDate: s.sowingDate })),
+    );
+    if (suggested.ok) {
+      for (const r of suggested.data.recommendations) {
+        maturityByCropId.set(r.cropId, r.maturityType);
+      }
+    }
+  }
   const variantIdByCropId = await resolveVariantIds(
     selections.map((selection) => selection.cropId),
     maturityByCropId,

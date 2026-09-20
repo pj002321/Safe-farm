@@ -33,7 +33,7 @@ async def run(title: str, deps: GraphDeps) -> None:
 
     # ainvoke() -> 마지막 결과만
     # astrem()  -> 단계 마다
-    async for update in graph.astream({"field_id": "field-1"}, stream_mode="updates"):
+    async for update in graph.astream({"lat": 37.5, "lon": 127.0}, stream_mode="updates"):
         for node, output in update.items():
             print(f"[{node}] {output}")
 

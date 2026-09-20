@@ -13,15 +13,15 @@ checkpointer 도 여기서 만들지 않고 `create_graph(deps, checkpointer=...
 
 from dataclasses import dataclass
 
-from langchain_core.language_models import BaseChatModel
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 
-from app.domain.suitability import CropProfile, Risk, SuitabilityResult, WeatherWindow
+from app.domain.crop_fit import CropCandidate, DailyWeather, FitResult, HazardRule, SowWindow
 from app.graph.nodes import (
     CandidateLoader,
+    ExplainLLM,
     WeatherFetcher,
     generate,
     make_collect_weather_node,
@@ -111,7 +111,7 @@ dataclss
 class GraphDeps:
     fetch_weather: WeatherFetcher
     load_candidates: CandidateLoader
-    llm: BaseChatModel
+    llm: ExplainLLM
 
 
 def build_graph(deps: GraphDeps) -> StateGraph:
@@ -179,7 +179,7 @@ def create_graph(
     return build_graph(deps).compile(checkpointer=checkpointer)
 
 
-CHECKPOINT_TYPES: tuple[type, ...] = (WeatherWindow, CropProfile, Risk, SuitabilityResult)
+CHECKPOINT_TYPES: tuple[type, ...] = (DailyWeather, SowWindow, HazardRule, CropCandidate, FitResult)
 """state 에 들어가는 도메인 타입. checkpoint 복원 허용 목록."""
 
 

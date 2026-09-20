@@ -29,7 +29,7 @@ async def main() -> None:
 
     print("=== 1. checkpointer 없음 ===")
     stateless = create_graph(fake_deps())
-    await stateless.ainvoke({"field_id": "field-1"}, config)
+    await stateless.ainvoke({"lat": 37.5, "lon": 127.0}, config)
     try:
         await stateless.aget_state(config)
     except ValueError as e:
@@ -37,7 +37,7 @@ async def main() -> None:
 
     print("\n=== 2. InMemorySaver ===")
     graph = create_graph(fake_deps(), checkpointer=InMemorySaver(serde=create_checkpoint_serde()))
-    await graph.ainvoke({"field_id": "field-1"}, config)
+    await graph.ainvoke({"lat": 37.5, "lon": 127.0}, config)
 
     snapshot = await graph.aget_state(config)
     print("마지막 state 키:", sorted(snapshot.values))

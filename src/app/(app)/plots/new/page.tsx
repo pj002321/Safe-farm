@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { AiCropRecommend } from "@/components/plot/AiCropRecommend";
 import { CropCards } from "@/components/plot/CropCards";
 import { PlotInfoFields } from "@/components/plot/PlotInfoFields";
 import { PlotLocationStep } from "@/components/plot/PlotLocationStep";
@@ -214,7 +215,10 @@ export default async function PlotRegisterPage() {
                 {step.no === 3 && (
                   <fieldset>
                     <legend className="sr-only">재배할 작물</legend>
-                    <CropCards crops={crops} maxSowingDate={today} />
+                    <AiCropRecommend />
+                    <div className="mt-5">
+                      <CropCards crops={crops} maxSowingDate={today} />
+                    </div>
                   </fieldset>
                 )}
               </StepPanel>
