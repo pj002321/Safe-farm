@@ -67,11 +67,19 @@ export function serverConfig(): SupabasePublicConfig & {
         "RLS 를 우회하므로 절대 클라이언트로 나가면 안 됩니다. import 경로를 확인하세요.",
     );
   }
+  // ⚠ **이름이 `DB_SERVICE_ROLE` 이다.** 이 프로젝트는 DB 를 Supabase 하나로
+  //   통일했고, 접속 계열 변수를 `DB_*` 로 맞춰 두었다(ai-service 의
+  //   `DB_HOST`·`DB_USER`·`DB_PASSWORD` 와 같은 줄기다). 같은 DB 를 가리키는
+  //   값이 한쪽은 `DB_`, 한쪽은 `SUPABASE_` 로 갈리면 넣을 때 헷갈린다.
+  //
+  //   ⚠ 옛 이름(`SUPABASE_SERVICE_ROLE`)도 받는다. 배포 환경에 그 이름으로
+  //     들어가 있으면 이름을 바꾸는 순간 조용히 죽기 때문이다 — 이 키가 없으면
+  //     `advices` 조회가 실패하고, 그 실패는 화면에 안 드러난다(2026-09-20 실측).
   return {
     ...publicConfig(),
     serviceRoleKey: required(
-      "SUPABASE_SERVICE_ROLE",
-      process.env.SUPABASE_SERVICE_ROLE,
+      "DB_SERVICE_ROLE",
+      process.env.DB_SERVICE_ROLE ?? process.env.SUPABASE_SERVICE_ROLE,
     ),
   };
 }

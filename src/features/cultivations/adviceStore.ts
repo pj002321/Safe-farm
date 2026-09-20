@@ -27,10 +27,25 @@ import { getSupabaseAdmin } from "@/shared/supabase/server";
  * ---------------------------------------------
  */
 
+/** 목록 칸 하나를 글자 배열로. 빈 것·글자 아닌 것은 버린다. */
+function lines(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((one) => (typeof one === "string" ? one.trim() : ""))
+    .filter((one) => one.length > 0);
+}
+
 /**
- * 그 재배의 그날 리포트 요약. 아직 안 만들어졌으면 null.
+ * 그 재배의 그날 리포트 **전체**. 아직 안 만들어졌으면 null.
  *
- * 조회가 실패해도 던지지 않는다 — 이 값이 없다고 `했음` 기록 자체가 막히면 안 된다.
+ * ★ 2026-09-20 — 전에는 `summary` 한 줄만 담았다. 리포트 탭은 그 아래에 할 일과
+ *   주의를 불릿으로 더 보여 주는데, 일지에는 첫 줄만 남아 **화면에서 본 것과
+ *   달랐다.** 보고 옮겨 적는 것이 이 일지의 쓸모라 모양이 같아야 한다.
+ *
+ * ⚠ **`todos` 와 `warnings` 를 나누지 않는다.** 리포트 탭이 둘을 같은 불릿으로
+ *   보여 주기 때문이다(`components/report/…`). 여기서만 나누면 화면과 달라진다.
+ *
+ * 조회가 실패해도 던지지 않는다 — 이 값이 없다고 기록 자체가 막히면 안 된다.
  */
 export async function adviceSummaryOn(
   cultivationId: string,
@@ -38,7 +53,7 @@ export async function adviceSummaryOn(
 ): Promise<string | null> {
   const { data, error } = await getSupabaseAdmin()
     .from("advices")
-    .select("summary")
+    .select("summary, todos, warnings")
     .eq("cultivation_id", cultivationId)
     .eq("advice_date", onDate)
     .maybeSingle();
@@ -47,5 +62,16 @@ export async function adviceSummaryOn(
     console.error("[cultivation] 그날 리포트 조회 실패", error.message);
     return null;
   }
-  return data?.summary ?? null;
+  if (!data) return null;
+
+  const summary = typeof data.summary === "string" ? data.summary.trim() : "";
+  const bullets = [...lines(data.todos), ...lines(data.warnings)];
+
+  // 요약도 불릿도 없으면 담지 않는다. 빈 글자를 담으면 화면이 "리포트가 있다" 고
+  // 읽어 아래 안내(까닭)를 못 내보낸다.
+  if (summary.length === 0 && bullets.length === 0) return null;
+
+  return [summary, ...bullets.map((one) => `- ${one}`)]
+    .filter((one) => one.length > 0)
+    .join("\n");
 }
