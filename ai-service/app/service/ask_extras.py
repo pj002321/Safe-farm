@@ -67,7 +67,11 @@ def _rain_forecast_line(plot: Plot) -> str | None:
       Open-Meteo 를 직접 부르면 같은 좌표를 1시간 안에 또 묻는 낭비가 생긴다.
     """
     try:
-        payload = forecast_cache.forecast(float(plot.latitude), float(plot.longitude))
+        payload = forecast_cache.forecast(
+            float(plot.latitude),
+            float(plot.longitude),
+            cache_key=forecast_cache.grid_cache_key(plot.grid_x, plot.grid_y),
+        )
         daily = payload["daily"]
         오늘부터 = daily_index_of(daily, kst_today().isoformat())
         if 오늘부터 is None:

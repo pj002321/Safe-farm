@@ -11,17 +11,18 @@ from app.service.plot_tasks import _memo_key, _plot_weather, _prefetch_weather
 
 
 class 가짜밭:
-    """plots 행에서 미리 받기가 보는 것은 위경도뿐이다."""
+    """미리 받기가 보는 것은 위경도와 **격자**다. 격자는 열쇠, 좌표는 실제 호출용이다."""
 
-    def __init__(self, lat, lon):
+    def __init__(self, lat, lon, grid=(52, 67)):
         self.latitude = lat
         self.longitude = lon
+        self.grid_x, self.grid_y = grid
 
 
 def _받은척(호출들):
     """부른 좌표를 적어 두고 빈 예보를 돌려주는 대역."""
 
-    def 대역(lat, lon):
+    def 대역(lat, lon, cache_key):
         호출들.append((lat, lon))
         return type("_W", (), {"water": WaterBalance(), "tomorrow": None})()
 
@@ -41,17 +42,29 @@ def test_미리_받아_두면_루프가_다시_안_부른다():
     assert len(호출) == 1, "루프가 또 불렀다 — _memo_key 가 두 곳에서 어긋났다"
 
 
-def test_같은_마을_밭_둘은_한_번만_부른다():
-    # _COORD_NDIGITS(2자리 ≈ 1km) 로 뭉친다
-    밭들 = [가짜밭(36.41178, 128.15793), 가짜밭(36.41002, 128.15501)]
+def test_같은_격자_밭_둘은_한_번만_부른다():
+    # 예보 격자(≈5km)로 뭉친다. 좌표로 묶던 때는 1km 눈금이라 아래 둘이 갈렸다
+    밭들 = [가짜밭(36.41178, 128.15793), 가짜밭(36.38500, 128.19000)]
     호출 = []
     with patch("app.service.plot_tasks._fetch_plot_weather", _받은척(호출)):
         _prefetch_weather(밭들, {})
     assert len(호출) == 1
 
 
+def test_다른_격자_밭은_따로_부른다():
+    # 좌표가 100m 안쪽이어도 격자가 다르면 다른 예보다. 뭉치면 남의 칸 값을 받는다
+    밭들 = [
+        가짜밭(36.41178, 128.15793, grid=(52, 67)),
+        가짜밭(36.41180, 128.15795, grid=(53, 67)),
+    ]
+    호출 = []
+    with patch("app.service.plot_tasks._fetch_plot_weather", _받은척(호출)):
+        _prefetch_weather(밭들, {})
+    assert len(호출) == 2
+
+
 def test_열쇠가_아니라_실제_밭_좌표로_부른다():
-    # 열쇠(반올림 좌표)로 부르면 300~600m 옆을 묻게 된다. 실측으로 수지가 어긋났다
+    # 열쇠는 격자라 좌표로 되돌릴 수 없다. 대표 좌표로 불러야 루프와 값이 같다
     밭 = 가짜밭(36.4117806052, 128.1579312345)
     호출 = []
     with patch("app.service.plot_tasks._fetch_plot_weather", _받은척(호출)):
