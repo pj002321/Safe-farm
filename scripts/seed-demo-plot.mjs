@@ -54,8 +54,11 @@ const DEMO_PLOT = {
   address_ko: "경상북도 상주시",
   name: "데모 배추밭",
   area_m2: 330,
-  crops: ["배추"],
 };
+// ⚠️ `crops` 를 여기 넣지 말 것. plots 에는 그 칸이 없다 — 작물은 cultivations
+//    행으로 들어간다(아래 findOrCreateCultivation). 한때 plots.crops text[] 가
+//    있었고 이 스크립트가 그걸 쓰고 있었는데, 스키마가 옮겨 가면서 남았다.
+//    PostgREST 는 "Could not find the 'crops' column" 으로 거부한다.
 
 async function findOrCreateDemoUser() {
   const { data, error } = await supabase.auth.admin.listUsers({

@@ -63,11 +63,14 @@ export async function CallToAction() {
               aria-hidden="true"
               className="size-1.5 rounded-full bg-telemetry"
             />
-            시범 지역 · {weather?.stationNameKo ?? plot?.regionKo ?? "관측소 정보 없음"}
+            시범 지역 ·{" "}
+            {weather?.stationNameKo ?? plot?.regionKo ?? "관측소 정보 없음"}
           </p>
 
           <h2 className="text-balance font-semibold text-3xl text-space-fg tracking-tight md:text-display">
-            이레 동안 비가 {summary?.rainfallMm != null ? summary.rainfallMm.toFixed(1) : "—"}mm.
+            이레 동안 비가{" "}
+            {summary?.rainfallMm != null ? summary.rainfallMm.toFixed(1) : "—"}
+            mm.
             <br />
             알고 계셨나요?
           </h2>
@@ -76,8 +79,8 @@ export async function CallToAction() {
             {isDry
               ? "상주의 배추밭은 오늘 물을 줘야 합니다."
               : "상주의 배추밭은 지금 물 걱정이 없습니다."}{" "}
-            밭 하나를 등록하시면 같은
-            계산을 당신의 좌표로 돌려, 내일 아침 첫 리포트를 보내 드립니다.
+            밭 하나를 등록하시면 같은 계산을 당신의 좌표로 돌려, 내일 아침 첫
+            리포트를 보내 드립니다.
           </p>
 
           <div className="mt-2 flex flex-col items-center gap-3 sm:flex-row">

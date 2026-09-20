@@ -1,8 +1,4 @@
-import {
-  CloudRainIcon,
-  DropletIcon,
-  WindIcon,
-} from "@/components/icons";
+import { CloudRainIcon, DropletIcon, WindIcon } from "@/components/icons";
 import type { PlotForecast } from "@/shared/aiService/client";
 import { windArrowDeg, windLabelKo } from "@/shared/growth/windText";
 
