@@ -37,6 +37,7 @@ function note(id: string, occurredOn: string): TimelineEventRow {
     stageOrder: null,
     forecastOn: null,
     workKind: null,
+    createdAt: "2026-09-19T11:41:00Z",
     adviceText: null,
     weather: NO_WEATHER,
   };
@@ -115,6 +116,7 @@ describe("buildTimeline", () => {
           stageOrder: null,
           forecastOn: "2026-10-18",
           workKind: null,
+          createdAt: "2026-09-19T11:41:00Z",
           adviceText: null,
           weather: NO_WEATHER,
         },

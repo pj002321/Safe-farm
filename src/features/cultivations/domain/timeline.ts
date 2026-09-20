@@ -54,12 +54,6 @@ export interface EntryWeather {
   sunsetAt: string | null;
 }
 
-/** 날씨 칸이 하나라도 차 있나. 전부 비면 화면은 띠를 아예 안 그린다. */
-export function hasWeather(weather: EntryWeather | null): boolean {
-  if (weather === null) return false;
-  return Object.values(weather).some((value) => value !== null);
-}
-
 /** `cultivation_events` 한 행을 화면이 쓰는 이름으로 좁힌 것. */
 export interface TimelineEventRow {
   id: string;
@@ -68,6 +62,8 @@ export interface TimelineEventRow {
   body: string | null;
   stageOrder: number | null;
   forecastOn: string | null;
+  /** 행이 만들어진 시각(ISO). 어제 일을 오늘 적으면 occurredOn 과 갈린다. */
+  createdAt: string;
   /** 농사로의 "활동유형". 고르지 않았으면 null. */
   workKind: string | null;
   /** 그날 AI 리포트 글. 그날 첫 `TASK_DONE` 에만 있다. */
@@ -103,6 +99,14 @@ export interface TimelineEntry {
    * 무엇을 했나다. 둘을 합치면 `EVENT_TITLE` 을 보는 §6-다 쪽과 엉킨다.
    */
   workKindKo: string | null;
+  /**
+   * **적은 시각**(ISO). 재배 컬럼에서 온 줄(파종·수확·중단)은 null 이다 — 그 셋은
+   * 행이 아니라 상태라 "언제 적었나" 가 없다.
+   *
+   * `occurredOn`(있었던 날)과 다르다. 사나흘 빠뜨린 것을 하루에 몰아 적으면 이
+   * 값이 전부 같은 날이 된다.
+   */
+  createdAtIso: string | null;
   /**
    * `했음` 을 누른 그 시점의 AI 리포트 글. 그날 첫 줄에만 있고 나머지는 null.
    *
@@ -160,6 +164,7 @@ function fromCultivation(
       bodyKo: null,
       stageOrder: null,
       workKindKo: null,
+      createdAtIso: null,
       adviceTextKo: null,
       weather: null,
     });
@@ -174,6 +179,7 @@ function fromCultivation(
       bodyKo: null,
       stageOrder: null,
       workKindKo: null,
+      createdAtIso: null,
       adviceTextKo: null,
       weather: null,
     });
@@ -188,6 +194,7 @@ function fromCultivation(
       bodyKo: failureReasonKo(cultivation.failureReason),
       stageOrder: null,
       workKindKo: null,
+      createdAtIso: null,
       adviceTextKo: null,
       weather: null,
     });
@@ -211,6 +218,7 @@ function fromEvent(event: TimelineEventRow): TimelineEntry {
         : event.body,
     stageOrder: event.stageOrder,
     workKindKo: event.workKind,
+    createdAtIso: event.createdAt,
     adviceTextKo: event.adviceText,
     weather: event.weather,
   };

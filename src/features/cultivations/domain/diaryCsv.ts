@@ -1,25 +1,31 @@
+import type { CsvValue } from "@/shared/utils/csv";
 import type { TimelineEntry } from "./timeline";
 
 /**
  * ---------------------------------------------
- * [Feature]: 영농일지 CSV 만들기 (순수)
+ * [Feature]: 영농일지를 CSV 표로 (순수)
  *
  * [Description]
  * - 농민이 보조금·인증 서류를 쓸 때 **보고 옮겨 적을** 한 장이다. 제출물이 아니라
  *   참고 자료라, 빈칸이 있어도 "그날은 모름" 으로 읽히면 된다.
- * - **화면과 순서가 반대다.** 화면은 최신순이고 여기는 **오름차순**(파종 → 수확)
- *   이다. 사람은 서류를 처음부터 끝까지 채우기 때문이다. 화면을 어떻게 보고
- *   있었는지에 파일 순서가 달리면 안 되므로 **여기서 늘 다시 세운다.**
+ * - **여기는 머리글과 줄만 만든다.** 따옴표·수식 주입·개행은 `shared/utils/csv`
+ *   의 `toCsv` 가, BOM 과 내려받기는 `CsvDownloadButton` 이 맡는다. 그쪽이
+ *   이미 하는 일을 여기서 또 하면 규칙이 두 벌이 된다.
+ *   ⚠ 특히 수식 주입 방어를 직접 하지 말 것 — `toCsv` 는 **숫자로 읽히는 값은
+ *     건드리지 않는다.** 직접 막으면 `-3.5` 같은 정상 음수가 글자로 망가진다.
+ * - **화면과 순서가 반대다.** 화면은 최신순이고 파일은 **오름차순**(파종 → 수확)
+ *   이다. 사람은 서류를 처음부터 끝까지 채우기 때문이다.
  * - **빈칸을 0 으로 채우지 않는다.** `강수 0` 은 "비가 안 왔다" 는 뜻이라, 못 찾은
- *   날과 안 온 날이 같아진다.
+ *   날과 안 온 날이 같아진다. `null` 은 `toCsv` 가 빈 칸으로 내보낸다.
  *
- * ⚠️ **아직 화면에서 부르지 않는다.** 내보내기 버튼은 잠가 두었다
+ * ⚠️ **아직 화면에서 부르지 않는다.** 내보내기 버튼을 잠가 두었다
  *    (`DiaryExportButton`). 칸은 이미 다 저장되고 있으므로 버튼만 열면 된다 —
  *    `taskAdvice.ts` 를 안 쓰이게 두는 것과 같은 결이다. 지우지 말 것.
  *
  * [Usage]
  * ```ts
- * const csv = buildDiaryCsv(entries, { cropKo: "양파", stageNames });
+ * const rows = diaryCsvRows(entries, { cropKo: "양파", stageNames });
+ * toCsv(DIARY_CSV_HEADERS, rows);
  * ```
  * ---------------------------------------------
  */
@@ -44,84 +50,45 @@ export interface DiaryCsvContext {
   stageNames: Record<number, string>;
 }
 
-/**
- * 이 글자로 시작하면 엑셀이 칸을 **수식으로** 연다.
- *
- * 탭·캐리지리턴이 끼어 있는 까닭은 그 뒤에 수식을 숨기는 수법이 있어서다.
- * 정규식으로 쓰면 `\t` 가 편집기·도구를 거치며 진짜 탭으로 바뀌어 식이 깨진다 —
- * 실제로 한 번 그랬다. 첫 글자만 보면 되는 일이라 집합으로 둔다.
- */
-const RISKY_FIRST = new Set(["=", "+", "-", "@", "\t", "\r"]);
-
-/**
- * 엑셀이 글자를 수식으로 읽지 않게 막는다.
- *
- * ⚠️ 자기 파일이면 별일 아니지만 이 파일은 조합·공무원에게 건네질 수 있다.
- *    앞에 작은따옴표를 붙이면 엑셀이 글자로 읽는다.
- */
-function defuse(value: string): string {
-  return RISKY_FIRST.has(value[0] ?? "") ? `'${value}` : value;
-}
-
-/** 큰따옴표·쉼표·줄바꿈이 들어 있으면 감싸고, 안의 큰따옴표는 두 개로. */
-function cell(value: string | number | null): string {
-  if (value === null) return "";
-  const text = defuse(String(value));
-  return /[",\n\r]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
-}
-
-function rowOf(entry: TimelineEntry, ctx: DiaryCsvContext): string {
-  const stageKo =
-    entry.stageOrder === null
-      ? null
-      : (ctx.stageNames[entry.stageOrder] ?? null);
-  const weather = entry.weather;
+function rowOf(
+  entry: TimelineEntry,
+  ctx: DiaryCsvContext,
+): readonly CsvValue[] {
+  const w = entry.weather;
 
   return [
     entry.occurredOn,
     ctx.cropKo,
-    stageKo,
+    entry.stageOrder === null
+      ? null
+      : (ctx.stageNames[entry.stageOrder] ?? null),
     entry.workKindKo,
-    weather?.skyKo ?? null,
+    w?.skyKo ?? null,
     // 파종·수확·중단 줄은 제목이 곧 내용이라 제목을 싣는다. 나머지는 본문.
     entry.bodyKo ?? entry.titleKo,
-    weather?.tempMaxC ?? null,
-    weather?.tempMinC ?? null,
-    weather?.rainfallMm ?? null,
+    w?.tempMaxC ?? null,
+    w?.tempMinC ?? null,
+    w?.rainfallMm ?? null,
     entry.adviceTextKo,
-  ]
-    .map(cell)
-    .join(",");
+  ];
 }
 
 /**
- * 기록을 CSV 한 장으로. 줄은 **오름차순**이다.
+ * 기록을 CSV 줄로. **오름차순**이다.
  *
- * ⚠️ **맨 앞에 U+FEFF 한 글자를 붙인다.** 없으면 엑셀이 시스템 코드페이지(cp949)로
- *    읽어 한글이 전부 깨진다. 눈에 안 보이는 글자라 코드에 직접 적지 않고
- *    `String.fromCharCode` 로 만든다 — 편집기가 조용히 지운다.
+ * ⚠️ 날짜로 다시 정렬하지 않고 **뒤집는다.** `buildTimeline` 이 날짜뿐 아니라 같은
+ *    날 안의 차례(`SAME_DAY_ORDER`)까지 정해서 준다. 날짜만 보고 다시 세우면
+ *    정렬이 안정적이라 **그날 줄만 최신순으로 남아** 오름차순 파일 안에서 거꾸로
+ *    선다. 뒤집기는 둘을 한꺼번에 뒤집는다.
  */
-export function buildDiaryCsv(
+export function diaryCsvRows(
   entries: readonly TimelineEntry[],
   ctx: DiaryCsvContext,
-): string {
-  const BOM = String.fromCharCode(0xfeff);
-  // ⚠️ 날짜로 다시 세우지 않고 **뒤집는다.** `buildTimeline` 이 날짜뿐 아니라 같은
-  //    날 안의 차례(SAME_DAY_ORDER)까지 정해서 준다. 날짜만 보고 다시 정렬하면
-  //    정렬이 안정적이라 **그날 줄만 최신순으로 남아** 오름차순 파일 안에서 거꾸로
-  //    선다. 뒤집기는 둘을 한꺼번에 뒤집는다.
-  const ascending = [...entries].reverse();
-
-  return (
-    BOM +
-    [
-      DIARY_CSV_HEADERS.join(","),
-      ...ascending.map((entry) => rowOf(entry, ctx)),
-    ].join("\r\n")
-  );
+): readonly (readonly CsvValue[])[] {
+  return [...entries].reverse().map((entry) => rowOf(entry, ctx));
 }
 
-/** 내려받을 때 쓸 이름. 공백과 쉼표는 파일 이름에서 골치라 밑줄로 바꾼다. */
+/** 내려받을 때 쓸 이름. 공백과 구분자는 파일 이름에서 골치라 밑줄로 바꾼다. */
 export function diaryCsvFileName(cropKo: string, plotNameKo: string): string {
   const safe = (value: string) => value.replace(/[\s,/\\]+/g, "_");
   return `영농일지_${safe(cropKo)}_${safe(plotNameKo)}.csv`;

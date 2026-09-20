@@ -1,9 +1,6 @@
-import { WeatherStrip } from "@/components/cultivation/WeatherStrip";
+import { DiaryDetail } from "@/components/cultivation/DiaryDetail";
 import { SubmitButton } from "@/components/shared/SubmitButton";
-import {
-  hasWeather,
-  type TimelineEntry,
-} from "@/features/cultivations/domain/timeline";
+import type { TimelineEntry } from "@/features/cultivations/domain/timeline";
 
 /**
  * ---------------------------------------------
@@ -15,9 +12,10 @@ import {
  *   `domain/timeline.ts` 가 하고 여기는 그리기만 한다.
  * - 재배에서 온 줄(파종·수확·중단)에는 지우기 버튼을 달지 않는다. 그건 기록이
  *   아니라 상태라서, 지우려면 재배 자체를 고쳐야 한다.
- * - **그날 날씨 띠를 같이 그린다**(`WeatherStrip`). 저장할 때 행에 박아 둔 값을
- *   그대로 읽는다 — 여기서 다시 조회하면 관측 정정 때 과거 일지가 바뀐다.
- *   날씨 칸이 전부 비면 띠가 아예 안 그려진다.
+ * - 펼치면 **그 줄에 박힌 값이 칸마다 이름을 달고** 나온다(`DiaryDetail`).
+ *   저장할 때 박아 둔 값을 그대로 읽는다 — 여기서 다시 조회하면 관측 정정 때
+ *   과거 일지가 바뀐다. **빈 칸도 이름은 띄운다** — 무엇이 담기는 일지인지
+ *   보이려는 것이다.
  * - **줄을 접어 둔다.** 날씨·조언이 붙으면서 한 줄이 네댓 줄이 됐다. 목록은
  *   "언제 무엇을 했나" 를 훑는 자리라, 자세한 것은 눌렀을 때만 편다.
  *   ⚠ `<details>` 로 한다 — 상태를 안 들고 있어도 되니 **JS 가 0줄**이고, 이
@@ -44,38 +42,15 @@ function titleOf(entry: TimelineEntry, stageKo: string | null): string {
   return [entry.titleKo, entry.workKindKo, stageKo].filter(Boolean).join(" · ");
 }
 
-/** 접었다 펼 만한 속이 있나. 없으면 제목만 그린다. */
+/**
+ * 접었다 펼 만한 속이 있나. 없으면 제목만 그린다.
+ *
+ * `createdAtIso` 하나로 가른다 — `cultivation_events` 행이면 늘 있고, 재배 컬럼에서
+ * 온 줄(파종·수확·중단)에는 없다. 그 셋은 담을 칸 자체가 없어서 펼쳐 봐야 전부
+ * 빈칸이다.
+ */
 function hasDetail(entry: TimelineEntry): boolean {
-  return (
-    entry.bodyKo !== null ||
-    entry.adviceTextKo !== null ||
-    hasWeather(entry.weather)
-  );
-}
-
-/** 펼쳤을 때 보이는 것. 접힌 줄에서는 아예 안 그린다. */
-function Detail({ entry }: { entry: TimelineEntry }) {
-  return (
-    <div className="mt-2 flex flex-col gap-2">
-      {entry.bodyKo && (
-        <p className="whitespace-pre-wrap wrap-break-word text-fg-muted text-sm">
-          {entry.bodyKo}
-        </p>
-      )}
-
-      <WeatherStrip weather={entry.weather} />
-
-      {/* 그날 AI 리포트. 문단이 길어 한 겹 더 접는다 */}
-      {entry.adviceTextKo && (
-        <details className="text-fg-muted text-xs">
-          <summary className="cursor-pointer">그날 AI 조언</summary>
-          <p className="mt-2 whitespace-pre-wrap wrap-break-word">
-            {entry.adviceTextKo}
-          </p>
-        </details>
-      )}
-    </div>
-  );
+  return entry.createdAtIso !== null;
 }
 
 export function RecordTimeline({
@@ -110,7 +85,7 @@ export function RecordTimeline({
                   <summary className="cursor-pointer font-medium text-fg text-sm">
                     {titleOf(entry, stageKo)}
                   </summary>
-                  <Detail entry={entry} />
+                  <DiaryDetail entry={entry} />
                 </details>
               ) : (
                 <span className="font-medium text-fg text-sm">

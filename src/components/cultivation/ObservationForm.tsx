@@ -122,7 +122,7 @@ export function ObservationForm({
         </label>
 
         <label className="flex flex-col gap-1">
-          <span className="font-medium text-fg text-sm">그날 하늘</span>
+          <span className="font-medium text-fg text-sm">날씨</span>
           <select
             className="w-fit rounded-lg border border-border bg-surface px-3 py-2 text-fg text-sm"
             defaultValue=""

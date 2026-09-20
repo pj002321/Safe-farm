@@ -29,7 +29,7 @@ import type { TimelineEventRow } from "./domain/timeline";
 // ⚠️ 한 줄짜리 리터럴로 둔다. 이어 붙이면 supabase-js 가 select 를 타입 수준에서
 //    못 읽어 결과가 `GenericStringError[]` 로 추론된다.
 const EVENT_SELECT =
-  "id, kind, occurred_on, body, stage_order, forecast_on, work_kind, sky_ko, advice_text, temp_max_c, temp_min_c, rainfall_mm, humidity_pct, wind_ms, wind_dir_deg, sunrise_at, sunset_at";
+  "id, kind, occurred_on, body, stage_order, forecast_on, created_at, work_kind, sky_ko, advice_text, temp_max_c, temp_min_c, rainfall_mm, humidity_pct, wind_ms, wind_dir_deg, sunrise_at, sunset_at";
 
 interface EventRow {
   id: string;
@@ -38,6 +38,7 @@ interface EventRow {
   body: string | null;
   stage_order: number | null;
   forecast_on: string | null;
+  created_at: string;
   work_kind: string | null;
   sky_ko: string | null;
   advice_text: string | null;
@@ -98,6 +99,7 @@ export async function listCultivationEvents(
         body: row.body,
         stageOrder: row.stage_order,
         forecastOn: row.forecast_on,
+        createdAt: row.created_at,
         workKind: row.work_kind,
         adviceText: row.advice_text,
         weather: {
