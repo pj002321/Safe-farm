@@ -2,6 +2,7 @@ import "server-only";
 
 import { nearestStation } from "@/shared/geo/nearestStation";
 import { listStations } from "@/shared/geo/stationStore";
+import { fruitOriginDate, isFruit } from "@/shared/growth/fruitOrigin";
 import type { DailyTemp } from "@/shared/growth/gdd";
 import { getSupabaseServer } from "@/shared/supabase/server";
 import type { CultivationCard } from "./domain/cultivationCard";
@@ -126,9 +127,31 @@ export async function listStages(
  * 카드 중 가장 이른 파종일이다. 카드마다 따로 읽지 않으려고 제일 넓은 구간을
  * 한 번에 가져온다. 파종일을 아는 카드가 하나도 없으면 null — 읽을 구간이 없다.
  */
-function earliestSowingDate(cards: readonly CultivationCard[]): string | null {
+/**
+ * 이 카드가 적산을 시작할 날. **과수는 그 해의 기점**이다.
+ *
+ * ★ 규칙은 `shared/growth/fruitOrigin.ts` 하나이고 파이썬 `plot_growth.gdd_origin`
+ *   과 같아야 한다. 나무는 몇 해 전에 심어서 `sowingDate` 부터 쌓으면 여러 해치
+ *   열이 누적된다 — 2022년에 심은 무화과가 1,605일치를 쌓아 목표를 3배로 넘었다
+ *   (2026-09-21 실측).
+ */
+function accumulateFrom(card: CultivationCard, today: string): string | null {
+  return fruitOriginDate(card, today) ?? card.sowingDate;
+}
+
+/**
+ * 관측을 읽기 시작할 날. 카드들 중 **가장 이른 시작일**이다.
+ *
+ * ⚠ 과수는 기점부터라 창이 짧다. 심은 날부터 읽으면 몇 해치를 끌어와
+ *   "1,344일의 관측이 없습니다" 같은 경고가 뜬다 — 사실 그 구간은 애초에
+ *   볼 필요가 없던 날들이다.
+ */
+function earliestSowingDate(
+  cards: readonly CultivationCard[],
+  today: string,
+): string | null {
   const dates = cards
-    .map((card) => card.sowingDate)
+    .map((card) => accumulateFrom(card, today))
     .filter((date): date is string => date !== null);
   if (dates.length === 0) return null;
   return dates.reduce((min, date) => (date < min ? date : min));
@@ -150,7 +173,7 @@ export async function loadPlotGrowth(
   const station = nearestStation(plot, await listStations());
   if (station === null) return EMPTY;
 
-  const from = earliestSowingDate(cards);
+  const from = earliestSowingDate(cards, today);
   const observations =
     from === null ? [] : await listObservations(station.stationCode, from);
   const stagesByVariant = await listStages(cards.map((card) => card.variantId));
@@ -165,8 +188,11 @@ export async function loadPlotGrowth(
     return {
       cultivationId: card.id,
       gauge: buildGrowthGauge({
-        sowingDate: card.sowingDate,
-        startStageOrder: card.startStageOrder,
+        // 과수는 그 해 기점부터 0에서 다시 쌓는다(`accumulateFrom`)
+        sowingDate: accumulateFrom(card, today),
+        // ⚠ 과수에는 모종 보정을 얹지 않는다 — 해마다 되감기므로 건너뛸 앞 단계가
+        //   없다(파이썬 `gdd_origin` 과 같은 판단)
+        startStageOrder: isFruit(card.sowMethod) ? null : card.startStageOrder,
         baseTempC: card.baseTempC,
         upperTempC: card.upperTempC,
         gddTarget: card.gddTarget,
