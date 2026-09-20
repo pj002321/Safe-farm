@@ -289,9 +289,18 @@ def stage_count_and_last_order(db: Session, variant_id: int) -> tuple[int, int |
     # examples
         stage_count_and_last_order(db, 12)  -> (4, 4)
     """
-    return db.query(func.count(CropStage.stage_order), func.max(CropStage.stage_order)).filter(
-        CropStage.variant_id == variant_id
-    ).one()
+    # 이웃 조회들과 같은 이유로 감싼다(`stage_at_gdd`·`usable_crop_of_variant`).
+    # 작업카드 배치가 밭마다 이 값을 묻는데 **같은 작물을 기르는 밭이 많다** —
+    # 실측 2026-09-20: 배치 한 번에 crop_stages 로 같은 질문이 10번 더 나갔다.
+    return memo(
+        db,
+        ("stage_count_and_last_order", variant_id),
+        lambda: db.query(
+            func.count(CropStage.stage_order), func.max(CropStage.stage_order)
+        )
+        .filter(CropStage.variant_id == variant_id)
+        .one(),
+    )
 
 
 def hazard_temp_limits(db: Session, crop_name_ko: str) -> tuple[float | None, float | None]:
@@ -313,6 +322,17 @@ def hazard_temp_limits(db: Session, crop_name_ko: str) -> tuple[float | None, fl
     # examples
         hazard_temp_limits(db, "고추")  -> (2.0, 33.0)
     """
+    # `crop_disaster_rules` 도 crop-data 가 내리는 정적 마스터라 요청 안에서 안 바뀐다.
+    # 실측 2026-09-20: 상추 4밭·고추 3밭이 같은 값을 다시 물어 배치 한 번에 8번 낭비.
+    return memo(
+        db,
+        ("hazard_temp_limits", crop_name_ko),
+        lambda: _hazard_temp_limits(db, crop_name_ko),
+    )
+
+
+def _hazard_temp_limits(db: Session, crop_name_ko: str) -> tuple[float | None, float | None]:
+    """`hazard_temp_limits` 의 알맹이. 캐시를 거치지 않는 실제 조회다."""
     row = db.execute(
         text("""
             select

@@ -6,8 +6,15 @@
 작물 마스터를 모아 그 함수에 먹이기만 한다.
 
 작물·파종일은 plots 가 아니라 cultivations 에 있다(20260916010000_plots_drop_crop_columns.sql
-이후). 한 밭에 여러 재배 건이 있을 수 있어 대표 한 건(가장 먼저 심은 것)만 골라 쓴다 —
-ask_context.py 의 `_lead` 와 같은 기준이다.
+이후). 한 밭에 여러 재배 건이 있을 수 있다.
+
+    compute_plot_growth      대표 한 건(가장 먼저 심은 것) — 리포트·/ask·밭 요약
+                             ask_context.py 의 `_lead` 와 같은 기준이다
+    cultivation_growth       건 하나를 지정해서 — 작업카드가 재배마다 돈다(교안 §2-B)
+
+⚠ **대표만 보면 나머지 작물은 판정조차 안 된다.** 실측 2026-09-20: 작물이 자라는
+  밭 12개 중 **7개가 작물 둘 이상**이고, 양파에 급한 일이 생겨도 홈은 시금치 것만
+  보여 줬다. 그래서 작업카드 쪽이 `cultivation_growth` 로 갈라져 나갔다.
 """
 
 from __future__ import annotations
@@ -170,10 +177,43 @@ def crop_interpretation(db: Session, plot: Plot, station: StationRow) -> dict | 
 
 
 def compute_plot_growth(db: Session, plot: Plot, station: StationRow) -> PlotGrowth | None:
-    """밭의 대표 재배 건을 골라 파종일부터 오늘까지 GDD 를 누적, 현재 생육단계를
-    계산한다. 기르는 중인 재배 건이 없거나 파종일·base_temp 를 모르면 None."""
+    """밭의 **대표** 재배 건을 골라 파종일부터 오늘까지 GDD 를 누적, 현재 생육단계를
+    계산한다. 기르는 중인 재배 건이 없거나 파종일·base_temp 를 모르면 None.
+
+    ⚠ 밭의 **모든** 작물을 봐야 하면 `cultivation_growth` 를 재배마다 부른다.
+      이 함수는 대표 하나라, 나머지 작물은 판정조차 되지 않는다.
+    """
     cultivation = lead_growing(db, plot.id)
     if cultivation is None:
+        return None
+    return cultivation_growth(db, cultivation, station)
+
+
+def cultivation_growth(
+    db: Session, cultivation: Cultivation, station: StationRow
+) -> PlotGrowth | None:
+    """
+    # summary
+    **재배 건 하나**의 누적 GDD 와 생육단계. 대표를 고르지 않는다.
+
+    부르는 쪽이 이미 재배 건을 손에 쥔 경우다 — 작업카드가 한 밭의 작물을 차례로
+    돌면서 판정한다(교안 §2-B). 밭을 다시 읽지 않으므로 같은 밭을 여러 번 돌아도
+    조회가 밭 수만큼 늘지 않는다.
+
+    # params
+    db: 세션<br>
+    cultivation: 기르는 중인 재배 건. 상태·삭제 확인은 repo 가 이미 했다<br>
+    station: 관측을 읽을 관측소. 밭 단위라 부르는 쪽이 한 번만 찾는다<br>
+
+    # returns
+    PlotGrowth 또는 None. **None 인 까닭은 셋이고 전부 그 재배 건의 사정이다** —
+    파종일이 없거나 · 작물을 못 찾거나 · base_temp 가 비었다. 밭의 문제가 아니므로
+    부르는 쪽은 그 건만 건너뛰고 나머지 작물을 계속 봐야 한다
+
+    # examples
+        cultivation_growth(db, 고추재배, station)  -> None   # 파종일이 없다
+    """
+    if cultivation.sowing_date is None:
         return None
 
     crop = usable_crop_of_variant(db, cultivation.variant_id)

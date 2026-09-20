@@ -121,14 +121,20 @@ export async function listCultivationEvents(
 }
 
 /**
- * 그날 그 종류의 기록이 이미 있나. `했음` 이 그날 **첫 번째인지** 가리는 데 쓴다.
+ * 그날 **AI 조언이 이미 붙은** 기록이 있나.
  *
- * 리포트 글은 하루에 한 번만 박는다 — 같은 날 카드를 여럿 누르면 같은 글이 여러
- * 행에 복사된다. 일지를 읽을 때 그날 행 중 하나에서 찾으면 된다.
+ * 리포트 글은 하루에 한 번만 박는다 — 같은 날 여러 줄에 복사되면 일지를 읽을 때
+ * 같은 말을 되풀이해 읽는다. 그날 어느 한 줄에만 있으면 된다.
+ *
+ * ★ 2026-09-20 — 전에는 **"그날 기록이 있나"** 를 물었다(`hasEventOn`). 틀렸다 —
+ *   조언이 안 붙은 기록이 하나라도 먼저 있으면 **그날은 영영 못 붙는다.**
+ *   실제로 그랬다: 메모를 두 번 남겼는데 둘 다 빈 채로 남았다. 물어야 할 것은
+ *   "행이 있나" 가 아니라 **"조언이 있나"** 다.
+ *
+ * ⚠ 종류를 가리지 않는다. `NOTE` 든 `TASK_DONE` 이든 그날 한 줄이면 충분하다.
  */
-export async function hasEventOn(
+export async function hasAdviceOn(
   cultivationId: string,
-  kind: EventKind,
   onDate: string,
 ): Promise<boolean> {
   const supabase = await getSupabaseServer();
@@ -137,8 +143,8 @@ export async function hasEventOn(
     .from("cultivation_events")
     .select("id")
     .eq("cultivation_id", cultivationId)
-    .eq("kind", kind)
     .eq("occurred_on", onDate)
+    .not("advice_text", "is", null)
     .is("deleted_at", null)
     .limit(1);
 
