@@ -30,7 +30,11 @@ const KST_STAMP_FORMATTER = new Intl.DateTimeFormat("en-CA", {
   day: "2-digit",
   hour: "2-digit",
   minute: "2-digit",
-  hour12: false,
+  // ⚠️ `hour12: false` 가 아니다. 그 옵션은 로케일에 따라 h24 로 풀려 **자정이
+  //    "24:10" 으로 나온다**(같은 시각이 어떤 서버에서는 00:10, 어떤 서버에서는
+  //    24:10). `hourCycle` 은 0~23 을 못 박는다. 둘을 같이 주면 `hour12` 가
+  //    이기므로 그쪽을 지웠다.
+  hourCycle: "h23",
 });
 
 /**

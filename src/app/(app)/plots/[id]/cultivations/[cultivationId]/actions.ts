@@ -11,6 +11,7 @@ import {
 import { parseFailureReason } from "@/features/cultivations/domain/failureReason";
 import { parseNote } from "@/features/cultivations/domain/observationNote";
 import {
+  pickedToQuery,
   TASK_NOTE_MAX_LENGTH,
   taskNoteField,
 } from "@/features/cultivations/domain/pickedTasks";
@@ -124,9 +125,24 @@ async function dayFirstAdvice(
   }
 }
 
-/** 사용자에게 보여줄 문장만 쿼리에 싣고 그 상세로 돌려보낸다. */
-function fail(path: string, message: string): never {
-  redirect(`${path}?error=${encodeURIComponent(message)}`);
+/**
+ * 사용자에게 보여줄 문장만 쿼리에 싣고 그 상세로 돌려보낸다.
+ *
+ * ⚠️ **담아 둔 카드는 같이 들고 간다**(`keepPicked`). 안 실으면 앞날짜 한 번
+ *    틀렸을 때 담은 카드가 전부 풀려, 다섯 장을 다시 담아야 한다.
+ *
+ * ⚠️ **카드에 적던 메모까지는 못 살린다.** 그건 폼 값이고 주소에 실을 것이
+ *    아니다. 붙들려면 이 화면이 Client Component 가 되어야 하는데, JS 가 0줄인
+ *    것이 이 화면의 성질이다.
+ */
+function fail(
+  path: string,
+  message: string,
+  keepPicked?: string | null,
+): never {
+  const picked =
+    keepPicked == null ? "" : `&picked=${encodeURIComponent(keepPicked)}`;
+  redirect(`${path}?error=${encodeURIComponent(message)}${picked}`);
 }
 
 function readText(formData: FormData, key: string): string {
@@ -205,6 +221,11 @@ async function openContext(formData: FormData): Promise<{
  * ⚠️ **`TASK_DONE` 의 `body` 에는 카드 제목만 넣는다.** `hideDoneToday` 가 그
  *    글자로 오늘 담은 카드를 목록에서 거른다. 카드별 메모는 `task_note` 로 간다.
  *
+ * ⚠️ **`한 일` 은 나오는 줄 전부에 박는다.** 전에는 `NOTE` 에만 실었는데, 메모를
+ *    비우고 카드만 담으면 `NOTE` 줄이 안 생겨 **사용자가 고른 값이 소리 없이
+ *    사라졌다**(2026-09-20 실측 — DB 에 그런 줄이 있다). 날씨·단계와 같은
+ *    "이 저장의 값" 이라 같은 방침으로 옮긴다.
+ *
  * 사진은 받지 않는다. 업로드는 AI 사진 분석과 한 묶음이라 그 브랜치로 미뤘다.
  */
 export async function addObservation(formData: FormData): Promise<void> {
@@ -217,13 +238,16 @@ export async function addObservation(formData: FormData): Promise<void> {
     today: kstDateString(),
     bodyOptional: picked.length > 0,
   });
-  if (!parsed.ok) fail(path, parsed.messageKo);
+  // 되돌아갈 때 담은 카드를 들고 간다. 안 실으면 날짜 한 번 틀렸을 때 전부 풀린다
+  const keep = pickedToQuery(picked);
+  if (!parsed.ok) fail(path, parsed.messageKo, keep);
 
   const { body, occurredOn } = parsed.value;
   // 화면이 계산해 둔 단계를 폼으로 받아 그대로 박는다. 여기서 다시 구하면
   // 관측·평년값을 또 읽어야 한다. 숫자가 아니면 빈 채로 둔다.
   const stageOrder = positiveInt(formData.get("stageOrder"));
   const skyKo = pickSkyKind(formData.get("skyKo"));
+  const workKind = pickWorkKind(formData.get("workKind"));
 
   // 한 번에 들어가는 줄들이라 날씨도 리포트도 **한 번만** 구한다. 줄마다 부르면
   // 같은 값을 여러 번 받아 오고, 리포트 쪽은 답까지 달라진다.
@@ -242,7 +266,7 @@ export async function addObservation(formData: FormData): Promise<void> {
       occurredOn,
       body,
       stageOrder,
-      workKind: pickWorkKind(formData.get("workKind")),
+      workKind,
       skyKo,
       weather,
     });
@@ -252,8 +276,8 @@ export async function addObservation(formData: FormData): Promise<void> {
       kind: "TASK_DONE",
       occurredOn,
       body: titleKo,
-      // 한 일은 카드 제목이 곧 그것이라 work_kind 를 따로 받지 않는다.
       stageOrder,
+      workKind,
       skyKo,
       taskNote: taskNoteOf(formData, titleKo),
       // 그날 리포트는 첫 줄에만. 나머지에 복사하면 같은 글이 여러 번 나온다.
@@ -265,7 +289,11 @@ export async function addObservation(formData: FormData): Promise<void> {
   try {
     await insertCultivationEvents(cultivationId, rows);
   } catch {
-    fail(path, "기록을 저장하지 못했습니다. 새로 고친 뒤 다시 시도해 주세요.");
+    fail(
+      path,
+      "기록을 저장하지 못했습니다. 새로 고친 뒤 다시 시도해 주세요.",
+      keep,
+    );
   }
 
   // 담은 카드가 있으면 밭 목록의 카드도 달라진다(그날 할 일에서 빠진다).

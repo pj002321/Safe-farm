@@ -40,6 +40,9 @@ import {
  *   카드마다 한 줄이 같이 남는다.
  * - 담은 게 있으면 접힌 칸이 **열린 채로** 그려진다. 칸이 열린 까닭이 그것이라
  *   담은 카드가 `한 일` 위에 온다.
+ * - ⚠ **`<details>` 의 `display` 를 바꾸지 않는다.** `flex` 를 걸면 브라우저에
+ *   따라 **접힌 상태에서도 속이 다 보인다.** 칸 사이 간격은 자식의 `mt-3` 이
+ *   맡는다 — 이 레포의 다른 `<details>` 넷도 같은 방식이다.
  * - ⚠ **`취소` 는 링크라 화면을 새로 받는다.** 적다 만 메모는 그때 사라진다.
  *   폼 값을 붙들려면 Client Component 가 되어야 하는데, 이 화면은 JS 가 0줄인
  *   것이 성질이다. 담기 전에 적는 일이 드물어 그 값을 치르기로 했다.
@@ -113,7 +116,7 @@ function PickedTasks({ picked }: { picked: readonly string[] }) {
 function DetailFields({ picked }: { picked: readonly string[] }) {
   return (
     <details
-      className="flex flex-col gap-3 rounded-lg border border-border bg-surface-2 px-4 py-3"
+      className="rounded-lg border border-border bg-surface-2 px-4 py-3"
       // 담은 게 있으면 열어 둔다. 서버가 붙이는 속성이라 JS 가 안 든다.
       open={picked.length > 0}
     >

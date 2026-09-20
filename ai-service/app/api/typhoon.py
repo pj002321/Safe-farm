@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from app.core.config import KMA_API_KEY
 from app.core.security import require_service_token
 from app.domain.typhoon import TyphoonPoint, split_track
-from pipeline.kma_client import fetch_typhoon_track
+from app.service.typhoon_cache import track as typhoon_track
 
 router = APIRouter(prefix="/v1/typhoon", tags=["typhoon"])
 
@@ -42,7 +42,7 @@ def track() -> dict:
             detail="KMA_API_KEY 가 설정되지 않았습니다.",
         )
     try:
-        rows = fetch_typhoon_track(KMA_API_KEY)
+        rows = typhoon_track(KMA_API_KEY)
     except Exception as exc:  # noqa: BLE001 — 외부 API 장애를 502 로 환원
         raise HTTPException(status_code=502, detail=f"태풍 조회 실패: {exc}") from exc
 

@@ -64,6 +64,39 @@ function measuredFields(entry: TimelineEntry): Field[] {
   ];
 }
 
+/**
+ * 사용자가 적거나 고른 것. **줄 종류에 따라 칸이 다르다.**
+ *
+ * ⚠ `했음` 으로 담은 줄(`TASK_DONE`)은 `bodyKo` 에 **카드 제목**이 들어간다
+ *   (`hideDoneToday` 가 그 글자로 오늘 담은 카드를 거른다). 그걸 `메모` 라는
+ *   이름표로 그리면 사용자가 자기가 쓴 메모가 덮어써졌다고 읽는다 — 실제로
+ *   그렇게 읽혔다(2026-09-20). 메모는 같은 저장에서 **NOTE 줄로 따로** 남는다.
+ *
+ * 그래서 담은 줄은 `담은 할 일 + 카드 메모` 로, 나머지는 `메모 + 한 일` 로
+ * 그린다. 늘 빌 칸을 띄우지 않는 것은 "여기 들어올 값이 있는데 없다" 라는
+ * `—` 의 뜻이 흐려지기 때문이다.
+ */
+function writtenFields(entry: TimelineEntry): Field[] {
+  if (entry.kind === "TASK_DONE") {
+    return [
+      { labelKo: "담은 할 일", value: entry.bodyKo, byUser: true, wide: true },
+      {
+        labelKo: "카드 메모",
+        value: entry.taskNoteKo,
+        byUser: true,
+        wide: true,
+      },
+      // 같은 저장에서 고른 활동유형이 이 줄에도 박힌다. 메모를 안 쓰면 `NOTE`
+      // 줄이 아예 없어서, 여기 없으면 고른 값을 볼 곳이 사라진다.
+      { labelKo: "한 일", value: entry.workKindKo, byUser: true, wide: true },
+    ];
+  }
+  return [
+    { labelKo: "메모", value: entry.bodyKo, byUser: true, wide: true },
+    { labelKo: "한 일", value: entry.workKindKo, byUser: true, wide: true },
+  ];
+}
+
 function Cell({ field }: { field: Field }) {
   const empty = field.value === null;
 
@@ -155,24 +188,7 @@ export function DiaryDetail({ entry }: { entry: TimelineEntry }) {
       />
 
       <Group
-        fields={[
-          { labelKo: "메모", value: entry.bodyKo, byUser: true, wide: true },
-          {
-            labelKo: "한 일",
-            value: entry.workKindKo,
-            byUser: true,
-            wide: true,
-          },
-          // 담은 할 일 줄에만 값이 있다. 메모와 따로 두는 것은 `bodyKo` 에
-          // 카드 제목이 들어가기 때문이다 — 합치면 그 글자로 카드를 거르는
-          // `hideDoneToday` 가 눌러 둔 카드를 다시 띄운다.
-          {
-            labelKo: "카드 메모",
-            value: entry.taskNoteKo,
-            byUser: true,
-            wide: true,
-          },
-        ]}
+        fields={writtenFields(entry)}
         noteKo="사용자가 적거나 고른 값"
         titleKo="적은 것"
       />

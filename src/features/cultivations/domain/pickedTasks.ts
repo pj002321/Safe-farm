@@ -41,21 +41,31 @@ const SEPARATOR = ",";
  * **지금 뜨는 카드에 있는 제목만 통과시킨다.** 주소창을 손으로 고쳐 아무 글자나
  * 넣어도 저장 화면에 들어오지 못한다. 조건이 바뀌어 사라진 카드도 같이 빠진다 —
  * 어제 담아 둔 주소를 오늘 열었을 때 없는 일을 저장하면 안 된다.
+ *
+ * ⚠ **`tasks` 가 `null` 이면 거르지 않는다.** 목록을 **못 받은** 때다
+ *   (ai-service 장애 · `TaskReason` 의 `"failed"`). 그때도 거르면 담아 둔 카드가
+ *   통째로 사라지고 적던 메모까지 날아간다 — "목록에 없다" 와 "목록을 모른다" 는
+ *   다르고, 모를 때 버리는 쪽이 더 나쁘다.
+ *
+ *   비었다고 `[]` 를 넘기지 말 것. 그건 "오늘 할 일이 없다" 라는 **아는 상태**다.
+ *   대신 그동안은 주소에 아무 글자나 실을 수 있게 된다 — 저장 쪽이 개수와 길이로
+ *   받아 낸다(`actions.ts` 의 `pickedTitles`).
  */
 export function pickedFromQuery(
   raw: string | string[] | undefined,
-  tasks: readonly TaskAdvice[],
+  tasks: readonly TaskAdvice[] | null,
 ): readonly string[] {
   const value = Array.isArray(raw) ? raw[0] : raw;
   if (!value) return [];
 
-  const known = new Set(tasks.map((task) => task.titleKo));
+  const known = tasks === null ? null : new Set(tasks.map((t) => t.titleKo));
   const seen = new Set<string>();
   return value
     .split(SEPARATOR)
     .map((part) => part.trim())
     .filter((part) => {
-      if (!known.has(part) || seen.has(part)) return false;
+      if (part.length === 0 || seen.has(part)) return false;
+      if (known !== null && !known.has(part)) return false;
       seen.add(part);
       return true;
     });

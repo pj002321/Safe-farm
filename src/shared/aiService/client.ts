@@ -314,6 +314,20 @@ export interface DiaryWeather {
 }
 
 /**
+ * 작업카드 한 장. `/v1/tasks/cultivation` 이 돌려주는 모양이다.
+ *
+ * 홈 카드(`plot_tasks` 표)와 **같은 판정 함수**에서 나오지만 저장되지 않는다 —
+ * 화면이 그릴 때마다 새로 낸다. 그래서 id 가 없다. 화면이 제목을 열쇠로 쓴다
+ * (`domain/doneTasks.ts` 가 그날 `했음` 을 제목으로 거르는 것과 같은 열쇠다).
+ */
+export interface AiTaskCard {
+  title: string;
+  reason: string;
+  /** 홈의 `Priority` 와 같은 값이다 — 급함 · 보통 · 여유. */
+  priority: string;
+}
+
+/**
  * 사용자의 밭 전체를 아우르는 AI 종합 요약. `available` 이 false 면 밭이
  * 하나도 없거나(NO_PLOTS) 어느 밭에서도 생육 데이터를 못 만든 것이다(NO_GROWTH_DATA).
  */
@@ -696,6 +710,47 @@ export const aiService = {
       `/v1/satellite/observations?lat=${lat}&lon=${lon}&date_from=${dateFrom}&date_to=${dateTo}`,
       { revalidateSec: SATELLITE_REVALIDATE_SEC, timeoutMs: 15_000 },
     ),
+  /**
+   * 재배 한 건의 오늘 할 일. **저장하지 않고 받아만 온다.**
+   *
+   * 재배 상세의 `이번 주 할 일` 이 이걸 쓴다. 전에는 화면 쪽 규칙
+   * (`shared/growth/taskAdvice.ts` 의 `recommendTasks_2`)이 따로 판정했는데,
+   * 임계값이 홈과 갈려서 **반대되는 조언이 나갔다** — 추수 3주 전 물을 뺀 논에
+   * 홈은 조용한데 상세가 "충분히 주기" 를 냈다. 판정을 한 벌로 모았다.
+   *
+   * ⚠️ **밭 단위 값을 보내지 않는다.** 물수지·위성·특보·병해충·관측강수는
+   *    서버가 `plotId` 로 직접 읽는다. 보내면 남의 밭 값을 끼워 넣을 통로가
+   *    된다(ai-service `service/cultivation_tasks.py` 머리말).
+   *
+   * ⚠️ **누적 GDD 는 화면이 센 값을 보낸다.** 서버가 다시 계산하면 사용자가 고친
+   *    단계 보정(rebase)을 몰라, 화면과 다른 단계를 근거로 말한다.
+   *
+   * ⚠️ `revalidateSec` 을 주지 않는다. 특보·예보가 바뀌면 그날 안에도 카드가
+   *    달라져야 하는 값이라 캐시된 응답을 쓰면 안 된다. 서버 쪽 1시간 예보
+   *    캐시가 왕복은 이미 줄여 준다.
+   */
+  cultivationTasks: (input: {
+    plotId: string;
+    variantId: number;
+    /** 화면이 판정한 단계 번호. 못 정했으면 생략 — 기상만으로 판정한다. */
+    stageOrder?: number | null;
+    accumulatedGdd?: number | null;
+  }) => {
+    const query = new URLSearchParams({
+      plot_id: input.plotId,
+      variant_id: String(input.variantId),
+    });
+    // 빈 값을 보내지 않는다. FastAPI 가 `stage_order=` 를 0 이 아니라 422 로 본다
+    if (input.stageOrder != null) {
+      query.set("stage_order", String(input.stageOrder));
+    }
+    if (input.accumulatedGdd != null) {
+      query.set("accumulated_gdd", String(input.accumulatedGdd));
+    }
+    return call<{ tasks: readonly AiTaskCard[] }>(
+      `/v1/tasks/cultivation?${query}`,
+    );
+  },
   /**
    * 밭 하나만 즉시 판정해 오늘 할 일 카드를 만든다. 자정 배치를 기다리지 않고
    * 밭 등록·재배 추가 직후 호출한다(registerPlot/addCultivations).

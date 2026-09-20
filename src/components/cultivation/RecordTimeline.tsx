@@ -37,9 +37,22 @@ export interface RecordTimelineProps {
 /** 재배 상태에서 온 줄. 지우기 버튼을 달지 않는다. */
 const FROM_CULTIVATION = new Set(["SOWN", "HARVESTED", "FAILED"]);
 
-/** 한 줄의 제목. 이름·한 일·단계를 가운뎃점으로 잇는다. */
+/**
+ * 한 줄의 제목. 가운뎃점으로 잇는다.
+ *
+ * ⚠ **담은 줄(`TASK_DONE`)은 카드 이름을 싣는다.** `작업 완료 · 줄기비대기` 로만
+ *   두면 펼치기 전에는 **무슨 일을 했는지 알 수 없다** — 그 줄의 `body` 가 곧
+ *   카드 이름이다.
+ *
+ *   대신 그 줄에서는 `한 일` 을 뺀다. 활동유형은 그 저장의 값이라 같은 날 담은
+ *   카드마다 같은 말이 붙어 목록이 시끄러워진다. 펼치면 그대로 보인다.
+ */
 function titleOf(entry: TimelineEntry, stageKo: string | null): string {
-  return [entry.titleKo, entry.workKindKo, stageKo].filter(Boolean).join(" · ");
+  const parts =
+    entry.kind === "TASK_DONE"
+      ? [entry.titleKo, entry.bodyKo, stageKo]
+      : [entry.titleKo, entry.workKindKo, stageKo];
+  return parts.filter(Boolean).join(" · ");
 }
 
 /**

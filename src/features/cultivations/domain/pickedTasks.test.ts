@@ -43,6 +43,24 @@ describe("pickedFromQuery", () => {
     expect(pickedFromQuery("", TASKS)).toEqual([]);
   });
 
+  it("목록을 모르면(null) 거르지 않는다 — 서버 장애에 담은 게 날아가면 안 된다", () => {
+    expect(pickedFromQuery("물주기,없는작업", null)).toEqual([
+      "물주기",
+      "없는작업",
+    ]);
+  });
+
+  it("목록이 비면(빈 배열) 전부 버린다 — 그건 아는 상태다", () => {
+    expect(pickedFromQuery("물주기", [])).toEqual([]);
+  });
+
+  it("빈 조각은 목록을 몰라도 버린다", () => {
+    expect(pickedFromQuery("물주기,,  ,김매기", null)).toEqual([
+      "물주기",
+      "김매기",
+    ]);
+  });
+
   it("쿼리가 여러 번 붙어 배열로 와도 첫 것만 본다", () => {
     expect(pickedFromQuery(["물주기", "김매기"], TASKS)).toEqual(["물주기"]);
   });

@@ -32,30 +32,24 @@ from app.domain.task_rules import (
 from app.domain.typhoon import TyphoonPoint, is_approaching, split_track
 from app.domain.vegetation_text import Vegetation, summarize_points
 from app.domain.water_balance import WaterBalance, judge_water
-from app.domain.task_rules import RAIN_WINDOW_DAYS, PlotTaskInputs, build_task_candidates
-
 from app.models.farm import Plot, PlotTask, WeatherObsDaily
-
-from app.service import forecast_cache
-from app.service.crop_hazard import temp_limits_for
-from app.service.pest_notes import pest_names_for
-from app.service.plot_growth import compute_plot_growth, nearest_station
-from app.service.satellite_cache import stored_observations
-from app.service.warn_region import plot_warning
-
-from pipeline.kma_client import fetch_typhoon_track
-from pipeline.open_meteo_client import (
-    daily_index_of,
-    hourly_value_at,
-    normalize_daily_forecast,
-)
-
 from app.repo.crop import usable_crop_of_variant
 from app.repo.cultivation import lead_growing
 from app.repo.plot import all_live_plots
 from app.repo.plot_task import add_task, expire_open_before, open_titles
 from app.repo.weather_obs import rainfall_since
-
+from app.service import forecast_cache
+from app.service.crop_hazard import temp_limits_for
+from app.service.pest_notes import pest_names_for
+from app.service.plot_growth import compute_plot_growth, nearest_station
+from app.service.satellite_cache import stored_observations
+from app.service.typhoon_cache import track as typhoon_track
+from app.service.warn_region import plot_warning
+from pipeline.open_meteo_client import (
+    daily_index_of,
+    hourly_value_at,
+    normalize_daily_forecast,
+)
 
 #: 안 하고 넘어간 카드를 닫기까지의 일수.
 #:
@@ -151,7 +145,7 @@ def _fetch_typhoon_forecast() -> tuple[TyphoonPoint, ...]:
     if not KMA_API_KEY:
         return ()
     try:
-        rows = fetch_typhoon_track(KMA_API_KEY)
+        rows = typhoon_track(KMA_API_KEY)
     except Exception:  # noqa: BLE001 — 외부 API 장애가 나머지 카드를 막지 않는다
         return ()
     _, forecast = split_track(rows)

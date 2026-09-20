@@ -15,11 +15,7 @@ import { SectionHeading } from "@/components/shared/SectionHeading";
 import { loadCultivationDetail } from "@/features/cultivations/detailStore";
 import { cardTitle } from "@/features/cultivations/domain/cultivationCard";
 import { pickedFromQuery } from "@/features/cultivations/domain/pickedTasks";
-import { summarizeWeather } from "@/features/monitoring/domain/weatherSeries";
-import {
-  loadForecastTemps,
-  loadWeatherSeries,
-} from "@/features/monitoring/weatherStore";
+import { loadForecastTemps } from "@/features/monitoring/weatherStore";
 import { getPlotDetail } from "@/features/plots/plotStore";
 import { getCurrentProfile } from "@/shared/auth/profileStore";
 import { kstDateString } from "@/shared/utils/kstDate";
@@ -40,7 +36,7 @@ import {
  * - 밭 상세의 작물 카드가 닿는 곳. 게이지 하나로는 "지금 뭘 해야 하나"를 못
  *   말해서, 단계 타임라인 · 할 일 · 도달 예측 · 기록을 한 화면에 모았다.
  * - 조회는 두 갈래다. 재배 쪽은 `loadCultivationDetail()` 이 한 번에 모으고,
- *   기상 요약은 `features/monitoring` 이 따로 읽어 **여기서 합친다** — features
+ *   예보는 `features/monitoring` 이 따로 읽어 **여기서 합친다** — features
  *   끼리는 import 할 수 없다(AGENTS.md).
  * - 오늘 날짜를 서버에서 한 번 정해 내려보낸다(`kstDateString()`). 컴포넌트가
  *   각자 `new Date()` 를 읽으면 서버와 브라우저가 다른 날을 그린다.
@@ -66,21 +62,17 @@ export default async function Page({
   if (!plot) notFound();
 
   const today = kstDateString();
-  // 차트용 계열과 도달 예측용 예보는 보는 기간이 달라 따로 읽는다. 둘 다
-  // `features/monitoring` 이라 서로를 기다릴 이유가 없어 나란히 받는다.
-  const [weather, forecast] = await Promise.all([
-    loadWeatherSeries(plot, today),
-    loadForecastTemps(plot, today).catch((error) => {
-      // 예보가 없으면 평년값만으로 메운다. 예측 하나 때문에 화면을 죽이지 않는다.
-      console.error("[cultivation] 예보 조회 실패", error);
-      return [];
-    }),
-  ]);
+  // 도달 예측용 예보. 관측 계열은 더 읽지 않는다 — 그걸 보던 것은 화면 쪽 할 일
+  // 규칙 하나뿐이었고, 그 판정이 ai-service 로 넘어갔다.
+  const forecast = await loadForecastTemps(plot, today).catch((error) => {
+    // 예보가 없으면 평년값만으로 메운다. 예측 하나 때문에 화면을 죽이지 않는다.
+    console.error("[cultivation] 예보 조회 실패", error);
+    return [];
+  });
   const detail = await loadCultivationDetail(
     plot,
     cultivationId,
     today,
-    summarizeWeather(weather.series),
     forecast,
   );
   if (!detail) notFound();
@@ -93,7 +85,14 @@ export default async function Page({
 
   const { error, saved, picked: pickedRaw } = await searchParams;
   // 지금 뜨는 카드에 있는 제목만 통과시킨다. 주소를 손으로 고쳐도 안 들어온다.
-  const picked = pickedFromQuery(pickedRaw, detail.tasks);
+  //
+  // ⚠ 할 일을 **못 받은** 때(`failed`)는 `null` 을 넘겨 거르지 않는다. 목록이
+  //   비었다고 담아 둔 카드를 버리면, ai-service 가 한 번 튕길 때 적던 메모까지
+  //   날아간다 — "목록에 없다" 와 "목록을 모른다" 는 다르다.
+  const picked = pickedFromQuery(
+    pickedRaw,
+    detail.taskReason === "failed" ? null : detail.tasks,
+  );
 
   return (
     <main className="mx-auto flex max-w-2xl flex-col gap-6 px-6 py-6 sm:py-8">
@@ -184,7 +183,11 @@ export default async function Page({
 
       {!ended && (
         <Card title="이번 주 할 일">
-          <TaskAdviceList picked={picked} tasks={detail.tasks} />
+          <TaskAdviceList
+            picked={picked}
+            reason={detail.taskReason}
+            tasks={detail.tasks}
+          />
         </Card>
       )}
 

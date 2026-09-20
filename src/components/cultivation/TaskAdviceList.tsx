@@ -1,4 +1,5 @@
 import { Badge } from "@/components/shared/Badge";
+import type { TaskReason } from "@/features/cultivations/domain/aiTasks";
 import {
   pickedHref,
   withPicked,
@@ -10,8 +11,9 @@ import type { TaskAdvice } from "@/shared/growth/taskAdvice";
  * [Feature]: 이번 주 할 일 목록
  *
  * [Description]
- * - 생육단계와 최근 기상에서 나온 추천이다. 규칙은 `shared/growth/taskAdvice.ts`
- *   가 갖고, 여기는 그리기만 한다.
+ * - **판정은 ai-service 가 한다** — 홈 카드와 **같은 함수**다
+ *   (`app/domain/task_rules.py`). 화면 쪽 규칙(`shared/growth/taskAdvice.ts`)이
+ *   따로 판정하던 때는 임계값이 갈려 반대되는 조언이 나갔다. 여기는 그리기만 한다.
  * - ⚠️ **약제 이름과 희석배수는 나오지 않는다.** 규칙 쪽에서 막는다 — 틀리면
  *   작물이 죽고, 우리는 그 책임을 질 위치가 아니다.
  * - **`했음` 은 저장하지 않는다**(2026-09-21 뒤집음). 카드를 관찰 기록으로
@@ -29,7 +31,24 @@ export interface TaskAdviceListProps {
   tasks: readonly TaskAdvice[];
   /** 지금 관찰 기록에 담겨 있는 카드 제목들. 여기서는 빠진다. */
   picked: readonly string[];
+  /** 0장일 때 **왜** 인지. 셋을 한 말로 뭉개면 정상인 밭에 거짓말이 나간다. */
+  reason: TaskReason;
 }
+
+/**
+ * 0장일 때 할 말.
+ *
+ * ★ 2026-09-20 — 전에는 무조건 "생육 단계를 판정하지 못해…" 였다. 상추처럼
+ *   단계가 멀쩡한데 오늘 조건이 없어 0장인 밭에도 그 말이 나갔다.
+ *   ai-service 가 *"0건이 정상인 유일한 경로"* 와 건너뜀을 애써 갈라 놓았는데
+ *   (`service/plot_tasks.py`) 화면이 도로 뭉갠 것이다.
+ */
+const EMPTY_KO: Record<TaskReason, string> = {
+  ok: "오늘은 따로 할 일이 없습니다.",
+  // 단계표가 없거나 기준온도·목표GDD 가 비어 있다. 자료가 채워져야 풀린다
+  "no-stage": "이 작물은 생육 단계 자료가 없어 할 일을 내지 못합니다.",
+  failed: "할 일을 불러오지 못했습니다. 새로 고쳐 주세요.",
+};
 
 const TONE = {
   info: "neutral",
@@ -37,13 +56,9 @@ const TONE = {
   unsuitable: "unsuitable",
 } as const;
 
-export function TaskAdviceList({ tasks, picked }: TaskAdviceListProps) {
+export function TaskAdviceList({ tasks, picked, reason }: TaskAdviceListProps) {
   if (tasks.length === 0) {
-    return (
-      <p className="text-fg-muted text-sm">
-        생육 단계를 판정하지 못해 할 일을 내지 못했습니다.
-      </p>
-    );
+    return <p className="text-fg-muted text-sm">{EMPTY_KO[reason]}</p>;
   }
 
   const left = tasks.filter((task) => !picked.includes(task.titleKo));

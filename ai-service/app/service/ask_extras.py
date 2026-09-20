@@ -31,7 +31,7 @@ from app.service.disaster_notes import prevention_notes_for
 from app.service.pest_notes import pest_names_for
 from app.service.plot_growth import PlotGrowth, compute_plot_growth, nearest_station
 from app.service.satellite_cache import READ_DAYS, stored_observations
-from pipeline.kma_client import fetch_typhoon_track
+from app.service.typhoon_cache import track as typhoon_track
 from pipeline.open_meteo_client import daily_index_of, normalize_daily_forecast
 
 
@@ -96,7 +96,7 @@ def _typhoon_line(plot: Plot) -> str | None:
     """
     if not KMA_API_KEY:
         return None
-    rows = fetch_typhoon_track(KMA_API_KEY)
+    rows = typhoon_track(KMA_API_KEY)
     if not rows:
         return None
     _, forecast = split_track(rows)
