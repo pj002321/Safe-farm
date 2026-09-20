@@ -29,6 +29,7 @@ export type TimelineKind =
   | "NOTE"
   | "TASK_DONE"
   | "STAGE_SET"
+  | "STAGE_ADD"
   | "FORECAST"
   | "HARVESTED"
   | "FAILED";
@@ -36,7 +37,7 @@ export type TimelineKind =
 /** `cultivation_events` 한 행을 화면이 쓰는 이름으로 좁힌 것. */
 export interface TimelineEventRow {
   id: string;
-  kind: "NOTE" | "TASK_DONE" | "STAGE_SET" | "FORECAST";
+  kind: "NOTE" | "TASK_DONE" | "STAGE_SET" | "STAGE_ADD" | "FORECAST";
   occurredOn: string;
   body: string | null;
   stageOrder: number | null;
@@ -75,6 +76,7 @@ export interface TimelineEntry {
 const SAME_DAY_ORDER: Record<TimelineKind, number> = {
   SOWN: 0,
   STAGE_SET: 1,
+  STAGE_ADD: 1,
   TASK_DONE: 2,
   NOTE: 3,
   FORECAST: 4,
@@ -86,6 +88,7 @@ const EVENT_TITLE: Record<TimelineEventRow["kind"], string> = {
   NOTE: "관찰 기록",
   TASK_DONE: "작업 완료",
   STAGE_SET: "생육단계 직접 지정",
+  STAGE_ADD: "단계 추가",
   FORECAST: "수확 예측",
 };
 

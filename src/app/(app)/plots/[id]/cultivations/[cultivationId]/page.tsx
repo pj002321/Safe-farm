@@ -4,6 +4,7 @@ import { EndCultivationForm } from "@/components/cultivation/EndCultivationForm"
 import { HarvestSummaryCard } from "@/components/cultivation/HarvestSummaryCard";
 import { ObservationForm } from "@/components/cultivation/ObservationForm";
 import { RecordTimeline } from "@/components/cultivation/RecordTimeline";
+import { StageAddForm } from "@/components/cultivation/StageAddForm";
 import { StageOverrideForm } from "@/components/cultivation/StageOverrideForm";
 import { StageTimeline } from "@/components/cultivation/StageTimeline";
 import { TaskAdviceList } from "@/components/cultivation/TaskAdviceList";
@@ -23,6 +24,7 @@ import { kstDateString } from "@/shared/utils/kstDate";
 import { harvestCultivation } from "../../actions";
 import {
   addObservation,
+  addStage,
   completeTask,
   failCultivation,
   overrideStage,
@@ -159,6 +161,14 @@ export default async function Page({
               onSubmit={overrideStage}
               plotId={plot.id}
               stages={detail.stages}
+              today={today}
+            />
+          )}
+          {!ended && (
+            <StageAddForm
+              cultivationId={card.id}
+              onSubmit={addStage}
+              plotId={plot.id}
               today={today}
             />
           )}

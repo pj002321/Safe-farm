@@ -31,7 +31,12 @@ import {
   rebaseGdd_1,
   type StageOverride,
 } from "./domain/stageOverride";
-import { buildStageTimeline, type StageStep } from "./domain/stageTimeline";
+import {
+  appendUserStages,
+  buildStageTimeline,
+  type StageStep,
+  type UserStage,
+} from "./domain/stageTimeline";
 import { buildTimeline, type TimelineEntry } from "./domain/timeline";
 import { listCultivationEvents } from "./eventStore";
 import { listObservations, listStages } from "./growthStore";
@@ -128,6 +133,32 @@ function latestOverride(
     stageOrder: latest.stageOrder as number,
     occurredOn: latest.occurredOn,
   };
+}
+
+/**
+ * 사용자가 붙인 단계들. 이름이 빈 행은 뺀다 — 타임라인에 이름 없는 점이 생긴다.
+ *
+ * 정렬은 `appendUserStages` 가 날짜로 다시 한다. 여기서는 고르기만 한다.
+ */
+function userStages(
+  entries: readonly {
+    id: string;
+    kind: string;
+    occurredOn: string;
+    body: string | null;
+  }[],
+): readonly UserStage[] {
+  return entries.flatMap((entry) =>
+    entry.kind === "STAGE_ADD" && entry.body !== null
+      ? [
+          {
+            eventId: entry.id,
+            nameKo: entry.body,
+            occurredOn: entry.occurredOn,
+          },
+        ]
+      : [],
+  );
 }
 
 /** 가장 **먼저** 내놓은 수확 예측일. 오차 계산의 기준이다. */
@@ -237,7 +268,7 @@ export async function loadCultivationDetail(
           card.upperTempC ?? undefined,
         );
 
-  const stageSteps =
+  const masterSteps =
     gauge === null || card.baseTempC === null
       ? []
       : buildStageTimeline({
@@ -251,6 +282,10 @@ export async function loadCultivationDetail(
           perDayGdd,
           today,
         });
+
+  // 사용자 단계는 **GDD 계산이 끝난 뒤** 붙인다. 구간이 없어 계산의 재료가 될 수
+  // 없고, 마스터가 비어도(기준온도 없음 등) 사용자가 적은 것은 보여야 한다.
+  const stageSteps = appendUserStages(masterSteps, userStages(events), today);
 
   const recent = observations.slice(-RECENT_WINDOW_DAYS);
   const arrival = (targetGdd: number): ArrivalForecast | null => {

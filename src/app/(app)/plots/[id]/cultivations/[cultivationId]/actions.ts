@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { markFailed } from "@/features/cultivations/cultivationStore";
 import { parseFailureReason } from "@/features/cultivations/domain/failureReason";
 import { parseNote } from "@/features/cultivations/domain/observationNote";
+import { parseUserStage } from "@/features/cultivations/domain/userStage";
 import {
   insertCultivationEvent,
   softDeleteCultivationEvent,
@@ -157,6 +158,43 @@ export async function overrideStage(formData: FormData): Promise<void> {
   revalidatePath(`/plots/${plotId}`);
   revalidatePath(path);
   redirect(`${path}?saved=stage`);
+}
+
+/**
+ * 단계표에 없는 단계를 이 재배에만 더한다.
+ *
+ * `crop_stages`(마스터)는 건드리지 않는다. 농사로에서 온 작물 공통 자료라 한
+ * 사람이 고치면 남의 화면이 같이 바뀐다. 기록 한 줄(`STAGE_ADD`)로만 남고,
+ * 타임라인이 읽을 때 마스터 뒤에 붙인다(`appendUserStages`).
+ *
+ * `overrideStage` 와 달리 **앞날짜를 막지 않는다.** 저쪽은 "이미 그렇게 됐다" 는
+ * 보정이고 이쪽은 "언제 할 것인가" 도 적을 수 있는 계획이다.
+ */
+export async function addStage(formData: FormData): Promise<void> {
+  // `/plots/{id}` 는 다시 그리지 않는다. 밭 목록의 카드는 GDD 로 판정한 단계를
+  // 보여 주는데, 사용자 단계는 그 계산에 안 들어가므로 바뀔 것이 없다.
+  const { cultivationId, path } = await openContext(formData);
+
+  const parsed = parseUserStage({
+    nameKo: readText(formData, "nameKo"),
+    occurredOn: readText(formData, "occurredOn") || kstDateString(),
+  });
+  if (!parsed.ok) fail(path, parsed.messageKo);
+
+  try {
+    await insertCultivationEvent(cultivationId, {
+      kind: "STAGE_ADD",
+      occurredOn: parsed.value.occurredOn,
+      // 단계 이름이 본문에 들어간다. stage_order 는 비운다 — 마스터에 없는
+      // 단계라 가리킬 번호가 없다.
+      body: parsed.value.nameKo,
+    });
+  } catch {
+    fail(path, "단계를 더하지 못했습니다. 새로 고친 뒤 다시 시도해 주세요.");
+  }
+
+  revalidatePath(path);
+  redirect(`${path}?saved=stage-add`);
 }
 
 /**

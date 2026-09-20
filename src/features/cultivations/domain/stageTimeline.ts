@@ -28,7 +28,15 @@ import type { StageRow } from "./growthGauge";
 export type StageState = "done" | "current" | "upcoming";
 
 export interface StageStep {
-  stageOrder: number;
+  /**
+   * 단계표(`crop_stages`)의 순번. **사용자가 더한 단계는 그 표에 없어 null** 이다.
+   * 화면 key 로 쓸 때는 `eventId ?? stageOrder` 로 고른다.
+   */
+  stageOrder: number | null;
+  /** 사용자 단계일 때 그 기록(`STAGE_ADD`)의 id. 마스터 단계면 null. */
+  eventId: string | null;
+  /** 단계표에서 온 것인가, 사용자가 붙인 것인가. 화면이 말을 가른다. */
+  source: "master" | "user";
   nameKo: string;
   guideKo: string | null;
   state: StageState;
@@ -145,6 +153,8 @@ export function buildStageTimeline(
 
     return {
       stageOrder: stage.stageOrder,
+      eventId: null,
+      source: "master",
       nameKo: stage.stageNameKo,
       guideKo: stage.guideKo,
       state: passed ? "done" : current ? "current" : "upcoming",
@@ -157,4 +167,51 @@ export function buildStageTimeline(
             : null,
     };
   });
+}
+
+/** 사용자가 `STAGE_ADD` 로 붙인 단계 하나. */
+export interface UserStage {
+  /** `cultivation_events` 행 id. 화면 key 이자 지울 때 쓰는 값. */
+  eventId: string;
+  nameKo: string;
+  occurredOn: string;
+}
+
+/**
+ * 사용자가 더한 단계를 **마스터 단계 뒤에** 잇는다. 고추를 거둔 뒤의 말림·가공처럼
+ * 단계표에 없는 일을 그 재배에만 붙이는 것이다.
+ *
+ * `buildStageTimeline` 의 인자가 아니라 **다 계산한 뒤에 부르는 별도 함수**인 것이
+ * 이 파일의 요점이다. 사용자 단계에는 GDD 구간이 없어 도달 예측의 재료가 못 된다.
+ *
+ * ⚠ **중간에 끼워 넣지 않는다.** 마스터는 GDD 로, 사용자 단계는 날짜로 줄을
+ *   세운다. 둘을 섞으면 순서가 정해지지 않는다 — 더운 해에는 GDD 단계가 날짜보다
+ *   앞서고 서늘한 해에는 뒤선다. 같은 화면이 해마다 다른 순서로 보이게 된다.
+ *   중간에 적고 싶은 일은 관찰 기록이 받는다.
+ *
+ * ⚠ **`current`(보라 점)를 주지 않는다.** "지금 이 단계다" 는 GDD 로 하는 말인데
+ *   여기엔 GDD 가 없다. 날짜가 지났으면 `done`, 아직이면 `upcoming` 둘뿐이다.
+ */
+export function appendUserStages(
+  masterSteps: readonly StageStep[],
+  userStages: readonly UserStage[],
+  today: string,
+): readonly StageStep[] {
+  if (userStages.length === 0) return masterSteps;
+
+  const added: StageStep[] = userStages
+    .toSorted((a, b) => a.occurredOn.localeCompare(b.occurredOn))
+    .map((stage) => ({
+      stageOrder: null,
+      eventId: stage.eventId,
+      source: "user",
+      nameKo: stage.nameKo,
+      guideKo: null,
+      state: stage.occurredOn <= today ? "done" : "upcoming",
+      reachedOn: stage.occurredOn,
+      // 우리가 민 날이 아니라 사용자가 적은 날이다. 추정이 아니므로 observed.
+      reachedKind: "observed",
+    }));
+
+  return [...masterSteps, ...added];
 }

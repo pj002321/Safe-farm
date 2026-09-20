@@ -31,7 +31,15 @@ interface EventRow {
   forecast_on: string | null;
 }
 
-const KINDS = ["NOTE", "TASK_DONE", "STAGE_SET", "FORECAST"] as const;
+const KINDS = [
+  "NOTE",
+  "TASK_DONE",
+  "STAGE_SET",
+  // 사용자가 단계표에 없는 단계를 자기 재배에만 붙인 것. 이름은 body 에 들어간다
+  // (`20260920090000_cultivation_events_farm_diary.sql`).
+  "STAGE_ADD",
+  "FORECAST",
+] as const;
 type EventKind = (typeof KINDS)[number];
 
 /** DB 가 새 kind 를 허용하게 바뀌어도 화면이 안 깨지게 좁힌다. 모르면 뺀다. */
