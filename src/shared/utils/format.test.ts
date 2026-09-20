@@ -4,6 +4,7 @@ import {
   formatRainfall,
   formatScore,
   formatTemperature,
+  hourMinuteOf,
 } from "./format";
 
 describe("formatTemperature", () => {
@@ -49,5 +50,22 @@ describe("formatFarmDate", () => {
     const result = formatFarmDate(new Date("2026-09-09T00:00:00Z"));
     expect(result).toContain("9월");
     expect(result).toContain("9일");
+  });
+});
+
+describe("hourMinuteOf", () => {
+  it("날짜를 떼고 시각만 — 시간대를 바꾸지 않는다", () => {
+    expect(hourMinuteOf("2026-09-19T06:19")).toBe("06:19");
+  });
+
+  it("뒤가 잘렸으면 null — 빈 문자열을 저장하면 화면이 빈 칸을 그린다", () => {
+    expect(hourMinuteOf("2026-09-19T")).toBeNull();
+    expect(hourMinuteOf("2026-09-19T06")).toBeNull();
+  });
+
+  it("T 가 없거나 값이 없으면 null", () => {
+    expect(hourMinuteOf("2026-09-19")).toBeNull();
+    expect(hourMinuteOf(null)).toBeNull();
+    expect(hourMinuteOf(undefined)).toBeNull();
   });
 });

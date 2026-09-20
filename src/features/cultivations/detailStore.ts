@@ -1,5 +1,6 @@
 import "server-only";
 
+import { aiService } from "@/shared/aiService/client";
 import { stationsByDistance } from "@/shared/geo/nearestStation";
 import { listStations } from "@/shared/geo/stationStore";
 import {
@@ -9,14 +10,11 @@ import {
 } from "@/shared/growth/forecast";
 import { type DailyTemp, recentDailyGdd } from "@/shared/growth/gdd";
 import { listMonthlyNormals } from "@/shared/growth/normalStore";
-import {
-  recommendTasks_2,
-  type TaskAdvice,
-  type TaskRule,
-  type TaskWeather,
-} from "@/shared/growth/taskAdvice";
+import type { TaskAdvice } from "@/shared/growth/taskAdvice";
 import { getCultivationCard } from "./cultivationStore";
+import { type TaskReason, toTaskAdvices } from "./domain/aiTasks";
 import type { CultivationCard } from "./domain/cultivationCard";
+import { hideDoneToday } from "./domain/doneTasks";
 import {
   buildGrowthGauge,
   type GrowthGauge,
@@ -31,7 +29,12 @@ import {
   rebaseGdd_1,
   type StageOverride,
 } from "./domain/stageOverride";
-import { buildStageTimeline, type StageStep } from "./domain/stageTimeline";
+import {
+  appendUserStages,
+  buildStageTimeline,
+  type StageStep,
+  type UserStage,
+} from "./domain/stageTimeline";
 import { buildTimeline, type TimelineEntry } from "./domain/timeline";
 import { listCultivationEvents } from "./eventStore";
 import { listObservations, listStages } from "./growthStore";
@@ -47,6 +50,10 @@ import { listObservations, listStages } from "./growthStore";
  * - **규칙 변형(`_1`/`_2`)을 고르는 자리가 이 파일이다.** 아래 세 상수의 오른쪽만
  *   바꾸면 화면 전체가 그 규칙으로 돈다. 고르고 나면 진 쪽 함수는 지운다 —
  *   남겨 두면 다음 사람이 어느 쪽이 도는지 코드에서 알 수 없다.
+ * - **할 일은 우리가 판정하지 않는다.** ai-service 가 홈 카드와 **같은 함수**로
+ *   낸 것을 받아 온다(`/v1/tasks/cultivation`). 전에는 화면 쪽 규칙이 따로
+ *   판정해서 임계값이 갈렸고, 실제로 반대되는 조언이 나갔다 — 추수 3주 전 물을
+ *   뺀 논에 홈은 조용한데 상세가 "충분히 주기" 를 냈다.
  * - 도달 예측은 **예보 → 평년값** 순으로 메운다. 예보가 닿는 날은 예보 기온으로,
  *   그 밖은 그 달의 평년 기온으로 쌓는다(`forecastArrival_2`). 평년값은 밭에서
  *   가까운 관측소 것을 읽고, 없으면 다음으로 가까운 곳으로 물러선다.
@@ -64,9 +71,6 @@ import { listObservations, listStages } from "./growthStore";
  *    "모른다"만 내놓으므로, 적재 상태를 확인하기 전까지 되돌릴 자리를 남긴다.
  */
 const ARRIVAL_RULE: ArrivalRule = forecastArrival_2;
-
-/** `recommendTasks_1` 은 단계만 본다. 기상 경고를 같이 내려면 `_2`. */
-const TASK_RULE: TaskRule = recommendTasks_2;
 
 /** `rebaseGdd_2` 는 보정 전 오차를 유지한다. `_1` 은 보정일을 새 출발선으로 본다. */
 const REBASE_RULE: RebaseRule = rebaseGdd_1;
@@ -98,6 +102,8 @@ export interface CultivationDetail {
   gauge: GrowthGauge | null;
   stageSteps: readonly StageStep[];
   tasks: readonly TaskAdvice[];
+  /** 할 일이 0장일 때 **왜** 인지. 화면이 그에 맞는 말을 고른다. */
+  taskReason: TaskReason;
   /** 다음 단계 도달 예측. 마지막 단계거나 못 맞히면 null. */
   nextStage: NextStageForecast | null;
   /** 수확 도달 예측. 이미 끝난 재배면 null. */
@@ -108,6 +114,44 @@ export interface CultivationDetail {
   /** 이 밭 대신 읽은 관측소. */
   stationNameKo: string | null;
   today: string;
+}
+
+/**
+ * 이 재배의 오늘 할 일. **판정은 ai-service 가 한다**(홈 카드와 같은 함수).
+ *
+ * ⚠️ 못 받아도 던지지 않는다. 할 일만 비고 게이지·타임라인은 그대로 그려진다 —
+ *    평년값 조회가 실패했을 때와 같은 판단이다. 화면 전체를 죽일 값이 아니다.
+ *
+ * ⚠️ **밭 단위 값을 보내지 않는다.** 물수지·위성·특보·병해충·관측강수는 서버가
+ *    `plotId` 로 직접 읽는다. 여기서 보내면 남의 밭 값을 끼워 넣을 통로가 된다.
+ */
+async function loadTasks(
+  plotId: string,
+  variantId: number,
+  gauge: GrowthGauge | null,
+): Promise<{ tasks: readonly TaskAdvice[]; reason: TaskReason }> {
+  // 단계를 못 세운 밭은 여기서 끝낸다. 서버를 불러 봐야 시기 규칙이 전부 꺼져
+  // 0장이 오는데, 그 0장은 "할 일이 없다" 가 아니라 **모른다** 는 뜻이다.
+  if (gauge?.stage == null) return { tasks: [], reason: "no-stage" };
+
+  const result = await aiService.cultivationTasks({
+    plotId,
+    variantId,
+    // 화면이 판정한 단계·누적을 그대로 넘긴다. 서버가 다시 계산하면 사용자가
+    // 고친 단계 보정(rebase)을 몰라 화면과 다른 단계를 근거로 말한다.
+    stageOrder: gauge.stage.stageOrder,
+    accumulatedGdd: gauge.accumulatedGdd,
+  });
+
+  if (!result.ok) {
+    console.error(
+      "[cultivation] 할 일 조회 실패",
+      result.reason,
+      result.detail,
+    );
+    return { tasks: [], reason: "failed" };
+  }
+  return { tasks: toTaskAdvices(result.data.tasks), reason: "ok" };
 }
 
 /** 단계 보정 이벤트 중 가장 나중 것. 여러 번 고쳐도 마지막 뜻만 남는다. */
@@ -128,6 +172,32 @@ function latestOverride(
     stageOrder: latest.stageOrder as number,
     occurredOn: latest.occurredOn,
   };
+}
+
+/**
+ * 사용자가 붙인 단계들. 이름이 빈 행은 뺀다 — 타임라인에 이름 없는 점이 생긴다.
+ *
+ * 정렬은 `appendUserStages` 가 날짜로 다시 한다. 여기서는 고르기만 한다.
+ */
+function userStages(
+  entries: readonly {
+    id: string;
+    kind: string;
+    occurredOn: string;
+    body: string | null;
+  }[],
+): readonly UserStage[] {
+  return entries.flatMap((entry) =>
+    entry.kind === "STAGE_ADD" && entry.body !== null
+      ? [
+          {
+            eventId: entry.id,
+            nameKo: entry.body,
+            occurredOn: entry.occurredOn,
+          },
+        ]
+      : [],
+  );
 }
 
 /** 가장 **먼저** 내놓은 수확 예측일. 오차 계산의 기준이다. */
@@ -152,14 +222,6 @@ export async function loadCultivationDetail(
   plot: { id: string; latitude: number; longitude: number },
   cultivationId: string,
   today: string,
-  /**
-   * 최근 기상 요약. 추천 작업의 기상 판정이 이걸 본다.
-   *
-   * 여기서 직접 읽지 않는 이유는 그 조회가 `features/monitoring` 에 있고
-   * features 끼리는 import 할 수 없어서다(AGENTS.md). 페이지가 둘을 합친다 —
-   * `plotStrip.ts` 가 생육단계를 인자로 받는 것과 같은 이유다.
-   */
-  weather: TaskWeather | null = null,
   /**
    * 내일부터의 예보 기온. 도달 예측이 이 구간을 먼저 쓰고, 그 밖을 평년값으로
    * 메운다. `weather` 와 같은 이유로 여기서 직접 읽지 않는다 — 예보 조회는
@@ -237,7 +299,7 @@ export async function loadCultivationDetail(
           card.upperTempC ?? undefined,
         );
 
-  const stageSteps =
+  const masterSteps =
     gauge === null || card.baseTempC === null
       ? []
       : buildStageTimeline({
@@ -252,6 +314,11 @@ export async function loadCultivationDetail(
           today,
         });
 
+  // 사용자 단계는 **GDD 계산이 끝난 뒤** 붙인다. 구간이 없어 계산의 재료가 될 수
+  // 없고, 마스터가 비어도(기준온도 없음 등) 사용자가 적은 것은 보여야 한다.
+  const stageSteps = appendUserStages(masterSteps, userStages(events), today);
+
+  const ended = card.status === "HARVESTED" || card.status === "FAILED";
   const recent = observations.slice(-RECENT_WINDOW_DAYS);
   const arrival = (targetGdd: number): ArrivalForecast | null => {
     if (gauge === null || card.baseTempC === null) return null;
@@ -268,7 +335,6 @@ export async function loadCultivationDetail(
     });
   };
 
-  const ended = card.status === "HARVESTED" || card.status === "FAILED";
   const current = gauge?.stage ?? null;
   const nextStage =
     ended || current === null
@@ -281,6 +347,12 @@ export async function loadCultivationDetail(
           );
           return { stageNameKo: next?.stageNameKo ?? "수확기", forecast };
         })();
+
+  // 끝난 재배는 부르지 않는다. 화면이 이 칸 자체를 안 그리고(page.tsx 의
+  // `!ended`), 수확한 밭에 대고 물수지·위성을 다시 읽을 이유도 없다.
+  const ai = ended
+    ? { tasks: [] as readonly TaskAdvice[], reason: "ok" as TaskReason }
+    : await loadTasks(plot.id, card.variantId, gauge);
 
   const entries = buildTimeline({
     cultivation: {
@@ -300,10 +372,12 @@ export async function loadCultivationDetail(
     stages,
     gauge,
     stageSteps,
-    tasks: TASK_RULE({
-      stageNameKo: gauge?.stage?.stageNameKo ?? null,
-      weather,
-    }),
+    // 오늘 이미 `했음` 을 누른 카드는 뺀다. 규칙이 만든 계산값이라 id 가 없어
+    // 제목으로 견준다 — 그날치만 본다(`domain/doneTasks.ts`).
+    // ai-service 가 죽어도 화면 전체를 죽이지 않는다. 할 일만 비고 게이지·
+    // 타임라인은 그대로다 — 평년값 조회 실패와 같은 판단이다.
+    tasks: hideDoneToday(ai.tasks, entries, today),
+    taskReason: ai.reason,
     nextStage,
     harvest: ended || card.gddTarget === null ? null : arrival(card.gddTarget),
     entries,

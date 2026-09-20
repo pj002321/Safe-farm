@@ -29,18 +29,48 @@ export type TimelineKind =
   | "NOTE"
   | "TASK_DONE"
   | "STAGE_SET"
+  | "STAGE_ADD"
   | "FORECAST"
   | "HARVESTED"
   | "FAILED";
 
+/**
+ * 저장할 때 행에 박아 둔 그날 날씨. **칸마다 비어 있을 수 있고 그게 정상이다.**
+ *
+ * ⚠️ 빈 칸을 0 으로 바꾸지 말 것. `rainfallMm = 0` 은 "비가 안 왔다" 는 뜻이라,
+ *    못 찾은 날과 안 온 날이 화면에서 같아진다.
+ */
+export interface EntryWeather {
+  skyKo: string | null;
+  tempMaxC: number | null;
+  tempMinC: number | null;
+  rainfallMm: number | null;
+  humidityPct: number | null;
+  windMs: number | null;
+  /** 그날 대표 풍향(도). **불어오는 쪽**이다. */
+  windDirDeg: number | null;
+  /** `"2026-09-19T06:19"` 꼴. 시각만 뽑는 것은 화면의 일이다. */
+  sunriseAt: string | null;
+  sunsetAt: string | null;
+}
+
 /** `cultivation_events` 한 행을 화면이 쓰는 이름으로 좁힌 것. */
 export interface TimelineEventRow {
   id: string;
-  kind: "NOTE" | "TASK_DONE" | "STAGE_SET" | "FORECAST";
+  kind: "NOTE" | "TASK_DONE" | "STAGE_SET" | "STAGE_ADD" | "FORECAST";
   occurredOn: string;
   body: string | null;
   stageOrder: number | null;
   forecastOn: string | null;
+  /** 행이 만들어진 시각(ISO). 어제 일을 오늘 적으면 occurredOn 과 갈린다. */
+  createdAt: string;
+  /** 농사로의 "활동유형". 고르지 않았으면 null. */
+  workKind: string | null;
+  /** `TASK_DONE` 카드에 적은 한 줄. 안 적었으면 null. */
+  taskNote: string | null;
+  /** 그날 AI 리포트 글. 그날 첫 `TASK_DONE` 에만 있다. */
+  adviceText: string | null;
+  weather: EntryWeather;
 }
 
 /** `cultivations` 에서 날짜만 뽑은 것. */
@@ -64,6 +94,40 @@ export interface TimelineEntry {
   bodyKo: string | null;
   /** `STAGE_SET` 이 가리키는 단계. 화면이 이름을 붙인다. */
   stageOrder: number | null;
+  /**
+   * 농사로의 "활동유형". 안 골랐거나 재배 컬럼에서 온 줄이면 null.
+   *
+   * `titleKo` 를 덮지 않고 따로 둔다 — 제목은 kind 가 정하는 말이고 이건 그날
+   * 무엇을 했나다. 둘을 합치면 `EVENT_TITLE` 을 보는 §6-다 쪽과 엉킨다.
+   */
+  workKindKo: string | null;
+  /**
+   * 담은 카드에 적은 한 줄. `TASK_DONE` 말고는 전부 null 이다.
+   *
+   * `bodyKo`(= 카드 제목)와 따로 둔다. 한 칸에 몰아넣으면 `hideDoneToday` 가
+   * 제목으로 거르지 못해 눌러 둔 카드가 다시 뜬다.
+   */
+  taskNoteKo: string | null;
+  /**
+   * **적은 시각**(ISO). 재배 컬럼에서 온 줄(파종·수확·중단)은 null 이다 — 그 셋은
+   * 행이 아니라 상태라 "언제 적었나" 가 없다.
+   *
+   * `occurredOn`(있었던 날)과 다르다. 사나흘 빠뜨린 것을 하루에 몰아 적으면 이
+   * 값이 전부 같은 날이 된다.
+   */
+  createdAtIso: string | null;
+  /**
+   * `했음` 을 누른 그 시점의 AI 리포트 글. 그날 첫 줄에만 있고 나머지는 null.
+   *
+   * 길어서 화면은 접어 둔다. 여기 있는 것은 **그때 박아 둔 글**이라, `advices`
+   * 표가 지워져도 남는다.
+   */
+  adviceTextKo: string | null;
+  /**
+   * 저장할 때 박은 그날 날씨. 재배 컬럼에서 온 줄(파종·수확·중단)은 null 이다 —
+   * 그 셋은 `cultivation_events` 행이 아니라 날씨를 박을 자리가 없다.
+   */
+  weather: EntryWeather | null;
 }
 
 /**
@@ -75,6 +139,7 @@ export interface TimelineEntry {
 const SAME_DAY_ORDER: Record<TimelineKind, number> = {
   SOWN: 0,
   STAGE_SET: 1,
+  STAGE_ADD: 1,
   TASK_DONE: 2,
   NOTE: 3,
   FORECAST: 4,
@@ -86,6 +151,7 @@ const EVENT_TITLE: Record<TimelineEventRow["kind"], string> = {
   NOTE: "관찰 기록",
   TASK_DONE: "작업 완료",
   STAGE_SET: "생육단계 직접 지정",
+  STAGE_ADD: "단계 추가",
   FORECAST: "수확 예측",
 };
 
@@ -106,6 +172,11 @@ function fromCultivation(
           : `${cultivation.cropKo} 씨 뿌림`,
       bodyKo: null,
       stageOrder: null,
+      workKindKo: null,
+      taskNoteKo: null,
+      createdAtIso: null,
+      adviceTextKo: null,
+      weather: null,
     });
   }
 
@@ -117,6 +188,11 @@ function fromCultivation(
       titleKo: `${cultivation.cropKo} 수확`,
       bodyKo: null,
       stageOrder: null,
+      workKindKo: null,
+      taskNoteKo: null,
+      createdAtIso: null,
+      adviceTextKo: null,
+      weather: null,
     });
   }
 
@@ -128,6 +204,11 @@ function fromCultivation(
       titleKo: `${cultivation.cropKo} 재배 중단`,
       bodyKo: failureReasonKo(cultivation.failureReason),
       stageOrder: null,
+      workKindKo: null,
+      taskNoteKo: null,
+      createdAtIso: null,
+      adviceTextKo: null,
+      weather: null,
     });
   }
 
@@ -148,6 +229,11 @@ function fromEvent(event: TimelineEventRow): TimelineEntry {
           : `${event.forecastOn} 수확 예상`
         : event.body,
     stageOrder: event.stageOrder,
+    workKindKo: event.workKind,
+    taskNoteKo: event.taskNote,
+    createdAtIso: event.createdAt,
+    adviceTextKo: event.adviceText,
+    weather: event.weather,
   };
 }
 

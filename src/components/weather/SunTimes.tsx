@@ -1,5 +1,6 @@
 import { SunIcon } from "@/components/icons";
 import type { PlotForecast } from "@/shared/aiService/client";
+import { hourMinuteOf } from "@/shared/utils/format";
 
 /**
  * ---------------------------------------------
@@ -21,14 +22,9 @@ import type { PlotForecast } from "@/shared/aiService/client";
  */
 
 /** "2026-09-19T06:19" → "06:19". 형태가 다르면 null 이라 줄이 안 그려진다. */
-function hhmm(iso: string | null): string | null {
-  const time = iso?.split("T")[1];
-  return time?.slice(0, 5) ?? null;
-}
-
 export function SunTimes({ today }: { today: PlotForecast["days"][number] }) {
-  const rise = hhmm(today.sunrise);
-  const set = hhmm(today.sunset);
+  const rise = hourMinuteOf(today.sunrise);
+  const set = hourMinuteOf(today.sunset);
   if (rise === null && set === null) return null;
 
   return (

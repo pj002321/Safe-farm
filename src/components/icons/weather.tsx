@@ -33,6 +33,15 @@ export function SunIcon(props: IconProps) {
   );
 }
 
+/** 구름만 (흐림). `CloudRainIcon` 과 같은 실루엣이라 나란히 놓아도 무게가 안 튄다 */
+export function CloudIcon(props: IconProps) {
+  return (
+    <svg {...ICON_BASE} aria-hidden="true" {...props}>
+      <path d={CLOUD_PATH} />
+    </svg>
+  );
+}
+
 /** 구름과 비스듬히 내리는 빗줄기 3개 (강수) */
 export function CloudRainIcon(props: IconProps) {
   return (
