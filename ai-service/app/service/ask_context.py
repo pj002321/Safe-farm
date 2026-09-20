@@ -10,23 +10,40 @@ from dataclasses import dataclass
 from sqlalchemy.orm import Session
 
 from app.domain.gdd import daily_gdd
-from app.service.ask_extras import extra_context_lines
 from app.models.farm import Crop, CropStage, Cultivation
 from app.repo.crop import stage_at_gdd, stage_by_order
 from app.repo.cultivation import growing_with_crop
 from app.repo.plot import owned_plot
 from app.repo.station import StationRow
 from app.repo.weather_obs import latest_temps, temps_since
+from app.service.ask_extras import extra_context_lines
 
 # ⚠ 관측소 고르기는 `plot_growth` 것을 그대로 쓴다. 여기 한 벌 더 두었다가 한쪽만
 #   고쳐서 /ask 가 말하는 관측소와 리포트가 쓰는 관측소가 갈린 적이 있다.
-from app.service.plot_growth import nearest_station
+from app.service.plot_growth import gdd_origin, nearest_station
 
 RECENT_WEATHER_DAYS = 7
 
 
 def _start_gdd(db: Session, cultivation: Cultivation) -> float:
     """적산을 시작할 GDD.
+
+    ⚠ **2026-09-20 부터 이 파일은 이 함수를 부르지 않는다.** `_current_stage` 가
+      `plot_growth.gdd_origin` 을 쓴다. 새로 쓸 일이 생기면 이것 말고 **그쪽**을 부를 것.
+
+      까닭 — `plot_growth._start_gdd` 와 **글자까지 같은 사본이었다.**
+      같은 날 두 사람이 각자 만들었다(3a8ad91 HeoJaeSeong · bfabbae HO-Vic).
+      나눈 판단이 아니라 서로 모르고 쓴 것으로 보인다 — bfabbae 는
+      "테이블 분리 ask 대응" 이고, 그때 넣은 코드는 `repo` 를 안 거치고
+      `db.query(CropStage)` 를 직접 썼다(지금은 `stage_by_order` 로 정리돼 있다).
+
+      사본이 둘이면 **한쪽만 고쳤을 때 갈린다.** 과수 규칙(그 해 기점에서 0으로
+      되감기)을 넣으면서 그 위험이 실제가 됐다 — LLM 이 말하는 단계와 화면의
+      단계가 어긋난다. `cropping.py` 머리말과 `growthGauge.ts` 머리말이 같은
+      까닭으로 "규칙은 한 곳에" 를 적어 두었다.
+
+      ⚠ **지우지 않는다.** 이 함수를 만든 사람의 판단이고, 다른 곳에서 쓰게 될 때
+        규칙을 다시 찾지 않아도 된다.
 
     모종으로 시작했으면 0 이 아니다 — 그 모종은 이미 어느 단계까지 자란 상태로
     밭에 들어왔다. start_stage_order 가 가리키는 단계의 gdd_from 부터 쌓는다.
@@ -51,6 +68,11 @@ def _current_stage(
     정의되지 않는다.
 
     누적값은 저장하지 않고 매번 관측에서 다시 쌓는다(웹의 gdd.ts 와 같은 방침).
+
+    ⚠ **과수는 파종일부터 쌓지 않는다**(2026-09-20). 나무는 몇 해 전에 심어서
+      그 해의 0일이 **기점**(발아, 없으면 개화)이다 — `plot_growth.gdd_origin` 이
+      그 규칙을 갖고 있고 작업카드 쪽도 같은 함수를 쓴다. 여기서 따로 적으면
+      **LLM 이 말하는 단계와 화면의 단계가 갈린다.**
     """
     if cultivation.sowing_date is None:
         return None
@@ -59,9 +81,10 @@ def _current_stage(
     if crop.base_temp is None:
         return None
 
-    obs = temps_since(db, station.station_code, cultivation.sowing_date)
+    시작일, 누적시작, _ = gdd_origin(db, cultivation)
+    obs = temps_since(db, station.station_code, 시작일)
     upper = float(crop.upper_temp) if crop.upper_temp is not None else None
-    accumulated = _start_gdd(db, cultivation) + sum(
+    accumulated = 누적시작 + sum(
         daily_gdd(float(o.temp_max), float(o.temp_min), float(crop.base_temp), upper) for o in obs
     )
 

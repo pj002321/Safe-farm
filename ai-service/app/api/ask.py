@@ -16,6 +16,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
+from app.core import measure
 from app.core.config import DAILY_ASK_LIMIT
 from app.core.db import get_db
 from app.core.security import require_service_token
@@ -92,9 +93,12 @@ def _sse(
     try:
         for mode, chunk in ask_graph.stream(graph_state, stream_mode=["updates", "custom"]):
             if mode == "custom":
+                measure.mark_first_token()  # 첫 번째만 기록한다(core/measure)
                 parts.append(chunk["piece"])
                 yield _event("token", chunk["piece"])
                 continue
+            for node_name in chunk:
+                measure.mark_node(node_name)  # 노드 완료 시각(core/measure)
             output = chunk.get("retrieve")
             if output is not None:
                 matches = [
@@ -104,10 +108,13 @@ def _sse(
                 yield _event("matches", [m.model_dump() for m in matches])
     except Exception:  # noqa: BLE001 — 원인별 분기가 없다. 어느 쪽이든 화면이 할 일은 같다
         complete_answer(db, history, "".join(parts))
+        measure.finish()
         yield _event("error", STREAM_FAILED_MESSAGE)
         return
 
     complete_answer(db, history, "".join(parts))
+    # 스트림이 끝나야 출력 토큰·전체 시간이 확정된다. 미들웨어는 이보다 먼저 돌아간다.
+    measure.finish()
     yield _event("done", True)
 
 

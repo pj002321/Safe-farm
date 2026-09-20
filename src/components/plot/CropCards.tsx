@@ -387,16 +387,27 @@ function CropSowingFields({
         </fieldset>
       )}
 
-      <fieldset className="flex gap-2">
-        <legend className="sr-only">재배 방식</legend>
-        <CropSowingMethod
-          cropId={cropId}
-          defaultChecked
-          labelKo="씨앗"
-          value="seed"
-        />
-        <CropSowingMethod cropId={cropId} labelKo="모종" value="seedling" />
-      </fieldset>
+      {/* ⚠ **모종 창이 없는 작물에는 이 물음이 성립하지 않는다**(2026-09-21).
+          과수가 그렇다 — 사과나무를 씨로 심는 사람은 없고, 마스터의
+          `plant_from`·`plant_to` 도 비어 있다. 그런데도 라디오가 늘 그려져
+          "씨앗" 이 기본으로 찍혔고, 저장된 `sowing_type` 이 화면에 `정식` 으로
+          나왔다(무화과 실측).
+
+          ⚠ **작물 이름으로 가르지 않는다.** 마스터가 모종 창을 안 주면 고를 것이
+            없다는 뜻이고, 그 판단은 자료에 있다. 과수 밖에도 모종 창이 없는
+            작물이 있으면 똑같이 라디오가 사라지는 것이 맞다. */}
+      {plantWindowKo !== null && (
+        <fieldset className="flex gap-2">
+          <legend className="sr-only">재배 방식</legend>
+          <CropSowingMethod
+            cropId={cropId}
+            defaultChecked
+            labelKo="씨앗"
+            value="seed"
+          />
+          <CropSowingMethod cropId={cropId} labelKo="모종" value="seedling" />
+        </fieldset>
+      )}
     </div>
   );
 }

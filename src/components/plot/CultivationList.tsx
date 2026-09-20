@@ -11,6 +11,10 @@ import {
 } from "@/features/cultivations/domain/cultivationCard";
 import type { GrowthGauge as Gauge } from "@/features/cultivations/domain/growthGauge";
 import type { PlotGrowth } from "@/features/cultivations/growthStore";
+import {
+  fruitOriginDate,
+  yearsSincePlanting,
+} from "@/shared/growth/fruitOrigin";
 
 /**
  * ---------------------------------------------
@@ -171,6 +175,12 @@ function CultivationItem({
   const maturity = card.maturityType
     ? (MATURITY_LABEL[card.maturityType] ?? card.maturityType)
     : null;
+  // ★ 과수는 **n년차**를 쓴다 — 2026-09-20 (`교안_과수를_살린다.md` §9-6).
+  //   나무를 5년 전에 심었으면 `D+1998` 이 되는데, 그 숫자는 올해의 생육을
+  //   말하지 못한다. 심은 지 몇 해째인지가 농민이 쓰는 말이다.
+  //
+  //   ⚠ 심은 날은 그대로 적는다. 뜻이 사라지는 것은 `D+` 쪽뿐이다.
+  const years = yearsSincePlanting(card, card.sowingDate, today);
 
   return (
     <li className="overflow-hidden rounded-xl border border-border bg-surface">
@@ -186,9 +196,15 @@ function CultivationItem({
           card.aliasKo && card.cropNameKo,
           maturity,
           card.sowingDate
-            ? `${card.sowingType === "SEEDLING" ? "정식" : "파종"} ${card.sowingDate}`
+            ? // ⚠ 과수는 '파종' 도 '정식' 도 아니다 — 나무를 **심은 날**이다.
+              //   그 해의 0일은 따로 있고(기점), 이 날짜는 n년차를 세는 자리다
+              `${years !== null ? "심음" : card.sowingType === "SEEDLING" ? "정식" : "파종"} ${card.sowingDate}`
             : "파종일 모름",
-          days !== null && days >= 0 ? `D+${days}` : null,
+          years !== null
+            ? `${years}년차`
+            : days !== null && days >= 0
+              ? `D+${days}`
+              : null,
           card.harvestedAt ? `수확 ${card.harvestedAt}` : null,
         ]
           .filter(Boolean)
@@ -197,7 +213,7 @@ function CultivationItem({
 
       <div className="px-5 py-4">
         {gauge ? (
-          <CultivationGauge card={card} gauge={gauge} />
+          <CultivationGauge card={card} gauge={gauge} today={today} />
         ) : (
           <p className="text-fg-subtle text-sm">
             {card.status === "PLANNED"
@@ -233,7 +249,8 @@ function CultivationItem({
           <details className="w-full [&_summary]:list-none">
             <summary className="inline-flex w-fit cursor-pointer items-center gap-1 rounded-md px-3 py-1.5 font-medium text-fg-muted text-sm transition-colors duration-200 ease-out-expo hover:bg-surface-2 hover:text-fg">
               <CalendarIcon className="size-3.5" />
-              파종일 수정
+              {/* 과수는 파종이 아니라 나무를 심은 날이다 (위 ★) */}
+              {years !== null ? "심은 날 수정" : "파종일 수정"}
             </summary>
             <form
               action={onEditSowing}
@@ -318,11 +335,19 @@ function CultivationItem({
 function CultivationGauge({
   card,
   gauge,
+  today,
 }: {
   card: CultivationCard;
   gauge: Gauge;
+  /** 과수의 그 해 기점을 구하는 데 쓴다. 여기서 `Date.now()` 를 읽지 않는다 */
+  today: string;
 }) {
   const missing = Math.max(0, gauge.expectedDays - gauge.coveredDays);
+  // ★ 과수는 그 해 **기점**(발아·개화)부터 쌓는다 — 심은 날이 아니다
+  //   (`shared/growth/fruitOrigin.ts`). 값은 이미 그렇게 나오는데 **글자만**
+  //   '파종' 이라 말이 어긋났다(2026-09-21). 나무를 4년 전에 심은 사람에게
+  //   "파종일부터 145일" 은 틀린 말이다.
+  const 기점 = fruitOriginDate(card, today);
 
   return (
     <div className="flex flex-col gap-3">
@@ -338,7 +363,11 @@ function CultivationGauge({
               : `수확까지 약 ${gauge.daysLeft}일`
         }
         footStartKo={
-          card.sowingDate ? `파종 ${card.sowingDate.slice(5)}` : "모종부터"
+          기점 !== null
+            ? `기점 ${기점.slice(5)}`
+            : card.sowingDate
+              ? `파종 ${card.sowingDate.slice(5)}`
+              : "모종부터"
         }
         markLabelKo={gauge.stage ? `${gauge.stage.stageNameKo} 끝` : ""}
         markRatio={gauge.markRatio}
@@ -357,8 +386,9 @@ function CultivationGauge({
         // 빠진 날은 0 으로 더해진다. 그 사실을 말하지 않으면 사용자는 작물이
         // 안 자란 줄 안다 — 실제로는 우리가 기온을 못 읽은 것이다.
         <p className="text-caution text-xs leading-relaxed">
-          파종일부터 오늘까지 {gauge.expectedDays}일 중 {missing}일의 관측이
-          없습니다. 그만큼 누적 적산온도가 실제보다 낮게 나옵니다.
+          {기점 === null ? "파종일" : "올해 기점"}부터 오늘까지{" "}
+          {gauge.expectedDays}일 중 {missing}일의 관측이 없습니다. 그만큼 누적
+          적산온도가 실제보다 낮게 나옵니다.
         </p>
       )}
     </div>

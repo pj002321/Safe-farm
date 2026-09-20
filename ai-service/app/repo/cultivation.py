@@ -53,6 +53,51 @@ def growing_with_crop(db: Session, plot_id: uuid.UUID) -> list[tuple[Cultivation
     )
 
 
+def growing_in_order(db: Session, plot_id: uuid.UUID) -> list[Cultivation]:
+    """
+    # summary
+    이 밭에서 **지금 기르는** 재배 건 전부. 먼저 심은 것부터.
+
+    `growing_with_crop` 과 달리 작물을 같이 안 읽고 **차례가 있다.** 작업카드가
+    재배마다 판정하면서(교안 §2-B) 차례가 필요해졌다 — 밭에 한 장만 내는 재해
+    카드를 누구에게 붙일지가 이 차례로 정해진다.
+
+    ⚠ **판정에 못 쓰는 건도 준다.** GDD 를 못 내는 건이라도 빼 버리면 부르는 쪽이
+      "그런 작물이 있는 줄도" 모른 채 조용히 사라진다 — **거르는 것은 부르는 쪽
+      몫이고, 거를 때 까닭을 남기는 것도 그쪽 몫이다**(`plot_tasks._why_no_growth`).
+      실측 2026-09-20: 디테크타워 과천 밭의 **단감**이 그렇다(품종 587 ·
+      `crops.base_temp` 가 비어 GDD 를 못 낸다 · 전국 1건).
+      파종일이 없는 건도 같은 이유로 준다(전국 0건이지만 막을 장치는 아니다 —
+      `sowing_date` 오름차순에서 NULL 은 뒤로 간다).
+
+    ⚠ **id 로 한 번 더 가른다.** 같은 밭에 **파종일까지 같은 재배가 실재한다**
+      (2026-09-20 실측: 풋콩 2건 · 피망 2건). 차례가 날마다 뒤집히면 재해 카드가
+      어제는 이쪽, 오늘은 저쪽에 붙어 같은 카드가 두 장으로 늘어난다.
+
+    # params
+    db: 세션<br>
+    plot_id: 밭 id. **소유 확인은 이미 끝났다고 본다**(`repo.plot.owned_plot`)<br>
+
+    # returns
+    Cultivation 목록. 아무것도 안 기르면 빈 리스트
+
+    # examples
+        [c.sowing_date for c in growing_in_order(db, plot_id)]
+        -> [date(2026, 4, 12), date(2026, 6, 1), None]
+    """
+    return list(
+        db.scalars(
+            select(Cultivation)
+            .where(
+                Cultivation.plot_id == plot_id,
+                Cultivation.status == "GROWING",
+                Cultivation.deleted_at.is_(None),
+            )
+            .order_by(Cultivation.sowing_date, Cultivation.id)
+        )
+    )
+
+
 def lead_growing(db: Session, plot_id: uuid.UUID) -> Cultivation | None:
     """
     # summary
@@ -61,6 +106,10 @@ def lead_growing(db: Session, plot_id: uuid.UUID) -> Cultivation | None:
     화면의 D+n 과 같은 기준이다(`features/plots/domain/plotSummary.ts` 의
     `leadCultivation`). 파종일을 모르는 건은 후보에서 뺀다. 그 건으로는 GDD 를
     못 내는데 대표로 뽑히면 밭 전체가 "생육 근거 없음"이 되기 때문이다.
+
+    ⚠ **조건을 두 벌로 두지 않으려고 `growing_in_order` 를 걸러 쓴다.** 같은
+      조회가 여러 벌이 되면 조건이 갈린다 — 이 파일 머리말이 적어 둔, 실제로
+      한 번 겪은 사고다. 밭 하나의 재배 건은 몇 줄뿐이라 전부 받아도 싸다.
 
     # params
     db: 세션<br>
@@ -72,13 +121,7 @@ def lead_growing(db: Session, plot_id: uuid.UUID) -> Cultivation | None:
     # examples
         lead_growing(db, plot_id).sowing_date  -> date(2026, 4, 12)
     """
-    return db.scalars(
-        select(Cultivation)
-        .where(
-            Cultivation.plot_id == plot_id,
-            Cultivation.status == "GROWING",
-            Cultivation.deleted_at.is_(None),
-            Cultivation.sowing_date.isnot(None),
-        )
-        .order_by(Cultivation.sowing_date)
-    ).first()
+    return next(
+        (c for c in growing_in_order(db, plot_id) if c.sowing_date is not None),
+        None,
+    )

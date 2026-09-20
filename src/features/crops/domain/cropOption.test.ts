@@ -62,9 +62,34 @@ describe("toSowingWindowKo", () => {
   });
 
   it("파종 방법이 비면 중립적으로 '심습니다'", () => {
-    // 과수(배·사과·포도)가 여기 해당한다. 묘목을 심는 것이라 씨/모종 구분이 안 맞는다
+    // ⚠ 2026-09-20 이후 과수는 여기 안 온다 — '발아'·'개화' 가 실려 온다(아래).
+    //   빈 값은 이제 "방법을 모르는 작물" 뿐이다
     const v = [{ sow_method: null, sow_from: "03-01", sow_to: "03-31" }];
     expect(toSowingWindowKo(v)).toBe("3.1~3.31에 심습니다");
+  });
+
+  it("★ 과수는 사람이 하는 일이 아니라 나무에 일어나는 일로 말한다", () => {
+    // 나무를 몇 해 전에 심었으므로 그 해의 0일은 파종이 아니라 기점이다.
+    // sow_from~sow_to 가 가리키는 것도 파종 창이 아니라 기점 창이다
+    // (crop-data `build._파종방법` · 실측: 발아 12종 · 개화 3종)
+    expect(
+      toSowingWindowKo([
+        { sow_method: "발아", sow_from: "03-15", sow_to: "04-05" },
+      ]),
+    ).toBe("3.15~4.5에 싹이 틉니다");
+    expect(
+      toSowingWindowKo([
+        { sow_method: "개화", sow_from: "03-05", sow_to: "04-05" },
+      ]),
+    ).toBe("3.5~4.5에 꽃이 핍니다");
+  });
+
+  it("⚠ 과수를 기본값에 맡기면 조사가 틀린다 — 그래서 따로 적었다", () => {
+    // 이 검사가 지키는 것: 위 두 줄을 지우면 "발아을(를) 합니다" 가 된다
+    const 말 = toSowingWindowKo([
+      { sow_method: "발아", sow_from: "03-15", sow_to: "04-05" },
+    ]);
+    expect(말).not.toContain("을(를)");
   });
 
   it("농업 용어를 사람 말로 바꾼다", () => {

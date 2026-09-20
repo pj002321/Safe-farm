@@ -294,6 +294,40 @@ export interface PlotReport {
 }
 
 /**
+ * 영농일지 한 줄에 박을 그날 날씨. `/v1/weather/day` 한 줄이다.
+ *
+ * ⚠️ **칸마다 null 이 올 수 있고, 그게 정상이다.** 관측이 비는 날은 비는 대로
+ *    저장한다 — 0 으로 채우면 "비가 안 왔다" 는 뜻이 된다.
+ */
+export interface DiaryWeather {
+  date: string;
+  tempMax: number | null;
+  tempMin: number | null;
+  rainfallMm: number | null;
+  humidityPct: number | null;
+  windMax: number | null;
+  /** 그날 대표 풍향(도). **불어오는 쪽**이다. */
+  windDirDeg: number | null;
+  /** `"2026-09-19T06:19"` 꼴. `"06:19"` 로 자르는 것은 저장하는 쪽 일이다. */
+  sunrise: string | null;
+  sunset: string | null;
+}
+
+/**
+ * 작업카드 한 장. `/v1/tasks/cultivation` 이 돌려주는 모양이다.
+ *
+ * 홈 카드(`plot_tasks` 표)와 **같은 판정 함수**에서 나오지만 저장되지 않는다 —
+ * 화면이 그릴 때마다 새로 낸다. 그래서 id 가 없다. 화면이 제목을 열쇠로 쓴다
+ * (`domain/doneTasks.ts` 가 그날 `했음` 을 제목으로 거르는 것과 같은 열쇠다).
+ */
+export interface AiTaskCard {
+  title: string;
+  reason: string;
+  /** 홈의 `Priority` 와 같은 값이다 — 급함 · 보통 · 여유. */
+  priority: string;
+}
+
+/**
  * 사용자의 밭 전체를 아우르는 AI 종합 요약. `available` 이 false 면 밭이
  * 하나도 없거나(NO_PLOTS) 어느 밭에서도 생육 데이터를 못 만든 것이다(NO_GROWTH_DATA).
  */
@@ -643,6 +677,28 @@ export const aiService = {
       ? { ok: true, data: normalizePlotForecast(result.data) }
       : result;
   },
+  /**
+   * 그 좌표 그 날짜 하루치 날씨. **영농일지가 저장할 때 한 번 부른다.**
+   *
+   * `plotForecast` 를 쓰지 않는 까닭 — 저쪽은 `past_days` 인자가 없어 **과거가
+   * 아예 안 온다.** 사용자는 한 달 전 날짜로도 일지를 쓴다.
+   *
+   * ⚠️ **`revalidateSec` 을 주지 않는다.** 저장 순간의 값을 행에 박는 호출이라
+   *    캐시된 응답을 쓰면 다른 날짜 값이 박힌다. ai-service 쪽 1시간 캐시가
+   *    (좌표, past_days) 를 열쇠로 이미 왕복을 줄여 준다.
+   *
+   * ⚠️ **`FORECAST_TIMEOUT_MS`(15초)를 쓰지 않는다.** 화면 예보는 그게 없으면
+   *    카드가 비지만, 여기서는 **농민이 저장 버튼을 누르고 기다리는 시간**이다.
+   *    날씨는 없어도 되는 값이라 기본값(5초)에 맡기고 빨리 포기한다 — 실패해도
+   *    메모는 저장되고, 1시간 캐시 덕에 다음 저장은 대개 즉시 붙는다.
+   *
+   * ⚠️ 92일보다 오래된 날짜는 `day` 가 **null 로 온다. 오류가 아니다** —
+   *    그대로 빈 채 저장하고 화면이 "그날 날씨를 못 찾았습니다" 로 그린다.
+   */
+  weatherOfDay: (lat: number, lon: number, date: string) =>
+    call<{ day: DiaryWeather | null }>(
+      `/v1/weather/day?lat=${lat}&lon=${lon}&date=${date}`,
+    ),
   /** 좌표 하나의 `dateFrom`~`dateTo`(YYYY-MM-DD) NDVI·NDMI 일별 평균(F5). */
   satelliteObservations: (
     lat: number,
@@ -654,6 +710,58 @@ export const aiService = {
       `/v1/satellite/observations?lat=${lat}&lon=${lon}&date_from=${dateFrom}&date_to=${dateTo}`,
       { revalidateSec: SATELLITE_REVALIDATE_SEC, timeoutMs: 15_000 },
     ),
+  /**
+   * 재배 한 건의 오늘 할 일. **저장하지 않고 받아만 온다.**
+   *
+   * 재배 상세의 `이번 주 할 일` 이 이걸 쓴다. 전에는 화면 쪽 규칙
+   * (`shared/growth/taskAdvice.ts` 의 `recommendTasks_2`)이 따로 판정했는데,
+   * 임계값이 홈과 갈려서 **반대되는 조언이 나갔다** — 추수 3주 전 물을 뺀 논에
+   * 홈은 조용한데 상세가 "충분히 주기" 를 냈다. 판정을 한 벌로 모았다.
+   *
+   * ⚠️ **밭 단위 값을 보내지 않는다.** 물수지·위성·특보·병해충·관측강수는
+   *    서버가 `plotId` 로 직접 읽는다. 보내면 남의 밭 값을 끼워 넣을 통로가
+   *    된다(ai-service `service/cultivation_tasks.py` 머리말).
+   *
+   * ⚠️ **누적 GDD 는 화면이 센 값을 보낸다.** 서버가 다시 계산하면 사용자가 고친
+   *    단계 보정(rebase)을 몰라, 화면과 다른 단계를 근거로 말한다.
+   *
+   * ⚠️ `revalidateSec` 을 주지 않는다. 특보·예보가 바뀌면 그날 안에도 카드가
+   *    달라져야 하는 값이라 캐시된 응답을 쓰면 안 된다. 서버 쪽 1시간 예보
+   *    캐시가 왕복은 이미 줄여 준다.
+   */
+  cultivationTasks: (input: {
+    plotId: string;
+    variantId: number;
+    /** 화면이 판정한 단계 번호. 못 정했으면 생략 — 기상만으로 판정한다. */
+    stageOrder?: number | null;
+    accumulatedGdd?: number | null;
+    /**
+     * 나무를 심은 지 몇 해째인가(과수만). 모르면 생략.
+     *
+     * ⚠ **1년차 묘목에 수확 카드를 안 보내려고** 넘긴다. 기점 되감기가 심기
+     *   전부터 열을 쌓아서, 사흘 전에 심은 단감이 `꽃눈분화기` 로 판정됐다
+     *   (2026-09-21 실측). 계산은 맞지만 그해에 열매는 안 달린다.
+     */
+    yearsSincePlanting?: number | null;
+  }) => {
+    const query = new URLSearchParams({
+      plot_id: input.plotId,
+      variant_id: String(input.variantId),
+    });
+    // 빈 값을 보내지 않는다. FastAPI 가 `stage_order=` 를 0 이 아니라 422 로 본다
+    if (input.stageOrder != null) {
+      query.set("stage_order", String(input.stageOrder));
+    }
+    if (input.accumulatedGdd != null) {
+      query.set("accumulated_gdd", String(input.accumulatedGdd));
+    }
+    if (input.yearsSincePlanting != null) {
+      query.set("years_since_planting", String(input.yearsSincePlanting));
+    }
+    return call<{ tasks: readonly AiTaskCard[] }>(
+      `/v1/tasks/cultivation?${query}`,
+    );
+  },
   /**
    * 밭 하나만 즉시 판정해 오늘 할 일 카드를 만든다. 자정 배치를 기다리지 않고
    * 밭 등록·재배 추가 직후 호출한다(registerPlot/addCultivations).

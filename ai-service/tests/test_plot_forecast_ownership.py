@@ -23,7 +23,9 @@ PLOT = uuid.UUID("33333333-3333-3333-3333-333333333333")
 
 
 class _Plot:
-    """밭 객체는 그대로 흘려보내기만 하므로 속이 비어 있어도 된다."""
+    """밭 객체는 그대로 흘려보내기만 한다. 격자만 있으면 된다 — 예보 열쇠에 쓴다."""
+
+    grid_x, grid_y = 52, 67
 
 
 @pytest.fixture
@@ -33,8 +35,8 @@ def wired(monkeypatch):
 
     monkeypatch.setattr(
         weather,
-        "fetch_forecast",
-        lambda lat, lon: {
+        "cached_forecast",
+        lambda lat, lon, *, cache_key=None: {
             "current": {"time": "2026-09-19T08:00", "temperature_2m": 20.0},
             "hourly": {"time": [], "temperature_2m": []},
             "daily": {"time": []},
@@ -104,6 +106,39 @@ def test_user_id_is_actually_passed_to_the_query(wired):
     _call(plot_id=PLOT, user_id=MINE)
 
     assert wired == [(PLOT, MINE)]
+
+
+def _keys_seen(monkeypatch):
+    """예보에 넘어간 `cache_key` 를 적어 두는 대역을 끼운다."""
+    keys = []
+
+    def stub(lat, lon, *, cache_key=None):
+        keys.append(cache_key)
+        return {"current": None, "hourly": {"time": []}, "daily": {"time": []}}
+
+    monkeypatch.setattr(weather, "cached_forecast", stub)
+    return keys
+
+
+def test_my_own_plot_is_keyed_by_grid(wired, monkeypatch):
+    """밭을 **예보보다 먼저** 찾아야 격자를 열쇠로 쓸 수 있다.
+
+    순서를 되돌리면 열쇠가 None 이 되어 좌표로 묶인다. 한 격자 안의 밭들이
+    각각 밖으로 나가는데, Next 는 URL 에 plot_id 가 들어가 밭마다 따로
+    캐시하므로 저쪽이 안 막아 준다 — 느려질 뿐 값은 맞아서 티가 안 난다.
+    """
+    keys = _keys_seen(monkeypatch)
+    _call(plot_id=PLOT, user_id=MINE)
+
+    assert keys == [("grid", 52, 67)], "밭 조회가 예보 뒤로 밀렸다"
+
+
+def test_plotless_call_is_keyed_by_coords(wired, monkeypatch):
+    """지도에서 찍은 좌표에는 밭이 없다. 열쇠도 없이 좌표로 묶인다."""
+    keys = _keys_seen(monkeypatch)
+    _call()
+
+    assert keys == [None]
 
 
 def test_missing_plot_looks_the_same_as_someone_elses(wired):

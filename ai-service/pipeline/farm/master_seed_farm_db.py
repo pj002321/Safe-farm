@@ -304,7 +304,9 @@ def load(db, data: dict[str, list[dict]]) -> dict[str, int]:
     rows = [
         {
             "crop_name": r["crop_name"],
-            "cultivation_type": r["cultivation_type"] or "",   # read_csv 가 빈 칸을 None 으로 준다. UNIQUE 때문에 빈 문자열로
+            # read_csv 가 빈 칸을 None 으로 준다. UNIQUE 가 NULL 끼리를 서로 다르게
+            # 보므로 빈 문자열로 맞춘다 (아래 crop_disaster_rules 와 같은 까닭)
+            "cultivation_type": r["cultivation_type"] or "",
             "section": r["section"],
             "topic": r["topic"],
             "body": r["body"],
@@ -314,8 +316,17 @@ def load(db, data: dict[str, list[dict]]) -> dict[str, int]:
         }
         for r in data["crop_guides"]
     ]
-    done["crop_guides"] = upsert(db, CropGuide, rows,
-                                 ["crop_name", "cultivation_type", "section", "topic"])
+    열쇠 = ["crop_name", "cultivation_type", "section", "topic"]
+    done["crop_guides"] = upsert(db, CropGuide, rows, 열쇠)
+    # ⚠ **여기도 지워야 한다** — crop_stages 와 같은 까닭이다(위 ⚠). crop-data 가
+    #   작형을 버리면 CSV 에서는 빠지는데 upsert 는 DB 의 옛 행을 그대로 둔다.
+    #   2026-09-21 실측: `고추/꽈리고추 반촉성` 5행이 CSV 에서 빠진 뒤에도 DB 에
+    #   남았고, **그대로 임베딩까지 올라가 검색에 걸렸다**(documents 659 vs CSV 654).
+    #
+    #   ⚠ crop_stages 와 달리 열쇠가 전부 문자열이라 자료형을 맞출 것이 없다.
+    지움 = prune(db, CropGuide, rows, 열쇠)
+    if 지움:
+        print(f"  crop_guides: CSV 에서 사라진 {지움}행을 지웠습니다")
 
     rows = [
         {
@@ -340,6 +351,17 @@ def load(db, data: dict[str, list[dict]]) -> dict[str, int]:
     )
 
     # 컬럼이 nx, ny 뿐이라 갱신할 것이 없다. 충돌하면 건너뛴다
+    # ⚠ **이 표는 출처가 둘이다**(2026-09-21). 여기(grids.csv 8행)와
+    #   `pipeline/farm/sync_plot_grids.sync`(밭에서 뽑은 격자)가 같은 표를 채운다.
+    #
+    #   grids.csv 8행은 더미에서 갈라져 나온 **예시값**이다(72717a3 · 첫 줄 60,127 은
+    #   기상청 문서의 서울 예시). 어느 밭과도 안 맞는다 — 실측 2026-09-20 에 밭 23개 중
+    #   매칭 0개였다. **정본은 밭 쪽**이고 이쪽은 잔해다.
+    #
+    #   ⚠ 지우지 않는 까닭 — `weather_forecast.grid_id` 가 FK CASCADE 라 지우면 붙어
+    #     있던 예보(12행)도 같이 사라진다. 충돌 키가 (nx,ny) 로 같아 서로 덮어쓰지도
+    #     않는다. 예보 적재를 켤 때 HO-Vic 님과 같이 정리한다
+    #     (`교안_기상청예보_적재.md` §7 · ②-ㄹ).
     done["grids"] = upsert(db, Grid, data["grids"], ["nx", "ny"])
     done["stations"] = upsert(db, Station, data["stations"], ["station_code"])
 
