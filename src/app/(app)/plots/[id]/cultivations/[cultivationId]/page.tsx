@@ -58,13 +58,22 @@ export default async function Page({
   const { id, cultivationId } = await params;
 
   const profile = await getCurrentProfile();
-  const plot = profile ? await getPlotDetail(profile.id, id) : null;
+  // ⚠ `profile` 을 먼저 막는다. 아래에서 `profile.id` 를 쓰는데, `plot` 만 검사하면
+  //   타입이 "plot 이 있으면 profile 도 있다" 를 모른다.
+  if (!profile) notFound();
+  const plot = await getPlotDetail(profile.id, id);
   if (!plot) notFound();
 
   const today = kstDateString();
   // 도달 예측용 예보. 관측 계열은 더 읽지 않는다 — 그걸 보던 것은 화면 쪽 할 일
   // 규칙 하나뿐이었고, 그 판정이 ai-service 로 넘어갔다.
-  const forecast = await loadForecastTemps(plot, today).catch((error) => {
+  // ⚠ `userId` 를 같이 넘긴다. ai-service 가 밭을 먼저 찾아 격자 캐시 열쇠를
+  //   만든다 — 안 넘기면 좌표 열쇠로 떨어져 밭마다 1.2초가 붙는다
+  //   (`weatherStore.loadForecastTemps` 의 ★).
+  const forecast = await loadForecastTemps(
+    { ...plot, userId: profile.id },
+    today,
+  ).catch((error) => {
     // 예보가 없으면 평년값만으로 메운다. 예측 하나 때문에 화면을 죽이지 않는다.
     console.error("[cultivation] 예보 조회 실패", error);
     return [];
