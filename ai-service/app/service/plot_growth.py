@@ -257,6 +257,12 @@ def gdd_origin(db: Session, cultivation: Cultivation) -> tuple[date, float, bool
     return cultivation.sowing_date, _start_gdd(db, cultivation), 과수
 
 
+def _n년차(심은날: date, 오늘: date) -> int | None:
+    """나무를 심은 지 몇 해째인가. 1보다 작으면 None — 미래 날짜다."""
+    해 = 오늘.year - 심은날.year + 1
+    return 해 if 해 >= 1 else None
+
+
 def _start_gdd(db: Session, cultivation: Cultivation) -> float:
     """적산을 시작할 GDD. 모종으로 시작했으면 0 이 아니다 — start_stage_order 가
     가리키는 단계의 gdd_from 부터 쌓는다. 씨부터면 0 에서 시작한다.
@@ -409,7 +415,10 @@ def cultivation_growth(
         #   그 해의 생육을 말하지 못한다. n년차는 아래 칸이 따로 나른다.
         days_since_planting=(오늘 - 시작일).days,
         # 과수만. 한해살이는 None 이다 — `sowing_date` 가 곧 그 해의 시작이라 뜻이 없다
-        years_since_planting=(오늘.year - cultivation.sowing_date.year + 1) if 과수 else None,
+        # ⚠ 심은 날이 오늘보다 뒤면 음수가 된다 — 화면에 "-3년차" 가 찍힌다.
+        #   사용자가 미래 날짜를 넣을 수 있어 막을 수 있는 입력이 아니다.
+        #   웹의 `fruitOrigin.yearsSincePlanting` 도 같은 검사를 한다.
+        years_since_planting=_n년차(cultivation.sowing_date, 오늘) if 과수 else None,
         after_harvest=수확뒤,
         accumulated_gdd=round(accumulated, 1),
         stage_name=stage.stage_name if stage else None,

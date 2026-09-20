@@ -485,6 +485,10 @@ def generate_tasks_for_plot(
             # 수확 — GDD 가 '때'를, 위성이 '아직 있나'를 말한다(task_rules 주석)
             gdd_target_passed=past_target(growth.accumulated_gdd, growth.gdd_target),
             sow_method=growth.sow_method,
+            # 과수의 n년차. **1년차 묘목에는 수확 카드를 안 낸다** — 기점 되감기가
+            #   심기 전부터 열을 쌓아 사흘 전에 심은 단감이 `꽃눈분화기` 로 나왔다
+            #   (2026-09-21 실측). 한해살이는 None 이라 아무것도 안 바뀐다
+            years_since_planting=growth.years_since_planting,
             vegetation=식생,
             # 이맘때 이 작물에 자주 나오는 병해충. DB 조회 한 번이라 배치를 안 늦춘다
             pest_names=pest_names_for(db, growth.crop_name_ko, kst_today()),

@@ -97,6 +97,19 @@ export function windowMidMmDd(
   return [mid.getUTCMonth() + 1, mid.getUTCDate()];
 }
 
+/**
+ * `"YYYY-MM-DD"` 의 연도. 꼴이 아니면 null.
+ *
+ * ⚠ **`Number(문자열)` 만으로는 못 막는다.** `Number("")` 가 `0` 이라
+ *   `Number.isFinite` 를 통과하고, 그러면 `"-1-03-25"` 같은 날짜가 만들어진다
+ *   (2026-09-21 버그 헌팅에서 실제로 나왔다). `"2026"` 처럼 짧은 값도
+ *   그대로 통과해 조용히 작년 기점을 돌려줬다. **꼴부터 본다.**
+ */
+function yearOf(iso: string): number | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(iso ?? "")) return null;
+  return Number(iso.slice(0, 4));
+}
+
 /** `[월, 일]` + 연도 → `"YYYY-MM-DD"`. */
 function toIso(year: number, [month, day]: [number, number]): string {
   const mm = String(month).padStart(2, "0");
@@ -123,8 +136,8 @@ export function fruitOriginDate(
   const mid = windowMidMmDd(variant.sowFrom, variant.sowTo);
   if (mid === null) return null;
 
-  const year = Number(today.slice(0, 4));
-  if (!Number.isFinite(year)) return null;
+  const year = yearOf(today);
+  if (year === null) return null;
 
   const thisYear = toIso(year, mid);
   return thisYear <= today ? thisYear : toIso(year - 1, mid);
@@ -143,10 +156,13 @@ export function yearsSincePlanting(
   today: string,
 ): number | null {
   if (!isFruit(variant.sowMethod) || sowingDate === null) return null;
-  const planted = Number(sowingDate.slice(0, 4));
-  const now = Number(today.slice(0, 4));
-  if (!Number.isFinite(planted) || !Number.isFinite(now)) return null;
-  return now - planted + 1;
+  const planted = yearOf(sowingDate);
+  const now = yearOf(today);
+  if (planted === null || now === null) return null;
+  const 해 = now - planted + 1;
+  // ⚠ **심은 날이 오늘보다 뒤면 음수가 나온다.** 화면에 "-3년차" 가 찍힌다.
+  //   막을 수 있는 입력이 아니라(사용자가 미래 날짜를 넣을 수 있다) 여기서 거른다.
+  return 해 >= 1 ? 해 : null;
 }
 
 /** 과수의 한 해 주기 상태. 과수가 아니면 화면이 이 칸을 안 쓴다. */

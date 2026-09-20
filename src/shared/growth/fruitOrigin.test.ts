@@ -98,9 +98,67 @@ describe("fruitOriginDate", () => {
     expect(fruitOriginDate(시금치, "2026-09-20")).toBeNull();
   });
 
+  it("🔴 today 가 날짜 꼴이 아니면 null — 2026-09-21 버그 헌팅", () => {
+    // Number("") 가 0 이라 isFinite 를 통과한다. 그래서 "-1-03-25" 가 나왔다.
+    // "2026" 처럼 짧은 값도 조용히 작년 기점을 돌려줬다
+    for (const t of ["", "2026", "오늘", "not-a-date", "26-09-20"]) {
+      expect(fruitOriginDate(사과, t)).toBeNull();
+    }
+  });
+
   it("창이 빈 과수도 null — 옛 길로 떨어뜨린다", () => {
     const v = { sowMethod: "발아", sowFrom: null, sowTo: null };
     expect(fruitOriginDate(v, "2026-09-20")).toBeNull();
+  });
+});
+
+describe("해가 바뀌면 다시 0 부터", () => {
+  // ★ **과수는 선이 아니라 원이다.** 파이썬 쪽 같은 이름의 검사와 짝이다.
+  //    실측 2026-09-21 — 단감(창 03-25~04-25, 기점 04-09) 누적이
+  //    04-08 26.2 → 04-09 **0.0**, 단계도 첫 칸(발아전엽기)으로 돌아왔다.
+  const 단감 = { sowMethod: "발아", sowFrom: "03-25", sowTo: "04-25" };
+
+  it("기점 하루 전까지는 작년 기점이다", () => {
+    // 여기가 어긋나면 한겨울에 누적이 0 으로 떨어져 게이지가 처음으로 되감긴다.
+    // 1월에 감귤을 따는 사람이 그것을 본다
+    expect(fruitOriginDate(단감, "2027-04-08")).toBe("2026-04-09");
+    expect(fruitOriginDate(단감, "2027-01-10")).toBe("2026-04-09");
+  });
+
+  it("🔴 기점 당일에 다음 바퀴가 시작된다 — 누적이 0 으로 돌아가는 자리", () => {
+    // 쌓을 구간이 0일이 되어 누적도 0 이 된다. 따로 지우는 코드가 없는 까닭이다
+    expect(fruitOriginDate(단감, "2027-04-09")).toBe("2027-04-09");
+    expect(fruitOriginDate(단감, "2027-04-10")).toBe("2027-04-09");
+  });
+
+  it("개화 기점도 해마다 되감긴다 — 기점 낱말은 둘이다", () => {
+    // ⚠ 발아만 되감기면 개화 4품종만 영영 심은 날부터 세게 된다
+    expect(fruitOriginDate(매실, "2027-03-19")).toBe("2026-03-20");
+    expect(fruitOriginDate(매실, "2027-03-20")).toBe("2027-03-20");
+  });
+
+  it("바퀴가 여러 해 돌아도 기점은 같은 날이다", () => {
+    for (const 해 of [2026, 2027, 2028, 2029]) {
+      expect(fruitOriginDate(단감, `${해}-09-20`)).toBe(`${해}-04-09`);
+    }
+  });
+
+  it("윤년에도 기점이 안 밀린다", () => {
+    // ⚠ 2028 은 윤년이다. 2월이 기점인 무화과는 윤일 당일도 받아야 한다
+    expect(fruitOriginDate(단감, "2028-09-20")).toBe("2028-04-09");
+    const 무화과 = { sowMethod: "발아", sowFrom: "02-15", sowTo: "02-25" };
+    expect(fruitOriginDate(무화과, "2028-02-29")).toBe("2028-02-20");
+  });
+
+  it("다음 바퀴의 기점을 미리 말한다 — 화면이 '언제 다시 세나' 를 쓴다", () => {
+    const c = buildFruitCycle(
+      { ...단감, sowingDate: "2021-04-01" },
+      "2026-09-21",
+      2084,
+      2186,
+    );
+    expect(c?.originOn).toBe("2026-04-09");
+    expect(c?.nextOriginOn).toBe("2027-04-09");
   });
 });
 
@@ -119,6 +177,15 @@ describe("yearsSincePlanting", () => {
 
   it("심은 날을 모르면 null", () => {
     expect(yearsSincePlanting(사과, null, "2026-09-20")).toBeNull();
+  });
+
+  it("🔴 심은 날이 미래거나 꼴이 아니면 null — 2026-09-21 버그 헌팅", () => {
+    // 전에는 "2030-01-01" 이 -3 을, "" 가 2027 을 돌려줬다. 화면에 그대로 찍힌다
+    expect(yearsSincePlanting(사과, "2030-01-01", "2026-09-20")).toBeNull();
+    expect(yearsSincePlanting(사과, "", "2026-09-20")).toBeNull();
+    expect(yearsSincePlanting(사과, "헛소리", "2026-09-20")).toBeNull();
+    // 심은 해면 1년차 — 경계는 살아 있어야 한다
+    expect(yearsSincePlanting(사과, "2026-01-01", "2026-09-20")).toBe(1);
   });
 });
 

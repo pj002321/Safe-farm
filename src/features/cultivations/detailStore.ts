@@ -12,6 +12,7 @@ import {
   buildFruitCycle,
   type FruitCycle,
   fruitOriginDate,
+  yearsSincePlanting,
 } from "@/shared/growth/fruitOrigin";
 import { type DailyTemp, recentDailyGdd } from "@/shared/growth/gdd";
 import { listMonthlyNormals } from "@/shared/growth/normalStore";
@@ -142,6 +143,7 @@ async function loadTasks(
   plotId: string,
   variantId: number,
   gauge: GrowthGauge | null,
+  years: number | null,
 ): Promise<{ tasks: readonly TaskAdvice[]; reason: TaskReason }> {
   // 단계를 못 세운 밭은 여기서 끝낸다. 서버를 불러 봐야 시기 규칙이 전부 꺼져
   // 0장이 오는데, 그 0장은 "할 일이 없다" 가 아니라 **모른다** 는 뜻이다.
@@ -154,6 +156,10 @@ async function loadTasks(
     // 고친 단계 보정(rebase)을 몰라 화면과 다른 단계를 근거로 말한다.
     stageOrder: gauge.stage.stageOrder,
     accumulatedGdd: gauge.accumulatedGdd,
+    // 과수의 n년차. **1년차 묘목에 수확 카드를 안 내려고** 넘긴다 — 기점
+    // 되감기가 심기 전부터 열을 쌓아 사흘 전에 심은 단감이 `꽃눈분화기` 로
+    // 나왔다(2026-09-21). 한해살이는 null 이라 아무것도 안 바뀐다.
+    yearsSincePlanting: years,
   });
 
   if (!result.ok) {
@@ -376,7 +382,12 @@ export async function loadCultivationDetail(
   // `!ended`), 수확한 밭에 대고 물수지·위성을 다시 읽을 이유도 없다.
   const ai = ended
     ? { tasks: [] as readonly TaskAdvice[], reason: "ok" as TaskReason }
-    : await loadTasks(plot.id, card.variantId, gauge);
+    : await loadTasks(
+        plot.id,
+        card.variantId,
+        gauge,
+        yearsSincePlanting(card, card.sowingDate, today),
+      );
 
   const entries = buildTimeline({
     cultivation: {

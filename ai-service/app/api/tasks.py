@@ -69,6 +69,7 @@ def tasks_of_cultivation(
     variant_id: int,
     stage_order: int | None = None,
     accumulated_gdd: float | None = None,
+    years_since_planting: int | None = None,
     db: Session = Depends(get_db),
 ) -> dict:
     """재배 한 건의 오늘 할 일. 저장하지 않고 돌려주기만 한다.
@@ -84,7 +85,9 @@ def tasks_of_cultivation(
     if plot is None:
         raise HTTPException(status_code=404, detail="PLOT_NOT_FOUND")
 
-    candidates = tasks_for_cultivation(db, plot, variant_id, stage_order, accumulated_gdd)
+    candidates = tasks_for_cultivation(
+        db, plot, variant_id, stage_order, accumulated_gdd, years_since_planting
+    )
     return {
         "tasks": [
             {"title": c.title, "reason": c.reason, "priority": c.priority}
