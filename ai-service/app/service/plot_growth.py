@@ -194,9 +194,61 @@ def _과수기점일(variant, 오늘: date) -> date | None:
     return 올해 if 올해 <= 오늘 else date(오늘.year - 1, *md)
 
 
+def gdd_origin(db: Session, cultivation: Cultivation) -> tuple[date, float, bool]:
+    """
+    # summary
+    **적산을 어디서 시작할까.** (시작일, 시작 GDD, 과수인가) 를 함께 준다.
+
+    ★ **이 규칙을 쓰는 곳이 셋이다** — `cultivation_growth`(작업카드·리포트) ·
+      `ask_context._current_stage`(LLM) · 웹의 `growthGauge.buildGrowthGauge`.
+      앞의 둘은 이 함수를 같이 쓰고, 웹은 언어가 달라 같은 규칙을 **따로 적는다.**
+      `growthGauge.ts` 머리말이 *"규칙은 파이썬과 같아야 한다 — 다르면 둘 중
+      하나는 거짓말이 된다"* 고 못 박아 둔 그 약속이다. **한쪽만 고치지 말 것.**
+
+    두 갈래다.
+
+        한해살이   파종일부터. 모종으로 시작했으면 그 단계의 gdd_from 을 얹는다
+        과수      **그 해의 기점**부터 0에서. 나무는 몇 해 전에 심었다
+
+    ⚠ 과수에 파종일을 쓰면 여러 해치 열이 쌓인다 — 5년 전에 심은 사과가 첫해에
+      gdd_target 을 넘어 영영 '수확' 에 머문다.
+
+    ⚠ 과수에 `_start_gdd`(모종 보정)를 얹지 않는다. 그건 "씨 대신 모종으로
+      시작했으니 앞 단계를 건너뛴다" 는 뜻인데, 과수는 해마다 기점에서 0으로
+      되감기므로 건너뛸 앞 단계가 없다.
+
+    # params
+    db: 세션<br>
+    cultivation: 재배 건. `sowing_date` 가 있어야 한다(부르는 쪽이 이미 검사)<br>
+
+    # returns
+    (적산 시작일, 시작 GDD, 과수인가)
+
+    # examples
+        gdd_origin(db, 사과재배)   -> (date(2026, 3, 25), 0.0, True)
+        gdd_origin(db, 시금치재배)  -> (date(2026, 8, 15), 0.0, False)
+    """
+    variant = variant_by_id(db, cultivation.variant_id)
+    과수 = variant is not None and is_fruit(variant.sow_method)
+    if 과수:
+        기점 = _과수기점일(variant, date.today())
+        if 기점 is not None:
+            return 기점, 0.0, True
+        # 창이 빈 품종은 옛 길로 떨어진다. 그 작물은 어차피 gdd_target 도 비어
+        # 게이지가 안 뜬다 — 조용히 틀리는 것보다 낫다
+    return cultivation.sowing_date, _start_gdd(db, cultivation), 과수
+
+
 def _start_gdd(db: Session, cultivation: Cultivation) -> float:
     """적산을 시작할 GDD. 모종으로 시작했으면 0 이 아니다 — start_stage_order 가
-    가리키는 단계의 gdd_from 부터 쌓는다. 씨부터면 0 에서 시작한다."""
+    가리키는 단계의 gdd_from 부터 쌓는다. 씨부터면 0 에서 시작한다.
+
+    ⚠ **이것이 정본이다.** `ask_context.py` 에 같은 이름의 사본이 있다 — 같은 날
+      두 사람이 서로 모르고 각자 만들었다(3a8ad91 · bfabbae). 2026-09-20 에
+      `gdd_origin` 으로 길을 모으면서 그쪽은 안 불리게 됐지만 **지우지는 않았다.**
+      고칠 일이 생기면 **여기만 고치면 된다** — 다만 저쪽이 다시 불리기 시작하면
+      두 벌이 되므로, 저쪽 주석도 같이 볼 것.
+    """
     if cultivation.start_stage_order is None:
         return 0.0
 
@@ -299,24 +351,12 @@ def cultivation_growth(
     variant = variant_by_id(db, cultivation.variant_id)
     오늘 = date.today()
 
-    # ★ 과수는 **해마다 0에서 다시 쌓는다** — 2026-09-20 (`교안_과수를_살린다.md`)
-    #
-    #   나무는 몇 해 전에 심어서 `sowing_date` 부터 쌓으면 여러 해치 열이 누적된다.
-    #   그 해의 0일은 **기점**(발아, 없으면 개화)이고 날짜는 마스터에 있다.
-    #   `sowing_date` 는 그대로 **심은 날**로 남아 n년차를 센다.
-    #
-    #   ⚠ 기점을 못 찾으면(창이 빈 품종) 옛 길로 떨어진다. 그 작물은 어차피
-    #     gdd_target 도 비어 게이지가 안 뜬다 — 조용히 틀리는 것보다 낫다.
-    과수 = variant is not None and is_fruit(variant.sow_method)
-    기점 = _과수기점일(variant, 오늘) if 과수 else None
-    시작일 = 기점 or cultivation.sowing_date
+    # 적산을 어디서 시작할지는 `gdd_origin` 한 곳이 정한다 — LLM 쪽(ask_context)도
+    # 같은 함수를 쓴다. 과수면 그 해의 기점부터 0에서 다시 쌓는다
+    시작일, 누적시작, 과수 = gdd_origin(db, cultivation)
 
     obs = temps_since(db, station.station_code, 시작일)
     upper = float(crop.upper_temp) if crop.upper_temp is not None else None
-    # ⚠ 과수에는 `_start_gdd`(모종 보정)를 얹지 않는다. 그건 "씨 대신 모종으로
-    #   시작했으니 앞 단계를 건너뛴다" 는 뜻인데, 과수는 해마다 기점에서 0으로
-    #   되감기므로 건너뛸 앞 단계가 없다.
-    누적시작 = 0.0 if 과수 else _start_gdd(db, cultivation)
     accumulated = 누적시작 + sum(
         daily_gdd(float(o.temp_max), float(o.temp_min), float(crop.base_temp), upper) for o in obs
     )
