@@ -48,9 +48,14 @@ interface PlotMapFrameProps {
    * 마크업을 직접 갖지 않고 자리만 내어 준다.
    */
   controls?: ReactNode;
+  /**
+   * 지도 **위**에 얹는 조작(예: 스카이뷰 전환). `controls` 와 달리 지도 캔버스와
+   * 같은 relative 컨테이너 안에 들어가야 절대 위치로 지도 위에 뜬다.
+   */
+  overlay?: ReactNode;
 }
 
-export function PlotMapFrame({ controls }: PlotMapFrameProps) {
+export function PlotMapFrame({ controls, overlay }: PlotMapFrameProps) {
   return (
     <div className="flex flex-col gap-3">
       {controls}
@@ -68,6 +73,10 @@ export function PlotMapFrame({ controls }: PlotMapFrameProps) {
             backgroundSize: "2rem 2rem",
           }}
         />
+
+        {overlay && (
+          <div className="absolute top-3 right-3 z-20">{overlay}</div>
+        )}
 
         {/* 중앙 고정 핀. 지도를 끌어도 여기 그대로 있고, 지도 중심이 곧 밭 위치다.
             pointer-events-none 이라 지도 드래그를 가로채지 않는다.

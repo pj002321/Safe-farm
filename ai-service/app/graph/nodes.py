@@ -15,6 +15,7 @@ from langgraph.config import get_stream_writer
 from langgraph.graph import END
 
 from app.core.config import OPENAI_MODEL
+from app.domain.ask_topics import topics_in
 from app.domain.suitability import CropProfile, WeatherWindow, rank_crops
 from app.graph.state import GraphState, RecommendationState
 from app.knowledge.embedder import get_client
@@ -207,13 +208,26 @@ def plan(state: GraphState) -> GraphState:
     state: question, history_context, plot_id 를 읽는다<br>
 
     # returns
-    {"route": "tool"|"rag", "tool_calls": [...]}. plot_id 가 없으면 LLM이
-    조회를 원해도 "rag"로 내린다 — 조회할 밭이 없기 때문이다
+    {"route": "tool"|"rag", "tool_calls": [...]}. plot_id 가 없으면 LLM을
+    **부르지 않고** 곧장 "rag" 다 — 조회할 밭이 없어 답이 어차피 버려진다
 
     # examples
         plan({"question": "요즘 물 줘야해?", "plot_id": uuid(...), ...})
         -> {'route': 'tool', 'tool_calls': [...]}
     """
+    # 밭이 없으면 LLM 이 조회를 원해도 결과가 "rag" 로 고정이다. 물어보고 버리는
+    # 왕복이라 아예 건너뛴다 — 질문 하나에 LLM 호출이 둘에서 하나로 준다.
+    # 밭을 고르지 않고 묻는 질문(첫 화면·일반 재배법)이 여기 걸린다.
+    if state.get("plot_id") is None:
+        return {"route": "rag", "tool_calls": []}
+
+    # topics_in 이 갈래를 잡는 질문(비·태풍 …)은 LLM 라우터에 묻지 않고 곧장
+    # 조회한다. "태풍25호는 어디쯤 있어?" 처럼 "이 밭 전제"로 안 읽히는 질문도
+    # extra_context_lines 가 답을 갖고 있는데, PLAN_SYSTEM 의 "이 밭 전제" 기준으로는
+    # rag 로 빠져 그 답이 통째로 버려졌다(2026-09-20 실측).
+    if topics_in(state["question"]):
+        return {"route": "tool", "tool_calls": []}
+
     messages = [{"role": "system", "content": PLAN_SYSTEM}]
     if state.get("history_context"):
         messages.append({"role": "user", "content": f"지난 대화:\n{state['history_context']}"})
@@ -226,8 +240,7 @@ def plan(state: GraphState) -> GraphState:
         tool_choice="auto",
     )
     tool_calls = response.choices[0].message.tool_calls or []
-    route = "tool" if tool_calls and state.get("plot_id") else "rag"
-    return {"route": route, "tool_calls": tool_calls}
+    return {"route": "tool" if tool_calls else "rag", "tool_calls": tool_calls}
 
 
 def run_tools(state: GraphState) -> GraphState:
@@ -246,7 +259,11 @@ def run_tools(state: GraphState) -> GraphState:
         run_tools({"db": db, "plot_id": uuid(...), "user_id": uuid(...)})
         -> {'tool_result': '이 밭은 서울에 있고...'}
     """
-    result = build_plot_context(state["db"], state["plot_id"], state["user_id"])
+    # question 을 같이 넘긴다 — 물어본 갈래(위성·병해충·재해)만 컨텍스트에 붙는다.
+    # 안 넘기면 예전 그대로다(ask_context.build_plot_context 주석).
+    result = build_plot_context(
+        state["db"], state["plot_id"], state["user_id"], state["question"]
+    )
     return {"tool_result": result}
 
 
@@ -255,17 +272,21 @@ def route_after_plan(state: GraphState) -> str:
     # summary
     plan 뒤 어디로 갈지 정한다. route_after_weather와 같은 자리(순수 함수, 조건부 엣지).
 
+    ⚠ 밭 조회가 필요 없으면 **retrieve 가 아니라 generate 로** 간다. retrieve 는
+      plan 과 나란히 이미 출발해 있다(graph.build_graph_default 참고). 여기서
+      retrieve 를 가리키면 같은 노드가 두 번 돈다.
+
     # params
     state: route 를 본다<br>
 
     # returns
-    "run_tools" 또는 "retrieve"
+    "run_tools" 또는 "generate"
 
     # examples
         route_after_plan({"route": "tool"})  -> 'run_tools'
-        route_after_plan({"route": "rag"})   -> 'retrieve'
+        route_after_plan({"route": "rag"})   -> 'generate'
     """
-    return "run_tools" if state.get("route") == "tool" else "retrieve"
+    return "run_tools" if state.get("route") == "tool" else "generate"
 
 
 def retrieve(state: GraphState) -> GraphState:

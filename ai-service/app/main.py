@@ -27,6 +27,7 @@ from app.api import reports as reports_api
 from app.api import satellite as satellite_api
 from app.api import status as status_api
 from app.api import tasks as tasks_api
+from app.api import typhoon as typhoon_api
 from app.api import variety as variety_api
 from app.api import weather as weather_api
 from app.core import config
@@ -53,6 +54,7 @@ app.include_router(tasks_api.router)
 app.include_router(reports_api.router)
 app.include_router(alerts_api.router)
 app.include_router(satellite_api.router)
+app.include_router(typhoon_api.router)
 
 @app.get("/health")
 def health() -> dict[str, object]:

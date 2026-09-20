@@ -15,6 +15,10 @@ function day(
     rainChance: 0,
     windMax: 1,
     humidityPct: 50,
+    // 해 뜸·해 짐과 대표 풍향. 이 테스트가 보는 값은 아니지만 타입이 요구한다
+    sunrise: null,
+    sunset: null,
+    windDirDeg: null,
   };
 }
 

@@ -1,6 +1,12 @@
 import "server-only";
 
+import { cache } from "react";
 import { getSupabaseServer } from "@/shared/supabase/server";
+import {
+  type CultivationRecord,
+  type CultivationRecordRow,
+  toCultivationRecord,
+} from "./domain/cultivationRecord";
 import type { PlotEditInput } from "./domain/editPlot";
 import {
   type PlotCard,
@@ -168,6 +174,28 @@ export async function getPlotDetail(
 }
 
 /**
+ * 로그인 없이 보여줄 데모 밭. 랜딩 `#today` 섹션이 쓴다.
+ *
+ * `userId` 를 받지 않는다 — 소유자 확인이 아니라 `is_demo = true` 로 표시된
+ * 그 한 행만 본다(`plots_select_demo` RLS 정책, `plots_one_demo_idx` 가 하나임을
+ * 보장한다). 랜딩 조립(`page.tsx`)에서 여러 섹션이 같은 요청 안에서 부를 수
+ * 있어 `getCurrentProfile()` 과 같은 이유로 `cache()` 로 감싼다.
+ */
+export const getDemoPlot = cache(async (): Promise<PlotDetail | null> => {
+  const supabase = await getSupabaseServer();
+
+  const { data, error } = await supabase
+    .from("plots")
+    .select("id, name, region_ko, area_m2, latitude, longitude, grid_x, grid_y")
+    .eq("is_demo", true)
+    .maybeSingle();
+
+  if (error) throw new Error(error.message);
+
+  return data ? toPlotDetail(data) : null;
+});
+
+/**
  * 좌표·격자가 필요한 화면이 읽는 밭 전체. 날씨(`/weather`)가 쓴다.
  *
  * `listPlotCards()` 와 나눈 이유는 그쪽이 작물을 같이 끌고 오기 때문이다 —
@@ -307,4 +335,34 @@ export async function softDeletePlot(
     .delete()
     .eq("plot_id", plotId);
   if (tasksDeleted.error) throw new Error(tasksDeleted.error.message);
+}
+
+const RECORD_SELECT =
+  "id, sowing_date, harvested_at, plots!inner(name, user_id), crop_variants(crops(name))";
+
+/**
+ * 마이페이지 지난 재배 기록. `status = HARVESTED` 인 것만 담는다 — 진행 중인
+ * 재배는 대시보드가 다룬다.
+ *
+ * `plots!inner` 로 조인해야 `.eq("plots.user_id", ...)` 가 루트 행(cultivations)
+ * 자체를 거른다 — `!inner` 없이 걸면 내 소유가 아닌 밭은 값이 비워질 뿐, 그
+ * 재배 행 자체는 그대로 남는다(PostgREST 임베디드 필터 규칙).
+ */
+export async function listCultivationRecords(
+  userId: string,
+): Promise<CultivationRecord[]> {
+  const supabase = await getSupabaseServer();
+
+  const { data, error } = await supabase
+    .from("cultivations")
+    .select(RECORD_SELECT)
+    .eq("status", "HARVESTED")
+    .eq("plots.user_id", userId)
+    .is("deleted_at", null);
+
+  if (error) throw new Error(error.message);
+
+  return ((data ?? []) as unknown as CultivationRecordRow[])
+    .map(toCultivationRecord)
+    .filter((record): record is CultivationRecord => record !== null);
 }

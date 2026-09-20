@@ -221,7 +221,9 @@ const DRY_MM = 5;
 const MIN_WEATHER_DAYS = 3;
 
 /** 기상 조건에서 나오는 작업. 단계와 무관하게 붙는다. */
-function weatherTasks(weather: TaskWeather | null): readonly TaskAdvice[] {
+export function weatherTasks(
+  weather: TaskWeather | null,
+): readonly TaskAdvice[] {
   if (weather === null || weather.days < MIN_WEATHER_DAYS) return [];
 
   const tasks: TaskAdvice[] = [];

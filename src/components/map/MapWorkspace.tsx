@@ -12,6 +12,7 @@ import {
   Legend,
   LiveIndicator,
   RegionInfo,
+  TyphoonBanner,
   WarnSummary,
 } from "./SigunguLegend";
 import {
@@ -24,6 +25,8 @@ import {
 } from "./sigunguLayers";
 import { usePlotMarkers } from "./usePlotMarkers";
 import { useSigunguLayer, useSigunguPolygons } from "./useSigunguLayer";
+import { useTyphoonLayer, useTyphoonTrack } from "./useTyphoonLayer";
+import { useWindArrows } from "./useWindArrows";
 
 /**
  * ---------------------------------------------
@@ -69,8 +72,10 @@ export function MapWorkspace({ points }: MapWorkspaceProps) {
    *    그대로 **빈 지도**가 된다. 값이 바뀌는 것이 곧 신호여야 한다.
    */
   const [map, setMap] = useState<kakao.maps.Map | null>(null);
+  const [skyview, setSkyview] = useState(false);
 
   const { current, warn, retry } = useSigunguLayer(layer);
+  const { track } = useTyphoonTrack();
 
   /** 내 밭이 보이도록 맞춘다. 첫 진입과 "내 밭" 버튼이 같은 함수를 쓴다. */
   const focusPlots = useCallback(
@@ -96,6 +101,18 @@ export function MapWorkspace({ points }: MapWorkspaceProps) {
     },
     [points],
   );
+
+  /** 일반 지도 ↔ 스카이뷰(위성사진). 시군구 색칠은 배경과 무관하게 그대로 얹혀 있다. */
+  const toggleSkyview = useCallback(() => {
+    const sdk = window.kakao;
+    if (!sdk || !map) return;
+
+    const next = !skyview;
+    setSkyview(next);
+    map.setMapTypeId(
+      next ? sdk.maps.MapTypeId.HYBRID : sdk.maps.MapTypeId.ROADMAP,
+    );
+  }, [map, skyview]);
 
   const focusNation = useCallback((target: kakao.maps.Map) => {
     const sdk = window.kakao;
@@ -140,6 +157,8 @@ export function MapWorkspace({ points }: MapWorkspaceProps) {
     selectedCode,
     onSelect: setSelectedCode,
   });
+  useWindArrows({ map, layer, data: current });
+  useTyphoonLayer(map, track, { cone: true, wind: true });
 
   /**
    * 실패는 **둘**이다. 예전에는 레이어 데이터 실패만 봤다.
@@ -171,6 +190,7 @@ export function MapWorkspace({ points }: MapWorkspaceProps) {
         <LiveIndicator />
       </div>
 
+      {track && <TyphoonBanner track={track} />}
       {warn && <WarnSummary data={warn} />}
 
       {/*
@@ -190,6 +210,9 @@ export function MapWorkspace({ points }: MapWorkspaceProps) {
               <ViewButton onClick={() => focusPlots(map)}>내 밭</ViewButton>
             )}
             <ViewButton onClick={() => focusNation(map)}>전국</ViewButton>
+            <ViewButton onClick={toggleSkyview}>
+              {skyview ? "일반 지도" : "스카이뷰"}
+            </ViewButton>
           </div>
         )}
 
