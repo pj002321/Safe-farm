@@ -118,7 +118,9 @@ def rank_candidates(state: RecommendationState) -> RecommendationState:
 
     # returns
     {"ranked": [...]}. weather 가 없으면 대신 {"error": ...} 를 돌려준다.
-    candidates 가 비면 ranked 도 빈 리스트
+    candidates 가 비면 ranked 도 빈 리스트. `unsuitable` 등급은 뺀다 —
+    추천이라 부를 근거가 없는 작물이라, 전부 그 등급이면 빈 목록과 같이
+    취급한다(route_after_rank 가 그때 END 로 보낸다)
 
     # examples
         rank_candidates({"weather": (d1, d2), "candidates": [crop]})
@@ -129,7 +131,7 @@ def rank_candidates(state: RecommendationState) -> RecommendationState:
         return {"error": "기상 데이터가 없어 점수를 낼 수 없습니다."}
     today = date.today()
     ranked = rank_fits(state.get("candidates", []), today.strftime("%m-%d"), today, weather)
-    return {"ranked": ranked}
+    return {"ranked": [r for r in ranked if r.grade != "unsuitable"]}
 
 
 def make_explain_node(llm: ExplainLLM) -> AsyncNode:
