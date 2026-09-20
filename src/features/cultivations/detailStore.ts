@@ -8,6 +8,11 @@ import {
   type ArrivalRule,
   forecastArrival_2,
 } from "@/shared/growth/forecast";
+import {
+  buildFruitCycle,
+  type FruitCycle,
+  fruitOriginDate,
+} from "@/shared/growth/fruitOrigin";
 import { type DailyTemp, recentDailyGdd } from "@/shared/growth/gdd";
 import { listMonthlyNormals } from "@/shared/growth/normalStore";
 import type { TaskAdvice } from "@/shared/growth/taskAdvice";
@@ -113,6 +118,14 @@ export interface CultivationDetail {
   summary: HarvestSummary | null;
   /** 이 밭 대신 읽은 관측소. */
   stationNameKo: string | null;
+  /**
+   * 과수의 한 해 주기. **과수가 아니면 null** — 화면이 이 칸으로 갈래를 판다.
+   *
+   * ⚠ 이 칸이 있으면 `gauge.stage === null` 의 뜻이 달라진다. 한해살이에서는
+   *   "자료가 없다" 이지만 과수에서는 `afterHarvest` 일 때 **"올해 수확이
+   *   끝났다"** 이고 그건 정상이다.
+   */
+  fruit: FruitCycle | null;
   today: string;
 }
 
@@ -274,12 +287,23 @@ export async function loadCultivationDetail(
           upperTempC: card.upperTempC,
         });
 
+  // ★ 과수는 **그 해의 기점**에서 GDD 를 0으로 되감는다 — 2026-09-20
+  //   (`교안_과수를_살린다.md`). 나무는 몇 해 전에 심어서 파종일부터 쌓으면
+  //   여러 해치 열이 누적된다. 규칙은 `shared/growth/fruitOrigin.ts` 하나이고
+  //   **파이썬의 `plot_growth.gdd_origin` 과 같아야 한다**(그쪽 머리말 참고).
+  //
+  //   ⚠ `rebase`(사용자 단계 보정)가 있으면 그쪽이 이긴다. 사람이 "지금 개화기다"
+  //     라고 고쳐 준 것이 달력보다 정확하다.
+  const 과수기점 = fruitOriginDate(card, today);
   const gauge =
     card.gddTarget === null || card.baseTempC === null || stages.length === 0
       ? null
       : buildGrowthGauge({
-          sowingDate: card.sowingDate,
-          startStageOrder: card.startStageOrder,
+          sowingDate: 과수기점 ?? card.sowingDate,
+          // ⚠ 과수에는 모종 보정을 얹지 않는다. 그건 "씨 대신 모종으로 시작했으니
+          //   앞 단계를 건너뛴다" 는 뜻인데, 과수는 해마다 기점에서 0으로
+          //   되감기므로 건너뛸 앞 단계가 없다(파이썬 `gdd_origin` 과 같은 판단).
+          startStageOrder: 과수기점 === null ? card.startStageOrder : null,
           baseTempC: card.baseTempC,
           upperTempC: card.upperTempC,
           gddTarget: card.gddTarget,
@@ -370,6 +394,14 @@ export async function loadCultivationDetail(
   return {
     card,
     stages,
+    // 과수의 한 해 주기. 게이지 뒤에 만든다 — 누적이 목표를 넘었는지를 봐야
+    // `afterHarvest` 를 가릴 수 있다
+    fruit: buildFruitCycle(
+      card,
+      today,
+      gauge?.accumulatedGdd ?? null,
+      card.gddTarget,
+    ),
     gauge,
     stageSteps,
     // 오늘 이미 `했음` 을 누른 카드는 뺀다. 규칙이 만든 계산값이라 id 가 없어

@@ -22,6 +22,9 @@ function row(over: Partial<CultivationCardRow> = {}): CultivationCardRow {
     created_at: "2026-09-01T00:00:00Z",
     crop_variants: {
       maturity_type: "MID",
+      sow_method: null,
+      sow_from: null,
+      sow_to: null,
       gdd_target: 797,
       days_to_harvest: 90,
       // numeric 은 supabase-js 가 문자열로 준다. 실제 응답 모양 그대로 둔다.
@@ -52,6 +55,9 @@ describe("toCultivationCard", () => {
       row({
         crop_variants: {
           maturity_type: "MID",
+          sow_method: null,
+          sow_from: null,
+          sow_to: null,
           gdd_target: 797,
           days_to_harvest: null,
           crops: { name: "감자", base_temp: "5.0", upper_temp: null },
@@ -69,6 +75,9 @@ describe("toCultivationCard", () => {
         crop_variants: [
           {
             maturity_type: "EARLY",
+            sow_method: null,
+            sow_from: null,
+            sow_to: null,
             gdd_target: 500,
             days_to_harvest: 60,
             crops: [{ name: "상추", base_temp: "4.0", upper_temp: "25.0" }],

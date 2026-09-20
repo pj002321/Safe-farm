@@ -159,7 +159,7 @@ export default async function Page({
 
       <Card title="생육 단계">
         <div className="flex flex-col gap-4">
-          <StageTimeline steps={detail.stageSteps} />
+          <StageTimeline fruit={detail.fruit} steps={detail.stageSteps} />
           {!ended && (
             <StageOverrideForm
               cultivationId={card.id}

@@ -11,6 +11,7 @@ import {
 } from "@/features/cultivations/domain/cultivationCard";
 import type { GrowthGauge as Gauge } from "@/features/cultivations/domain/growthGauge";
 import type { PlotGrowth } from "@/features/cultivations/growthStore";
+import { yearsSincePlanting } from "@/shared/growth/fruitOrigin";
 
 /**
  * ---------------------------------------------
@@ -171,6 +172,12 @@ function CultivationItem({
   const maturity = card.maturityType
     ? (MATURITY_LABEL[card.maturityType] ?? card.maturityType)
     : null;
+  // ★ 과수는 **n년차**를 쓴다 — 2026-09-20 (`교안_과수를_살린다.md` §9-6).
+  //   나무를 5년 전에 심었으면 `D+1998` 이 되는데, 그 숫자는 올해의 생육을
+  //   말하지 못한다. 심은 지 몇 해째인지가 농민이 쓰는 말이다.
+  //
+  //   ⚠ 심은 날은 그대로 적는다. 뜻이 사라지는 것은 `D+` 쪽뿐이다.
+  const years = yearsSincePlanting(card, card.sowingDate, today);
 
   return (
     <li className="overflow-hidden rounded-xl border border-border bg-surface">
@@ -188,7 +195,11 @@ function CultivationItem({
           card.sowingDate
             ? `${card.sowingType === "SEEDLING" ? "정식" : "파종"} ${card.sowingDate}`
             : "파종일 모름",
-          days !== null && days >= 0 ? `D+${days}` : null,
+          years !== null
+            ? `${years}년차`
+            : days !== null && days >= 0
+              ? `D+${days}`
+              : null,
           card.harvestedAt ? `수확 ${card.harvestedAt}` : null,
         ]
           .filter(Boolean)
