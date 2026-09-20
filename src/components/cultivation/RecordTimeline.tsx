@@ -70,6 +70,17 @@ export function RecordTimeline({
               )}
 
               <WeatherStrip weather={entry.weather} />
+
+              {/* 그날 AI 리포트. 문단이 길어 접어 둔다 — 펴지 않아도 "그날 조언이
+                  있었다" 는 사실은 요약 줄이 말해 준다 */}
+              {entry.adviceTextKo && (
+                <details className="text-fg-muted text-xs">
+                  <summary className="cursor-pointer">그날 AI 조언</summary>
+                  <p className="mt-2 whitespace-pre-wrap break-words">
+                    {entry.adviceTextKo}
+                  </p>
+                </details>
+              )}
             </div>
 
             {!FROM_CULTIVATION.has(entry.kind) && (

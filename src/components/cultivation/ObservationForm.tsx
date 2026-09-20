@@ -17,7 +17,7 @@ import { NOTE_MAX_LENGTH } from "@/features/cultivations/domain/observationNote"
  * - Client Component 가 아니다. 제출은 Server Action 이 받고 페이지가 다시 그려진다.
  *
  * [영농일지 — 2026-09-20 추가]
- * - 농민이 이 기록을 보조금·인증 서류로 낸다. 그래서 메모 한 줄이 아니라 **그날
+ * - 농민이 보조금·인증 서류를 쓸 때 **이 기록을 보고 옮겨 적는다.** 그래서 메모 한 줄이 아니라 **그날
  *   무슨 날씨에 무슨 일을 했나**가 한 행에 남아야 한다.
  * - **치는 것은 메모 하나뿐이다.** 기온·강수·습도·바람·일출일몰과 생육 단계는
  *   저장할 때 서버가 박는다(`actions.ts` 의 `addObservation`).
@@ -36,6 +36,13 @@ export interface ObservationFormProps {
   cultivationId: string;
   /** 오늘 (`"YYYY-MM-DD"`). 서버가 정한 값을 그대로 쓴다. */
   today: string;
+  /**
+   * 지금 판정된 생육단계. 저장할 때 이 기록에 같이 박힌다.
+   *
+   * 화면이 이미 계산해 둔 값을 넘겨받는다 — 액션에서 다시 구하면 관측·평년값을
+   * 또 읽어야 한다. 판정을 못 했으면 null 이고 그 칸은 빈 채로 저장된다.
+   */
+  currentStageOrder: number | null;
   onSubmit: (formData: FormData) => Promise<void>;
 }
 
@@ -79,12 +86,16 @@ export function ObservationForm({
   plotId,
   cultivationId,
   today,
+  currentStageOrder,
   onSubmit,
 }: ObservationFormProps) {
   return (
     <form action={onSubmit} className="flex flex-col gap-3">
       <input name="plotId" type="hidden" value={plotId} />
       <input name="cultivationId" type="hidden" value={cultivationId} />
+      {currentStageOrder !== null && (
+        <input name="stageOrder" type="hidden" value={currentStageOrder} />
+      )}
 
       <label className="flex flex-col gap-1">
         <span className="font-medium text-fg text-sm">메모</span>

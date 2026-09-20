@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { DiaryExportButton } from "@/components/cultivation/DiaryExportButton";
 import { EndCultivationForm } from "@/components/cultivation/EndCultivationForm";
 import { HarvestSummaryCard } from "@/components/cultivation/HarvestSummaryCard";
 import { ObservationForm } from "@/components/cultivation/ObservationForm";
@@ -190,6 +191,7 @@ export default async function Page({
         <Card title="관찰 기록">
           <ObservationForm
             cultivationId={card.id}
+            currentStageOrder={gauge?.stage?.stageOrder ?? null}
             onSubmit={addObservation}
             plotId={plot.id}
             today={today}
@@ -198,13 +200,16 @@ export default async function Page({
       )}
 
       <Card title="지나온 기록">
-        <RecordTimeline
-          cultivationId={card.id}
-          entries={detail.entries}
-          onRemove={removeEvent}
-          plotId={plot.id}
-          stageNames={stageNames}
-        />
+        <div className="flex flex-col gap-4">
+          <RecordTimeline
+            cultivationId={card.id}
+            entries={detail.entries}
+            onRemove={removeEvent}
+            plotId={plot.id}
+            stageNames={stageNames}
+          />
+          <DiaryExportButton />
+        </div>
       </Card>
 
       {!ended && (

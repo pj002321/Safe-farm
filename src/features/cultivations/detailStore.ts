@@ -17,6 +17,7 @@ import {
 } from "@/shared/growth/taskAdvice";
 import { getCultivationCard } from "./cultivationStore";
 import type { CultivationCard } from "./domain/cultivationCard";
+import { hideDoneToday } from "./domain/doneTasks";
 import {
   buildGrowthGauge,
   type GrowthGauge,
@@ -335,10 +336,16 @@ export async function loadCultivationDetail(
     stages,
     gauge,
     stageSteps,
-    tasks: TASK_RULE({
-      stageNameKo: gauge?.stage?.stageNameKo ?? null,
-      weather,
-    }),
+    // 오늘 이미 `했음` 을 누른 카드는 뺀다. 규칙이 만든 계산값이라 id 가 없어
+    // 제목으로 견준다 — 그날치만 본다(`domain/doneTasks.ts`).
+    tasks: hideDoneToday(
+      TASK_RULE({
+        stageNameKo: gauge?.stage?.stageNameKo ?? null,
+        weather,
+      }),
+      entries,
+      today,
+    ),
     nextStage,
     harvest: ended || card.gddTarget === null ? null : arrival(card.gddTarget),
     entries,

@@ -24,12 +24,12 @@ import type { TimelineEventRow } from "./domain/timeline";
  *
  * 일지 칸(`work_kind` 이하)은 **저장할 때 박아 둔 그 시점 값**이다. 읽을 때
  * 날씨를 다시 조인하지 않는다 — 관측이 나중에 정정되면 과거 일지가 소리 없이
- * 바뀌고, 그건 서류로 낸 뒤에는 위조가 된다.
+ * 바뀐다 — 어제 보고 적은 것과 오늘 보는 것이 다르면 참고 자료로 못 쓴다.
  */
 // ⚠️ 한 줄짜리 리터럴로 둔다. 이어 붙이면 supabase-js 가 select 를 타입 수준에서
 //    못 읽어 결과가 `GenericStringError[]` 로 추론된다.
 const EVENT_SELECT =
-  "id, kind, occurred_on, body, stage_order, forecast_on, work_kind, sky_ko, temp_max_c, temp_min_c, rainfall_mm, humidity_pct, wind_ms, wind_dir_deg, sunrise_at, sunset_at";
+  "id, kind, occurred_on, body, stage_order, forecast_on, work_kind, sky_ko, advice_text, temp_max_c, temp_min_c, rainfall_mm, humidity_pct, wind_ms, wind_dir_deg, sunrise_at, sunset_at";
 
 interface EventRow {
   id: string;
@@ -40,6 +40,7 @@ interface EventRow {
   forecast_on: string | null;
   work_kind: string | null;
   sky_ko: string | null;
+  advice_text: string | null;
   temp_max_c: number | null;
   temp_min_c: number | null;
   rainfall_mm: number | null;
@@ -98,6 +99,7 @@ export async function listCultivationEvents(
         stageOrder: row.stage_order,
         forecastOn: row.forecast_on,
         workKind: row.work_kind,
+        adviceText: row.advice_text,
         weather: {
           skyKo: row.sky_ko,
           tempMaxC: row.temp_max_c,
@@ -114,6 +116,32 @@ export async function listCultivationEvents(
   });
 }
 
+/**
+ * 그날 그 종류의 기록이 이미 있나. `했음` 이 그날 **첫 번째인지** 가리는 데 쓴다.
+ *
+ * 리포트 글은 하루에 한 번만 박는다 — 같은 날 카드를 여럿 누르면 같은 글이 여러
+ * 행에 복사된다. 일지를 읽을 때 그날 행 중 하나에서 찾으면 된다.
+ */
+export async function hasEventOn(
+  cultivationId: string,
+  kind: EventKind,
+  onDate: string,
+): Promise<boolean> {
+  const supabase = await getSupabaseServer();
+
+  const { data, error } = await supabase
+    .from("cultivation_events")
+    .select("id")
+    .eq("cultivation_id", cultivationId)
+    .eq("kind", kind)
+    .eq("occurred_on", onDate)
+    .is("deleted_at", null)
+    .limit(1);
+
+  if (error) throw new Error(error.message);
+  return (data ?? []).length > 0;
+}
+
 export interface EventInput {
   kind: EventKind;
   occurredOn: string;
@@ -125,10 +153,17 @@ export interface EventInput {
   /** 사용자가 고른 하늘. 맑음 · 흐림 · 비 · 눈. */
   skyKo?: string | null;
   /**
+   * 그날 AI 리포트 글. `TASK_DONE` 중 **그날 첫 줄에만** 넣는다.
+   *
+   * 조인하지 않고 그때 박는 까닭은 `advices` 행이 지워져도 일지에는 남아야
+   * 해서다 — 개발 중 그 표를 날짜로 통째 지운다.
+   */
+  adviceText?: string | null;
+  /**
    * 저장 시점에 박는 그날 날씨. **없으면 넘기지 않는다.**
    *
    * ⚠️ 못 찾은 칸을 0 으로 채우지 말 것. `rainfall_mm = 0` 은 "비가 안 왔다" 는
-   *    뜻이고, 그 일지가 보조금 서류로 나간다.
+   *    뜻이다. 못 찾은 날과 안 온 날이 같아진다.
    */
   weather?: {
     tempMaxC?: number | null;
@@ -166,6 +201,7 @@ export async function insertCultivationEvent(
     forecast_on: input.forecastOn ?? null,
     work_kind: input.workKind ?? null,
     sky_ko: input.skyKo ?? null,
+    advice_text: input.adviceText ?? null,
     temp_max_c: weather?.tempMaxC ?? null,
     temp_min_c: weather?.tempMinC ?? null,
     rainfall_mm: weather?.rainfallMm ?? null,

@@ -70,6 +70,8 @@ export interface TimelineEventRow {
   forecastOn: string | null;
   /** 농사로의 "활동유형". 고르지 않았으면 null. */
   workKind: string | null;
+  /** 그날 AI 리포트 글. 그날 첫 `TASK_DONE` 에만 있다. */
+  adviceText: string | null;
   weather: EntryWeather;
 }
 
@@ -101,6 +103,13 @@ export interface TimelineEntry {
    * 무엇을 했나다. 둘을 합치면 `EVENT_TITLE` 을 보는 §6-다 쪽과 엉킨다.
    */
   workKindKo: string | null;
+  /**
+   * `했음` 을 누른 그 시점의 AI 리포트 글. 그날 첫 줄에만 있고 나머지는 null.
+   *
+   * 길어서 화면은 접어 둔다. 여기 있는 것은 **그때 박아 둔 글**이라, `advices`
+   * 표가 지워져도 남는다.
+   */
+  adviceTextKo: string | null;
   /**
    * 저장할 때 박은 그날 날씨. 재배 컬럼에서 온 줄(파종·수확·중단)은 null 이다 —
    * 그 셋은 `cultivation_events` 행이 아니라 날씨를 박을 자리가 없다.
@@ -151,6 +160,7 @@ function fromCultivation(
       bodyKo: null,
       stageOrder: null,
       workKindKo: null,
+      adviceTextKo: null,
       weather: null,
     });
   }
@@ -164,6 +174,7 @@ function fromCultivation(
       bodyKo: null,
       stageOrder: null,
       workKindKo: null,
+      adviceTextKo: null,
       weather: null,
     });
   }
@@ -177,6 +188,7 @@ function fromCultivation(
       bodyKo: failureReasonKo(cultivation.failureReason),
       stageOrder: null,
       workKindKo: null,
+      adviceTextKo: null,
       weather: null,
     });
   }
@@ -199,6 +211,7 @@ function fromEvent(event: TimelineEventRow): TimelineEntry {
         : event.body,
     stageOrder: event.stageOrder,
     workKindKo: event.workKind,
+    adviceTextKo: event.adviceText,
     weather: event.weather,
   };
 }

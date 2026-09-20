@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { adviceSummaryOn } from "@/features/cultivations/adviceStore";
 import { markFailed } from "@/features/cultivations/cultivationStore";
 import {
   pickSkyKind,
@@ -12,6 +13,7 @@ import { parseNote } from "@/features/cultivations/domain/observationNote";
 import { parseUserStage } from "@/features/cultivations/domain/userStage";
 import {
   type EventInput,
+  hasEventOn,
   insertCultivationEvent,
   softDeleteCultivationEvent,
 } from "@/features/cultivations/eventStore";
@@ -41,7 +43,7 @@ import { kstDateString } from "@/shared/utils/kstDate";
  * `"2026-09-19T06:19"` → `"06:19"`. 형태가 다르면 null 이다.
  *
  * ⚠️ 자리로 자르지 않는다(`slice(11, 16)`). 형식이 바뀌면 **엉뚱한 글자가 조용히**
- *    저장된다 — 그게 보조금 서류로 나간다. `SunTimes.tsx` 의 `hhmm` 과 같은 방식.
+ *    저장된다. `SunTimes.tsx` 의 `hhmm` 과 같은 방식.
  */
 function hhmm(iso: string | null): string | null {
   const time = iso?.split("T")[1];
@@ -52,15 +54,15 @@ function hhmm(iso: string | null): string | null {
  * 그날 날씨를 가져와 행에 박을 모양으로 돌려준다. 못 가져오면 `null`.
  *
  * **읽을 때 조인하지 않고 저장할 때 박는다.** 영농일지는 "그때 그랬다" 는
- * 기록이고, 관측이 나중에 정정되면 과거 일지가 소리 없이 바뀐다 — 서류로 낸
- * 뒤에 값이 달라지면 그건 위조가 된다.
+ * 기록이고, 관측이 나중에 정정되면 과거 일지가 소리 없이 바뀐다 — 어제 보고
+ * 적어 둔 것과 오늘 보는 것이 다르면 참고 자료로 못 쓴다.
  *
  * ⚠️ **실패해도 던지지 않는다.** ai-service 가 죽었다고 농민이 쓴 메모가 사라지면
  *    안 된다. 날씨만 비우고 기록은 저장한다. 92일보다 오래된 날짜도 같은 길로
  *    빈다 — 그건 오류가 아니라 정상이다.
  *
  * ⚠️ **빈 칸을 0 으로 채우지 않는다.** `rainfall_mm = 0` 은 "비가 안 왔다" 는
- *    뜻이고, 그 일지가 보조금 서류로 나간다.
+ *    뜻이다. 못 찾은 날과 안 온 날이 같아진다.
  */
 async function diaryWeather(
   plot: { latitude: number; longitude: number },
@@ -88,6 +90,35 @@ async function diaryWeather(
   };
 }
 
+/**
+ * 그날 첫 `TASK_DONE` 이면 그날 AI 리포트 글을, 아니면 `null`.
+ *
+ * 리포트를 읽을 때 조인하지 않고 **그때 텍스트로 박는다.** 개발 중
+ * `delete from advices where advice_date = current_date` 를 돌리는데, 조인이면
+ * 그 순간 과거 일지에서도 글이 사라진다.
+ *
+ * ⚠️ **하루에 한 번만 박는다.** 같은 날 카드를 여럿 누르면 같은 글이 여러 행에
+ *    복사된다. 일지를 읽을 때 그날 행 중 하나에서 찾으면 된다.
+ *
+ * ⚠️ **없으면 만들지 않는다.** 리포트를 아직 안 본 날은 그냥 빈칸이다 — 교안이
+ *    말한 것은 "리포트를 출력할 경우" 같이 저장하라는 것이지, 누를 때마다
+ *    생성하라는 것이 아니다.
+ *
+ * 조회가 실패해도 던지지 않는다. 이 값 때문에 `했음` 기록 자체가 막히면 안 된다.
+ */
+async function dayFirstAdvice(
+  cultivationId: string,
+  today: string,
+): Promise<string | null> {
+  try {
+    if (await hasEventOn(cultivationId, "TASK_DONE", today)) return null;
+    return await adviceSummaryOn(cultivationId, today);
+  } catch (error) {
+    console.error("[cultivation] 그날 리포트 붙이기 실패", error);
+    return null;
+  }
+}
+
 /** 사용자에게 보여줄 문장만 쿼리에 싣고 그 상세로 돌려보낸다. */
 function fail(path: string, message: string): never {
   redirect(`${path}?error=${encodeURIComponent(message)}`);
@@ -96,6 +127,12 @@ function fail(path: string, message: string): never {
 function readText(formData: FormData, key: string): string {
   const raw = formData.get(key);
   return typeof raw === "string" ? raw.trim() : "";
+}
+
+/** 1 이상 정수면 그 값, 아니면 null. 빠진 칸과 0 을 같이 거른다. */
+function positiveInt(raw: unknown): number | null {
+  const n = Number(raw);
+  return Number.isInteger(n) && n >= 1 ? n : null;
 }
 
 /** 폼의 두 id 를 좁히고 밭 소유까지 확인한다. 하나라도 어긋나면 되돌린다. */
@@ -150,6 +187,9 @@ export async function addObservation(formData: FormData): Promise<void> {
       kind: "NOTE",
       occurredOn: parsed.value.occurredOn,
       body: parsed.value.body,
+      // 화면이 계산해 둔 단계를 폼으로 받아 그대로 박는다. 여기서 다시 구하면
+      // 관측·평년값을 또 읽어야 한다. 숫자가 아니면 빈 채로 둔다.
+      stageOrder: positiveInt(formData.get("stageOrder")),
       workKind: pickWorkKind(formData.get("workKind")),
       skyKo: pickSkyKind(formData.get("skyKo")),
       weather,
@@ -174,11 +214,15 @@ export async function completeTask(formData: FormData): Promise<void> {
   const titleKo = readText(formData, "titleKo");
   if (!titleKo) fail(path, "작업 이름이 비어 있습니다.");
 
+  const today = kstDateString();
+  const adviceText = await dayFirstAdvice(cultivationId, today);
+
   try {
     await insertCultivationEvent(cultivationId, {
       kind: "TASK_DONE",
-      occurredOn: kstDateString(),
+      occurredOn: today,
       body: titleKo.slice(0, 100),
+      adviceText,
     });
   } catch {
     fail(path, "기록하지 못했습니다. 새로 고친 뒤 다시 시도해 주세요.");
