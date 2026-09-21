@@ -45,6 +45,24 @@ function parseYear(raw: string | string[] | undefined): number | null {
   return Number.isInteger(year) && year > 1900 && year < 2200 ? year : null;
 }
 
+/**
+ * 처음 열릴 구역. `?section=records` 처럼 **id 에서 `me-` 를 뗀 값**으로 받는다.
+ *
+ * 없거나 모르는 값이면 첫 구역(계정)이다 — 예전엔 늘 그랬다. 이 파라미터가 필요한
+ * 이유는 lg 이상에서 고른 구역 하나만 보이기 때문이다: 연도 칩(`/me?year=2025`)이나
+ * 내보내기가 되돌려 보낸 주소(`/me?error=records-none`)로 다시 열리면 **계정 구역이
+ * 떠서** 방금 고른 연도도, 되돌아온 까닭도 안 보였다(2026-09-22). 라디오라
+ * 스크립트 없이 고를 방법은 `defaultChecked` 뿐이다.
+ */
+function parseSection(raw: string | string[] | undefined): string {
+  const value = Array.isArray(raw) ? raw[0] : raw;
+  const wanted = value ? `me-${value}` : null;
+  return (
+    ME_SECTIONS.find((section) => section.id === wanted)?.id ??
+    ME_SECTIONS[0].id
+  );
+}
+
 export default async function Page({
   searchParams,
 }: PageProps<"/me">): Promise<React.ReactElement> {
@@ -53,6 +71,7 @@ export default async function Page({
 
   const plotCount = await countPlots(profile.id);
   const year = parseYear(params.year);
+  const activeSectionId = parseSection(params.section);
   // 조회가 실패해도 마이페이지 전체가 500이 되면 안 된다 — 계정·텃밭 구역은
   // 멀쩡한데 질문 기록 하나 때문에 화면이 통째로 죽을 이유가 없다(dashboard/history
   // 와 같은 방침).
@@ -95,11 +114,11 @@ export default async function Page({
             "3개 중 2번째"가 무엇의 3개인지 말할 수 있다. */}
         <fieldset>
           <legend className="sr-only">내 정보 구역</legend>
-          {ME_SECTIONS.map((section, index) => (
+          {ME_SECTIONS.map((section) => (
             <input
               aria-label={section.labelKo}
               className="sr-only"
-              defaultChecked={index === 0}
+              defaultChecked={section.id === activeSectionId}
               id={section.id}
               key={section.id}
               name="__me_section"
@@ -143,7 +162,10 @@ export default async function Page({
             </Section>
 
             <Section section={ME_SECTIONS[2]}>
-              <RecordPanel records={records} year={year} />
+              {/* `error` 는 내보내기 라우트가 되돌려 보낸 키다(`records-none` ·
+                  `records-many`). 문장은 패널이 코드로 갖는다 — 주소로 온 글을
+                  그리지 않기 위해서다. */}
+              <RecordPanel error={errorKey} records={records} year={year} />
             </Section>
 
             <Section section={ME_SECTIONS[3]}>
