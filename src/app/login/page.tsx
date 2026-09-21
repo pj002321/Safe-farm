@@ -5,6 +5,7 @@ import {
   AuthDivider,
   GoogleSignInButton,
 } from "@/components/auth/GoogleSignInButton";
+import { PocModeButton } from "@/components/auth/PocModeButton";
 import { safeNextPath } from "@/shared/auth/redirect";
 import { LoginForm } from "./LoginForm";
 
@@ -59,6 +60,7 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
         <GoogleSignInButton next={nextPath} />
         <AuthDivider />
         <LoginForm next={nextPath} />
+        <PocModeButton />
       </div>
     </AuthShell>
   );

@@ -240,6 +240,31 @@ async function findOrCreateUser(email) {
   return { id: made.user.id, created: true };
 }
 
+/**
+ * 시연 계정의 약관 동의를 채운다.
+ *
+ * 없으면 로그인 직후 `/onboarding/consent` 로 튕겨 POC 버튼의 취지("눌러서 바로
+ * 둘러보기")가 깨진다. 실제 사람이 아니라 우리가 만든 시연 계정이므로 동의 시각을
+ * 시드 데이터로 넣는다 — 사람의 의사를 대신 표시하는 것이 아니다.
+ *
+ * ⚠️ 이 함수를 실사용자 계정에 쓰지 말 것. 동의는 사람이 하는 것이다.
+ */
+async function markConsented(userId) {
+  const now = new Date().toISOString();
+  const { error } = await supabase
+    .from("profiles")
+    .update({
+      // 셋 다 있어야 게이트를 통과한다 — hasCompletedConsent 가 셋을 본다.
+      // 둘만 채우면 로그인 뒤 동의 화면으로 돌아간다(실제로 그랬다).
+      terms_agreed_at: now,
+      privacy_agreed_at: now,
+      location_agreed_at: now,
+      marketing_opt_in: false,
+    })
+    .eq("id", userId);
+  if (error) throw error;
+}
+
 async function variantIdOf(cropName, maturity) {
   const { data, error } = await supabase
     .from("crop_variants")
@@ -316,6 +341,7 @@ try {
   const summary = [];
   for (const account of ACCOUNTS) {
     const { id, created } = await findOrCreateUser(account.email);
+    await markConsented(id);
     console.log(`${created ? "✓ 계정 생성" : "· 계정 확인"}: ${account.email}`);
 
     const plots = [];
