@@ -7,6 +7,7 @@ import { loadPlotGrowth } from "@/features/cultivations/growthStore";
 import { summarizeWeather } from "@/features/monitoring/domain/weatherSeries";
 import { loadWeatherSeries } from "@/features/monitoring/weatherStore";
 import { getDemoPlot } from "@/features/plots/plotStore";
+import { aiService } from "@/shared/aiService/client";
 import { dailyGdd } from "@/shared/growth/gdd";
 import { type TaskTone, weatherTasks } from "@/shared/growth/taskAdvice";
 import { kstDateString } from "@/shared/utils/kstDate";
@@ -43,12 +44,18 @@ export async function TodayInSangju() {
   const today = kstDateString();
   const cards = plot ? await listCultivationCards(plot.id) : [];
 
-  const [growth, weather] = plot
+  const [growth, weather, forecast] = plot
     ? await Promise.all([
         loadPlotGrowth(plot, cards, today),
         loadWeatherSeries(plot, today, 7, 6),
+        // ⚠ plot_id·user_id 를 넘기지 말 것. 좌표만으로 부른다 —
+        //   ① 랜딩은 비로그인이라 소유권을 댈 수 없고
+        //   ② URL 에 plot_id 가 들어가면 Next Data Cache 가 밭별로 쪼개진다.
+        //   좌표만 보내면 밭에 딸린 값(작물 해석·특보)은 안 오는데, 이 섹션은
+        //   그것들을 자기 DB 조회로 이미 갖고 있다.
+        aiService.plotForecast(plot.latitude, plot.longitude),
       ])
-    : [null, null];
+    : [null, null, null];
 
   const todayPoint = weather?.series.points.find(
     (point) => point.date === today && point.source === "observed",
@@ -56,14 +63,28 @@ export async function TodayInSangju() {
   const summary = weather ? summarizeWeather(weather.series) : null;
   const card = cards[0] ?? null;
   const gauge = growth?.growths[0]?.gauge ?? null;
+  
+  /** 오늘 예보 한 줄. ai-service 가 죽었거나 오늘이 없으면 null. */
+  const todayForecast =
+    forecast?.ok === true
+      ? (forecast.data.days.find((day) => day.date === today) ?? null)
+      : null;
+
+  /**
+   * 오늘 기온 — **관측이 먼저, 없으면 예보다.**
+   *
+   * 기상청 일통계는 하루가 끝나야 확정돼 오늘 행이 거의 늘 비어 있다. 일반 밭
+   * 화면이 그 자리를 Open-Meteo 로 채우는 것과 **같은 선**을 여기에도 잇는다.
+   * 관측이 들어온 뒤에는 관측이 이긴다 — 같은 날 두 값이 다르면 잰 쪽이 맞다.
+   */
+  const todayMinC = todayPoint?.tempMinC ?? todayForecast?.tempMin ?? null;
+  const todayMaxC = todayPoint?.tempMaxC ?? todayForecast?.tempMax ?? null;
 
   const todayGdd =
-    todayPoint?.tempMaxC != null &&
-    todayPoint?.tempMinC != null &&
-    card?.baseTempC != null
+    todayMaxC != null && todayMinC != null && card?.baseTempC != null
       ? dailyGdd(
-          todayPoint.tempMaxC,
-          todayPoint.tempMinC,
+          todayMaxC,
+          todayMinC,
           card.baseTempC,
           card.upperTempC ?? undefined,
         )
@@ -72,8 +93,8 @@ export async function TodayInSangju() {
   const METRICS: readonly { value: string; labelKo: string }[] = [
     {
       value:
-        todayPoint?.tempMinC != null && todayPoint?.tempMaxC != null
-          ? `${todayPoint.tempMinC.toFixed(1)} – ${todayPoint.tempMaxC.toFixed(1)}`
+        todayMinC != null && todayMaxC != null
+          ? `${todayMinC.toFixed(1)} – ${todayMaxC.toFixed(1)}`
           : "—",
       labelKo: "오늘 기온 ℃",
     },
