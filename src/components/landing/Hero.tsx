@@ -54,9 +54,9 @@ const INITIAL_SITE_ID =
 
 /** 히어로 하단 계측 스트립. 문구가 늘면 이 배열만 고친다. */
 const TELEMETRY: readonly { label: string; value: string }[] = [
-  { label: "관측 위성", value: "천리안 2A · 아리랑 3A" },
-  { label: "해상도", value: "10 m" },
-  { label: "갱신", value: "1일 2회" },
+  { label: "관측 위성", value: "천리안 2A · \nSentinel-2" },
+  { label: "해상도", value: "적외 2 km · \n10–20 m" },
+  { label: "관측 주기", value: "2분 · \n5일" },
   { label: "커버리지", value: "전국 17개 시도" },
 ];
 
@@ -133,7 +133,9 @@ export function Hero() {
             {TELEMETRY.map((item) => (
               <div className="flex flex-col gap-1" key={item.label}>
                 <dt className="uppercase tracking-[0.14em]">{item.label}</dt>
-                <dd className="text-space-fg tabular-nums">{item.value}</dd>
+                <dd className="whitespace-pre-line text-space-fg tabular-nums">
+                  {item.value}
+                </dd>
               </div>
             ))}
           </dl>

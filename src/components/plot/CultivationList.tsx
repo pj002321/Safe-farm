@@ -103,13 +103,18 @@ export function CultivationList({
     // 빈 화면을 만들지 않는다"는 그 규약의 취지는 아래 폼이 채운다.
     // 예전에는 여기 버튼이 `/plots/new` 로 갔다. 밭은 이미 있는데 밭이 하나 더
     // 생겼다 — 밭 상세에 작물을 더하는 폼이 나중에 붙으면서 어긋난 링크다.
+    //
+    // ⚠️ **여기에 닿는 길이 둘이다**(2026-09-22). 한 번도 안 심은 밭과, 심었는데
+    //    다 끝나서 `지난 재배 N건 보기` 접기로 내려간 밭. 그래서 *"아직 심은
+    //    작물이 없습니다"* 라고 쓸 수 없다 — 뒤쪽은 심었고 거뒀다. 두 경우에
+    //    다 맞는 말은 **"지금 기르는"** 이다.
     return (
       <div className="rounded-lg border border-border border-dashed bg-surface-2/40 px-6 py-8 text-center">
         <span className="mx-auto grid size-12 place-items-center rounded-full bg-accent-subtle text-2xl text-accent">
           <SproutIcon />
         </span>
         <p className="mt-4 font-semibold text-fg text-lg">
-          아직 심은 작물이 없습니다
+          지금 기르는 작물이 없습니다
         </p>
         <p className="mx-auto mt-2 max-w-md text-balance text-fg-muted text-sm leading-relaxed">
           아래에서 심은 작물을 골라 주시면 그 자리의 기상 관측으로 생육 단계를
@@ -123,33 +128,22 @@ export function CultivationList({
     growth.growths.map((item) => [item.cultivationId, item.gauge]),
   );
 
+  // 관측소 출처 줄은 `page.tsx` 가 찍는다 — 이 컴포넌트는 지난 재배 접기 안에서 한 번 더 그려진다
   return (
-    <div className="flex flex-col gap-4">
-      <ul className="flex flex-col gap-3">
-        {cards.map((card) => (
-          <CultivationItem
-            card={card}
-            gauge={gaugeById.get(card.id) ?? null}
-            key={card.id}
-            onDelete={onDelete}
-            onEditSowing={onEditSowing}
-            onHarvest={onHarvest}
-            plotId={plotId}
-            today={today}
-          />
-        ))}
-      </ul>
-
-      {growth.stationCode !== null && (
-        // 어느 관측소를 읽었는지 밝힌다. 밭에서 먼 관측소가 잡히면 사용자가
-        // 그 사실을 알아야 게이지를 얼마나 믿을지 판단할 수 있다.
-        <p className="font-mono text-fg-subtle text-xs">
-          기온 출처: {growth.stationNameKo ?? growth.stationCode} 관측소
-          {growth.latestObsDate !== null &&
-            ` · 관측 ${growth.latestObsDate}까지`}
-        </p>
-      )}
-    </div>
+    <ul className="flex flex-col gap-3">
+      {cards.map((card) => (
+        <CultivationItem
+          card={card}
+          gauge={gaugeById.get(card.id) ?? null}
+          key={card.id}
+          onDelete={onDelete}
+          onEditSowing={onEditSowing}
+          onHarvest={onHarvest}
+          plotId={plotId}
+          today={today}
+        />
+      ))}
+    </ul>
   );
 }
 

@@ -65,8 +65,15 @@ export interface HarvestSummary {
 
 const DAY_MS = 86_400_000;
 
-/** 달력 날짜 사이의 일수. UTC 자정 기준이라 서머타임에 흔들리지 않는다. */
-function daysBetween(from: string, to: string): number {
+/**
+ * 달력 날짜 사이의 일수. UTC 자정 기준이라 서머타임에 흔들리지 않는다.
+ *
+ * ⚠️ **이것만으로는 '걸린 날' 이 아니다.** 이 요약의 `totalDays` 는 여기에 +1 을
+ *    해서 파종 당일을 센다(아래). 일지 CSV 의 `재배일수` 는 **+1 을 하지 않는다** —
+ *    마이페이지가 `cultivationDays` 로 이미 그렇게 내보내고 있어서 맞춘 것이다.
+ *    두 숫자가 하루 다른 것은 뜻이 달라서다. 한쪽을 고칠 때 다른 쪽을 같이 본다.
+ */
+export function daysBetween(from: string, to: string): number {
   const a = Date.parse(`${from}T00:00:00Z`);
   const b = Date.parse(`${to}T00:00:00Z`);
   if (Number.isNaN(a) || Number.isNaN(b)) return 0;

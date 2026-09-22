@@ -107,7 +107,10 @@ function Cell({ field }: { field: Field }) {
       } ${empty ? "opacity-60" : ""} ${field.wide ? "col-span-2 sm:col-span-3" : ""}`}
     >
       {!field.hideLabel && (
-        <dt className="text-fg-subtle text-xs">{field.labelKo}</dt>
+        // ⚠️ `break-keep`(word-break: keep-all) 이 없으면 한글이 **낱말 가운데서**
+        //    끊긴다 — 좁은 칸에서 `강수량 mm` 이 `강수 / 량 / mm` 로 쪼개졌다.
+        //    한글은 기본이 아무 데서나 줄바꿈이라, 띄어쓰기에서만 끊게 막아 준다.
+        <dt className="break-keep text-fg-subtle text-xs">{field.labelKo}</dt>
       )}
       <dd
         className={`m-0 flex items-center gap-1.5 text-sm ${
