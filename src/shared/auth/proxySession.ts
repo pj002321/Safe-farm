@@ -69,7 +69,15 @@ const PUBLIC_EXACT = new Set([
  * 공개는 "세션 검사를 건너뛴다"는 뜻이지 무인증이 아니다. 그 경로는
  * `CRON_SECRET` 베어러 토큰을 직접 검사한다(app/api/cron/[job]/route.ts).
  */
-const PUBLIC_PREFIXES = ["/login", "/signup", "/auth", "/api/cron"];
+// `/api/auth/poc` 는 **정확히 그 경로만** 연다. `/api/auth` 로 넓히면 나중에
+// 그 아래 생기는 인증 라우트가 전부 따라서 열린다.
+const PUBLIC_PREFIXES = [
+  "/login",
+  "/signup",
+  "/auth",
+  "/api/cron",
+  "/api/auth/poc",
+];
 
 function isPublicPath(pathname: string): boolean {
   if (PUBLIC_EXACT.has(pathname)) return true;

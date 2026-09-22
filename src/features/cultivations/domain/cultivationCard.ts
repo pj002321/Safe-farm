@@ -48,6 +48,9 @@ export interface CultivationCardRow {
     maturity_type: string;
     gdd_target: number;
     days_to_harvest: number | null;
+    sow_method: string | null;
+    sow_from: string | null;
+    sow_to: string | null;
     crops: Embedded<{
       name: string;
       base_temp: number | string;
@@ -78,6 +81,17 @@ export interface CultivationCard {
   daysToHarvest: number | null;
   baseTempC: number | null;
   upperTempC: number | null;
+  /**
+   * 심는 법. **과수는 `발아`·`개화` 가 온다**(crop-data `build._파종방법`).
+   *
+   * ⚠ 과수면 아래 `sowFrom`~`sowTo` 가 파종 창이 아니라 **기점 창**이다.
+   *   그 사실을 알려 주는 것이 이 칸이다 — `shared/growth/fruitOrigin.isFruit`.
+   */
+  sowMethod: string | null;
+  /** 파종 창(한해살이) 또는 기점 창(과수)의 시작. `"MM-DD"`. */
+  sowFrom: string | null;
+  /** 같은 창의 끝. `"MM-DD"`. */
+  sowTo: string | null;
   createdAt: string;
 }
 
@@ -109,6 +123,9 @@ export function toCultivationCard(row: CultivationCardRow): CultivationCard {
     daysToHarvest: variant?.days_to_harvest ?? null,
     baseTempC: num(crop?.base_temp),
     upperTempC: num(crop?.upper_temp),
+    sowMethod: variant?.sow_method ?? null,
+    sowFrom: variant?.sow_from ?? null,
+    sowTo: variant?.sow_to ?? null,
     createdAt: row.created_at,
   };
 }

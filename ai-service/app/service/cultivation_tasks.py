@@ -74,6 +74,7 @@ def tasks_for_cultivation(
     variant_id: int,
     stage_order: int | None,
     accumulated_gdd: float | None,
+    years_since_planting: int | None = None,
 ) -> list[TaskCandidate]:
     """
     # summary
@@ -91,6 +92,9 @@ def tasks_for_cultivation(
     stage_order: 화면이 판정한 단계 번호(보정이 반영된 값). 못 정했으면 None —
         그때는 시기 근거 없이 기상만으로 판정한다<br>
     accumulated_gdd: 화면이 센 누적 GDD. 이상한 수면 버린다(`MAX_GDD`)<br>
+    years_since_planting: 나무를 심은 지 몇 해째인가(과수만). 모르면 None —
+        **1년차 묘목에 수확 카드를 안 보내려고** 받는다. 화면이 이미 세어 두었다
+        (`shared/growth/fruitOrigin.yearsSincePlanting`)<br>
 
     # returns
     TaskCandidate 목록. 0건은 **정상**이다 — 조건을 봤고 할 일이 없었다는 뜻이다.
@@ -133,6 +137,8 @@ def tasks_for_cultivation(
         # 목표를 모를 때 고른 쪽과 같게, 아무 말도 안 하는 쪽으로 떨어뜨린다
         gdd_target_passed=past_target(누적, 목표) if 누적 is not None else False,
         sow_method=variant.sow_method if variant else None,
+        # 1년차 묘목에 수확 카드를 안 보내려고 넘긴다(`과수수확중`)
+        years_since_planting=years_since_planting,
         vegetation=_vegetation(db, plot),
         pest_names=pest_names_for(db, crop.name, kst_today()),
         # 재해 — 기상청이 판정한 것을 받아 적기만 한다

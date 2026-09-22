@@ -96,6 +96,7 @@ const CARD_SELECT = `
   start_stage_order, harvested_at, failed_at, failure_reason, created_at,
   crop_variants(
     maturity_type, gdd_target, days_to_harvest,
+    sow_method, sow_from, sow_to,
     crops(name, base_temp, upper_temp)
   )
 `;

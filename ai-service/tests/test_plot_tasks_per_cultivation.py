@@ -50,6 +50,9 @@ def 생육(crop_name_ko):
         accumulated_gdd=100.0,
         gdd_target=None,
         sow_method="씨뿌림",
+        # 한해살이라 뜻이 없다. 그래도 칸은 있어야 한다 — 배치가 `PlotGrowth`
+        # 의 모든 칸을 읽으므로, 대역에 빠진 칸이 있으면 진짜와 어긋난다
+        years_since_planting=None,
     )
 
 

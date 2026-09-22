@@ -1,4 +1,5 @@
 import type { StageStep } from "@/features/cultivations/domain/stageTimeline";
+import type { FruitCycle } from "@/shared/growth/fruitOrigin";
 
 /**
  * ---------------------------------------------
@@ -19,6 +20,27 @@ import type { StageStep } from "@/features/cultivations/domain/stageTimeline";
 
 export interface StageTimelineProps {
   steps: readonly StageStep[];
+  /**
+   * 과수의 한 해 주기. **과수가 아니면 null.**
+   *
+   * ⚠ 이것이 있으면 마지막 단계 뒤의 말이 달라진다. 과수는 한 해를 돌므로
+   *   "마지막" 이 아니라 **"올해 수확이 끝났고 다음 기점에 다시 시작한다"** 다.
+   */
+  fruit?: FruitCycle | null;
+}
+
+/** `"YYYY-MM-DD"` → `"3월 25일"`. 화면에 연도는 안 적는다 — 해마다 같은 날이다. */
+function mmDdKo(iso: string): string {
+  const m = /^\d{4}-(\d{2})-(\d{2})$/.exec(iso);
+  if (m === null) return iso;
+  return `${Number(m[1])}월 ${Number(m[2])}일`;
+}
+
+/** 기점 낱말을 사람 말로. 모르는 값이 오면 그 말을 그대로 쓴다. */
+function originKo(kind: string): string {
+  if (kind === "발아") return "싹이 트면";
+  if (kind === "개화") return "꽃이 피면";
+  return `${kind} 때`;
 }
 
 const DOT: Record<StageStep["state"], string> = {
@@ -41,9 +63,27 @@ const DOT: Record<StageStep["state"], string> = {
  * ⚠ **마스터 단계만 받는다.** 사용자 단계까지 넘기면 단계를 더할 때마다 이 말이 따라
  *   내려가며 방금 더한 줄을 가리켜 "여기도 자료가 없습니다" 를 반복한다.
  */
-function afterLastKo(master: readonly StageStep[]): string | null {
+function afterLastKo(
+  master: readonly StageStep[],
+  fruit: FruitCycle | null | undefined,
+): string | null {
   const last = master.at(-1);
   if (last === undefined || last.state === "upcoming") return null;
+
+  // ★ 과수는 **끝이 아니라 한 바퀴**다 — 2026-09-20 (`교안_과수를_살린다.md`).
+  //   crop_stages 는 기점~수확까지만 담고(겨울은 GDD 가 0이라 구간으로 못 잰다),
+  //   수확 뒤는 다음 기점까지 기다리는 정상 상태다.
+  //
+  //   ⚠ 여기서 "마지막 단계입니다" 나 "자료가 없습니다" 를 쓰면 한 해의 절반을
+  //     틀린 말로 덮는다. 실측(2026-09-20): 9월 20일에 15종 중 7종이 이미
+  //     수확을 끝낸 상태였다(매실·블루베리·살구·자두·체리·포도·플럼코트).
+  if (fruit != null) {
+    const 다시 = `${mmDdKo(fruit.nextOriginOn)}쯤 ${originKo(fruit.originKind)} 다시 셉니다.`;
+    return fruit.afterHarvest
+      ? `올해 수확이 끝났습니다. ${다시}`
+      : `수확이 이 해의 마지막 단계입니다. ${다시}`;
+  }
+
   return last.nameKo.includes("수확")
     ? "마지막 단계입니다. 더 하실 일이 있으면 아래에서 단계를 더해 주세요."
     : "이 뒤 단계는 자료가 없습니다. 하신 일은 아래에서 단계로 더해 주세요.";
@@ -111,7 +151,7 @@ function Row({ step }: { step: StageStep }) {
   );
 }
 
-export function StageTimeline({ steps }: StageTimelineProps) {
+export function StageTimeline({ steps, fruit }: StageTimelineProps) {
   if (steps.length === 0) {
     return (
       <p className="text-fg-muted text-sm">
@@ -127,7 +167,7 @@ export function StageTimeline({ steps }: StageTimelineProps) {
   // 방금 자기 손으로 더한 줄이 접힌 채로 나오면 저장이 안 된 걸로 읽는다.
   const done = master.filter((step) => step.state === "done");
   const rest = master.filter((step) => step.state !== "done");
-  const afterLast = afterLastKo(master);
+  const afterLast = afterLastKo(master, fruit);
 
   return (
     <div className="flex flex-col gap-2">

@@ -723,15 +723,18 @@ export const aiService = {
     lon: number,
     crops: { cropId: number; sowDate: string | null }[],
   ) =>
-    call<{ recommendations: VariantRecommendation[] }>("/v1/recommend/variant", {
-      method: "POST",
-      body: JSON.stringify({
-        lat,
-        lon,
-        crops: crops.map((c) => ({ crop_id: c.cropId, sow_date: c.sowDate })),
-      }),
-      timeoutMs: RECOMMEND_TIMEOUT_MS,
-    }),
+    call<{ recommendations: VariantRecommendation[] }>(
+      "/v1/recommend/variant",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          lat,
+          lon,
+          crops: crops.map((c) => ({ crop_id: c.cropId, sow_date: c.sowDate })),
+        }),
+        timeoutMs: RECOMMEND_TIMEOUT_MS,
+      },
+    ),
   /**
    * 그 좌표 그 날짜 하루치 날씨. **영농일지가 저장할 때 한 번 부른다.**
    *
@@ -790,6 +793,14 @@ export const aiService = {
     /** 화면이 판정한 단계 번호. 못 정했으면 생략 — 기상만으로 판정한다. */
     stageOrder?: number | null;
     accumulatedGdd?: number | null;
+    /**
+     * 나무를 심은 지 몇 해째인가(과수만). 모르면 생략.
+     *
+     * ⚠ **1년차 묘목에 수확 카드를 안 보내려고** 넘긴다. 기점 되감기가 심기
+     *   전부터 열을 쌓아서, 사흘 전에 심은 단감이 `꽃눈분화기` 로 판정됐다
+     *   (2026-09-21 실측). 계산은 맞지만 그해에 열매는 안 달린다.
+     */
+    yearsSincePlanting?: number | null;
   }) => {
     const query = new URLSearchParams({
       plot_id: input.plotId,
@@ -801,6 +812,9 @@ export const aiService = {
     }
     if (input.accumulatedGdd != null) {
       query.set("accumulated_gdd", String(input.accumulatedGdd));
+    }
+    if (input.yearsSincePlanting != null) {
+      query.set("years_since_planting", String(input.yearsSincePlanting));
     }
     return call<{ tasks: readonly AiTaskCard[] }>(
       `/v1/tasks/cultivation?${query}`,
