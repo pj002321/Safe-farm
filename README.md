@@ -1,19 +1,109 @@
-# Safe Farm AI
+<div align="center">
+
+# 🌾 Safe Farm AI
+
+### 위성이 보는 땅, AI가 읽는 내일
 
 ![Safe Farm — 위성이 보는 땅, AI가 읽는 내일](./docs/thumbnail.png)
 
-기후·위성 데이터로 농작물 위험을 감지하고 개선을 추천하는 LLM 서비스.
+**기후 · 위성 데이터로 농작물 위험을 감지하고, LLM 이 내 밭에 맞는 개선책을 추천합니다.**<br/>
 **https://safe-farm-ai.web.app**
 
-**Next.js 16** (App Router) · **Firebase** (Auth/Firestore/Hosting) · **Cloud Run** · **LangGraph** (JS + Python) · **three.js** · **Tailwind v4** · **Biome** · **Vitest**
+<br/>
 
-> ⚠️ 아래 문서 대부분은 **Supabase 시절에 쓰인 것이라 현재 구조와 맞지 않습니다.**
-> (RLS · `app_metadata` · `NEXT_PUBLIC_SUPABASE_*` · `supabase/migrations` 등)
-> 최신 규칙은 [AGENTS.md](./AGENTS.md) 를 보세요. 이 README 는 갱신 예정입니다.
+![Next.js](https://img.shields.io/badge/Next.js-16-000000?style=for-the-badge&logo=nextdotjs&logoColor=white)
+![React](https://img.shields.io/badge/React-19-61DAFB?style=for-the-badge&logo=react&logoColor=black)
+![Supabase](https://img.shields.io/badge/Supabase-Auth_·_Postgres-3FCF8E?style=for-the-badge&logo=supabase&logoColor=white)
+![LangGraph](https://img.shields.io/badge/LangGraph-JS_·_Python-1C3C3C?style=for-the-badge&logo=langchain&logoColor=white)
+<br/>
+![Python](https://img.shields.io/badge/Python-3.10+-3776AB?style=for-the-badge&logo=python&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-009688?style=for-the-badge&logo=fastapi&logoColor=white)
+![three.js](https://img.shields.io/badge/three.js-000000?style=for-the-badge&logo=threedotjs&logoColor=white)
+![Tailwind](https://img.shields.io/badge/Tailwind-v4-06B6D4?style=for-the-badge&logo=tailwindcss&logoColor=white)
+![Railway](https://img.shields.io/badge/Railway-0B0D0E?style=for-the-badge&logo=railway&logoColor=white)
+
+<br/>
+
+[**빠른 시작**](#-빠른-시작) · [**시스템 구조**](#-시스템-구조) · [**폴더 구조**](#-폴더-구조) · [**규칙**](#-규칙) · [**보안**](#-보안--지키지-않으면-사고가-나는-것) · [**브랜치**](#-브랜치-전략)
+
+</div>
 
 ---
 
-## 시작하기
+## ✨ 주요 기능
+
+<table>
+<tr>
+<td width="33%" valign="top">
+
+### 🛰️ 위험 감지
+기상청 · Open-Meteo 기상과 Sentinel 위성 관측으로 시군구 단위 적산온도 · 강수 · 강풍 · 태풍 경보를 지도에 띄웁니다.
+
+</td>
+<td width="33%" valign="top">
+
+### 🌱 내 밭 생육 관리
+밭 · 작물 · 재배를 등록하면 실제 기온으로 GDD 생육단계를 계산하고, 영농일지를 CSV 로 내보냅니다.
+
+</td>
+<td width="33%" valign="top">
+
+### 🤖 AI 질의응답 · 리포트
+LangGraph 가 내 밭 컨텍스트를 주입해 답하고, NCPMS 병해충 정보로 진단 · 생육 리포트를 만듭니다.
+
+</td>
+</tr>
+</table>
+
+---
+
+## 🏗️ 시스템 구조
+
+```mermaid
+flowchart LR
+    subgraph WEB["🖥️ Next.js 16 (Railway)"]
+        UI["App Router<br/><i>(app) · (admin)</i>"]
+        PX["proxy.ts<br/><i>세션 검증 · 경로 분기</i>"]
+        RH["Route Handler<br/><i>/api/ai · /api/map · /api/cron</i>"]
+    end
+
+    subgraph AI["🧠 ai-service (FastAPI · LangGraph)"]
+        G["graph<br/><i>ask · diagnose · report</i>"]
+        P["pipeline<br/><i>수집 · 적재</i>"]
+    end
+
+    subgraph DATA["🗄️ Supabase"]
+        AUTH["Auth"]
+        PG[("Postgres<br/>RLS · pgvector")]
+    end
+
+    EXT["🌐 외부 데이터<br/>KMA · Open-Meteo<br/>Sentinel Hub · NCPMS"]
+
+    UI --> PX --> AUTH
+    UI -->|"api.ts"| PG
+    RH -->|"AI_SERVICE_TOKEN"| G
+    G --> PG
+    P --> EXT
+    P --> PG
+
+    style PX fill:#ff6c00,color:#fff,stroke:#333,stroke-width:2px
+    style G fill:#1C3C3C,color:#fff
+    style PG fill:#3FCF8E,color:#fff
+```
+
+---
+
+## 🚀 빠른 시작
+
+### 요구 사항
+
+| 항목 | 버전 |
+|---|---|
+| Node.js | 22 이상 |
+| Python | 3.10 이상 (`ai-service/`) |
+| Supabase | **Northeast Asia (Seoul) / ap-northeast-2** 리전 |
+
+### 1️⃣ 웹
 
 ```bash
 npm install
@@ -21,8 +111,22 @@ cp .env .env.local     # 실제 키는 .env.local 에 (git 추적 안 됨)
 npm run dev            # http://localhost:3000
 ```
 
-`.env` 는 플레이스홀더 템플릿이고 git에 추적됩니다. Supabase 프로젝트를 만든 뒤
-**Northeast Asia (Seoul) / ap-northeast-2** 리전으로 잡고 값을 채우세요.
+> [!NOTE]
+> `.env` 는 플레이스홀더 템플릿이고 git에 추적됩니다. 실제 값은 `.env.local` 에만 채우세요.
+
+### 2️⃣ AI 서버
+
+```bash
+cd ai-service && python -m pip install -e ".[dev]"
+```
+
+> [!IMPORTANT]
+> **`-e` 를 빼지 마세요.** 빼면 `app/` · `pipeline/` 이 sys.path 에 안 올라갑니다.
+> 자세한 내용은 [ai-service/README.md](./ai-service/README.md).
+
+<details>
+<summary><b>🔧 명령 전체</b></summary>
+<br/>
 
 | 명령 | 하는 일 |
 |---|---|
@@ -34,9 +138,11 @@ npm run dev            # http://localhost:3000
 | `npm run lint` | Biome (린트 + 포맷 검사) |
 | `npm run format` | Biome 포맷 적용 |
 
+</details>
+
 ---
 
-## 폴더 구조
+## 📁 폴더 구조
 
 ```
 src/
@@ -69,6 +175,10 @@ src/
 
 supabase/
 └── migrations/                *.sql — YYYYMMDDHHmmss_name.sql (UTC)
+
+ai-service/                    Python AI 서버 (FastAPI · LangGraph)
+├── app/                         api · graph · domain · repo
+└── pipeline/                    기상 · 위성 · 문서 수집 → 적재
 ```
 
 ### 새 파일을 어디에 둘 것인가
@@ -84,11 +194,12 @@ supabase/
 | DB 스키마 변경 | `npx supabase migration new <이름>` |
 | 여러 피쳐가 쓰는 헬퍼 | `shared/utils/<목적>.ts` |
 
+> [!TIP]
 > **`utils.ts` 같은 파일은 만들지 않습니다.** 목적별로 쪼개세요 (`format.ts`, `date.ts`).
 
 ---
 
-## 규칙
+## 📐 규칙
 
 ### 의존성은 단방향
 
@@ -129,21 +240,25 @@ features끼리 import 금지 — 조합은 `app/`에서 합니다. `components/s
 `domain/` 순수 함수와 LangGraph 조건부 엣지에만 씁니다. 컴포넌트 렌더링 테스트,
 스냅샷, Supabase 연동 목킹은 하지 않습니다 — 유지비가 가치를 넘습니다.
 
+> [!NOTE]
 > async Server Component는 Vitest 공식 미지원입니다. 그쪽 검증이 필요해지면
 > Playwright를 그때 추가합니다.
 
 ---
 
-## 보안 — 지키지 않으면 사고가 나는 것
+## 🔒 보안 — 지키지 않으면 사고가 나는 것
 
 ### `src/proxy.ts` 를 지우지 마세요
 
 Server Component는 쿠키를 쓸 수 없어 **여기서만** 토큰을 갱신할 수 있습니다.
 없으면 사용자가 무작위로 로그아웃됩니다.
 
-`shared/supabase/proxy.ts` 의 `setAll` **두 번째 인자 `headers`** 를 응답에 얹는
-루프도 지우면 안 됩니다 — 빠뜨리면 인증된 응답이 CDN에 캐시되어 **세션이 샙니다.**
-(Vercel 공식 템플릿이 이걸 누락하고 있습니다.)
+> [!WARNING]
+> `config.matcher` 의 **정적 확장자 목록**도 지우지 마세요. 빠뜨리면 `public/` 에셋이
+> `/login` 으로 리다이렉트되어 `Unexpected token '<'` 로 죽습니다.
+
+`shared/supabase/proxy.ts` 의 `setAll` 은 **요청과 응답 양쪽에** 씁니다 — 응답
+헤더를 빠뜨리면 인증된 응답이 CDN에 캐시되어 **세션이 샙니다.**
 
 ### 역할은 `app_metadata`
 
@@ -174,24 +289,25 @@ SQL 에디터·마이그레이션·MCP로 만든 테이블은 **RLS가 자동으
 로컬(`supabase start`)은 anon 자동 노출이 기본이라 **로컬만 되고 프로덕션에서
 죽는** 일이 흔합니다.
 
+> [!CAUTION]
 > PostgREST가 42501 에러와 함께 주는 `GRANT ... TO anon` 힌트를 그대로 따르지
 > 마세요. RLS가 꺼진 테이블에 실행하면 그 즉시 전체 공개됩니다.
 
 ### 환경변수 경계
 
 | 변수 | 브라우저 |
-|---|---|
+|---|:---:|
 | `NEXT_PUBLIC_SUPABASE_URL` | ✅ |
-| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | ✅ RLS가 방어선 |
-| `SUPABASE_SECRET_KEY` | ❌ RLS 우회 |
-| `POSTGRES_URL` | ❌ postgres 특권 롤 |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | ✅ RLS가 방어선 |
+| `SUPABASE_SERVICE_ROLE` | ❌ RLS 우회 |
+| `AI_SERVICE_TOKEN` | ❌ AI 서버 인증 |
 
 `NEXT_PUBLIC_` 접두가 붙은 값은 **빌드 시 번들에 문자열로 박혀** 전 세계에
 공개됩니다. 변수 이름이 아니라 **접두만** 판단 기준입니다.
 
 ---
 
-## 브랜치 전략
+## 🌿 브랜치 전략
 
 ```
 feature/* → development → production

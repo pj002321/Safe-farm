@@ -49,7 +49,12 @@ export interface EntryWeather {
   windMs: number | null;
   /** 그날 대표 풍향(도). **불어오는 쪽**이다. */
   windDirDeg: number | null;
-  /** `"2026-09-19T06:19"` 꼴. 시각만 뽑는 것은 화면의 일이다. */
+  /**
+   * `"06:06"` 꼴. **시각만 담는다** — 저장할 때 이미 잘라서 넣는다.
+   *
+   * ⚠️ 주석이 `"2026-09-19T06:19"` 라고 돼 있었는데 실측(2026-09-22)은 `06:06`
+   *    이다. 화면도 CSV 도 그대로 쓰면 되고, 자르는 코드를 새로 두지 말 것.
+   */
   sunriseAt: string | null;
   sunsetAt: string | null;
 }
@@ -155,6 +160,20 @@ const EVENT_TITLE: Record<TimelineEventRow["kind"], string> = {
   FORECAST: "수확 예측",
 };
 
+/**
+ * 시작을 뭐라고 부르나. **씨를 뿌렸나 모종을 심었나.**
+ *
+ * ⚠️ 여기 한 곳에서만 정한다. 타임라인 제목(`${작물} 씨 뿌림`)과 일지 CSV 의
+ *    `종류` 칸이 같이 부른다 — 두 벌로 적으면 한 줄 안에서 `종류=씨 뿌림` 인데
+ *    `메모=양파 모종 심음` 인 일이 생긴다. 서류로 옮겨 적는 파일에서 제일 나쁜
+ *    종류의 어긋남이다(2026-09-22).
+ */
+export function sowingLabelKo(
+  sowingType: TimelineCultivation["sowingType"],
+): string {
+  return sowingType === "SEEDLING" ? "모종 심음" : "씨 뿌림";
+}
+
 /** 재배 컬럼에서 나오는 줄. 날짜가 없으면 그 줄은 없다. */
 function fromCultivation(
   cultivation: TimelineCultivation,
@@ -166,10 +185,7 @@ function fromCultivation(
       id: `${cultivation.id}:SOWN`,
       kind: "SOWN",
       occurredOn: cultivation.sowingDate,
-      titleKo:
-        cultivation.sowingType === "SEEDLING"
-          ? `${cultivation.cropKo} 모종 심음`
-          : `${cultivation.cropKo} 씨 뿌림`,
+      titleKo: `${cultivation.cropKo} ${sowingLabelKo(cultivation.sowingType)}`,
       bodyKo: null,
       stageOrder: null,
       workKindKo: null,

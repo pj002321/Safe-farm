@@ -168,6 +168,7 @@ export async function markFailed(
   cultivationId: string,
   failedAt: string,
   reason: FailureReasonCode,
+  plotName: string | null,
 ): Promise<void> {
   const supabase = await getSupabaseServer();
 
@@ -177,6 +178,9 @@ export async function markFailed(
       status: "FAILED",
       failed_at: failedAt,
       failure_reason: reason,
+      // 중단도 끝이다 — `markHarvested` 와 같은 이유로 그 시점 밭 이름을 박는다.
+      // ⚠️ 수확량은 받지 않는다. 못 거둔 재배라 적을 값이 없다.
+      plot_name_at_end: plotName,
     })
     .eq("id", cultivationId)
     .eq("plot_id", plotId)
@@ -210,12 +214,24 @@ export async function markHarvested(
   plotId: string,
   cultivationId: string,
   harvestedAt: string,
+  yieldKg: number | null,
+  plotName: string | null,
 ): Promise<void> {
   const supabase = await getSupabaseServer();
 
   const { data, error } = await supabase
     .from("cultivations")
-    .update({ status: "HARVESTED", harvested_at: harvestedAt })
+    .update({
+      status: "HARVESTED",
+      harvested_at: harvestedAt,
+      // ⚠️ 안 적었으면 `null` 이다. `0` 으로 바꾸지 않는다 — `0kg 흉작` 과 `안 적음` 은
+      //    다른 값이고, 연도별 합계가 그 둘을 갈라 `기록 없음` 을 낸다.
+      yield_kg: yieldKg,
+      // 끝낸 그 시점의 밭 이름을 박는다. 읽는 쪽이 `plots(name)` 을 조인해 쓰고 있어,
+      // 밭 이름을 고치면 지난 기록의 밭 이름까지 통째로 바뀌었다(2026-09-22).
+      // ⚠️ `markFailed` 에도 같은 칸이 있다. 한쪽만 채우면 중단한 재배만 옛 이름이 샌다.
+      plot_name_at_end: plotName,
+    })
     .eq("id", cultivationId)
     .eq("plot_id", plotId)
     .eq("status", "GROWING")
@@ -231,7 +247,9 @@ export async function markHarvested(
  * 재배 한 건을 숨긴다. 행은 남는다(soft delete).
  *
  * 수확한 기록까지 치우려는 게 아니다 — 끝난 재배는 `markHarvested` 로
- * `HARVESTED` 가 되어 목록에 남는다. 이쪽은 **잘못 등록한 건을 정정**하는 길이다.
+ * `HARVESTED` 가 되고, **밭 화면의 `지난 재배 N건 보기` 접기와 마이페이지
+ * 재배기록에 남는다**(2026-09-22 이전에는 밭 목록 맨 아래에 그냥 남았다).
+ * 이쪽은 **잘못 등록한 건을 정정**하는 길이라, 지우면 그 두 곳에서 다 사라진다.
  *
  * 이름이 `delete` 가 아닌 이유는 도는 쿼리가 update 라서다(`softDeletePlot` 과
  * 같은 이유). 행을 실제로 지우지 않는 근거는
@@ -290,4 +308,39 @@ export async function updateCultivationSowing(
 
   if (error) throw new Error(error.message);
   if (!data || data.length === 0) throw new Error("CULTIVATION_NOT_FOUND");
+}
+
+/**
+ * 품종 여러 개의 단계 이름표. `variant_id` → (단계 번호 → 이름).
+ *
+ * 일지 CSV 의 `단계` 칸이 이것으로 번호를 이름으로 바꾼다. 화면(재배 상세)은
+ * `detail.stages` 에서 같은 표를 만든다 — **값의 출처가 같은 `crop_stages`** 다.
+ *
+ * ⚠️ 품종마다 따로 부르면 N+1 이 된다. 한 해치를 내보내면 품종이 여남은 개다.
+ */
+export async function listStageNamesByVariants(
+  variantIds: readonly number[],
+): Promise<Map<number, Record<number, string>>> {
+  const byVariant = new Map<number, Record<number, string>>();
+  if (variantIds.length === 0) return byVariant;
+
+  const supabase = await getSupabaseServer();
+  const { data, error } = await supabase
+    .from("crop_stages")
+    .select("variant_id, stage_order, stage_name")
+    // 같은 품종을 여러 재배가 쓰면 한 번만 묻는다
+    .in("variant_id", [...new Set(variantIds)]);
+
+  if (error) throw new Error(error.message);
+
+  for (const row of (data ?? []) as {
+    variant_id: number;
+    stage_order: number;
+    stage_name: string;
+  }[]) {
+    const names = byVariant.get(row.variant_id) ?? {};
+    names[row.stage_order] = row.stage_name;
+    byVariant.set(row.variant_id, names);
+  }
+  return byVariant;
 }
