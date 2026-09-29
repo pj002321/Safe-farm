@@ -4,13 +4,9 @@
 # 가장 중요한 줄은 `secrets/` 다. 컨테이너 이미지는 레이어 단위로 저장되고
 # Artifact Registry 를 읽을 수 있는 사람은 누구나 그 레이어를 꺼내 볼 수 있다.
 # 서비스 계정 키가 한 번 들어가면 이후 레이어에서 지워도 앞 레이어에 남는다.
-#
-# Cloud Run 에서는 키 파일이 **필요 없다.** 런타임 서비스 계정의 ADC
-# (Application Default Credentials)를 admin.ts 가 자동으로 집어 쓴다.
 # ─────────────────────────────────────────────────────────────
 secrets/
 *serviceAccount*.json
-*-firebase-adminsdk-*.json
 .env.local
 .env.*.local
 
@@ -30,9 +26,6 @@ out
 coverage
 Dockerfile
 .dockerignore
-firebase-debug.log*
-firestore-debug.log*
-.firebase
 npm-debug.log*
 .DS_Store
 

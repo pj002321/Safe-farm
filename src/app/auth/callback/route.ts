@@ -15,7 +15,6 @@ import { getSupabaseServer } from "@/shared/supabase/server";
  * [Description]
  * - Supabase 의 소셜 로그인은 **페이지를 떠난다.** 구글에서 돌아올 때 이 경로로
  *   `?code=...` 가 붙어 오고, 그 코드를 세션으로 바꾸는 것이 여기 일이다.
- *   (Firebase 판은 `signInWithPopup` 이라 콜백 경로가 아예 없었다.)
  * - **이 경로는 공개여야 한다.** 요청이 도착하는 시점에는 아직 세션이 없다.
  *   `proxySession.ts` 의 `PUBLIC_PREFIXES` 에 `/auth` 가 있는 이유다 —
  *   빠지면 콜백이 `/login` 으로 튕겨 영원히 로그인하지 못한다.

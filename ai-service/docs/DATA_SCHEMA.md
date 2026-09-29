@@ -10,7 +10,7 @@
 
 ## 1. 저장소 두 곳
 
-AGENTS.md 의 원칙: Firebase SDK 2종을 섞지 않는다. 데이터도 같은 이유로 성격이 다른
+데이터는 성격이 다른
 두 저장소로 나뉜다.
 
 | | Firestore | Postgres (`ai-service`) |
