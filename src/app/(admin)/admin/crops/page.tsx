@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { AdminPage } from "@/components/admin/AdminPage";
 import { AdminPlanned } from "@/components/admin/AdminPlanned";
-import { requireAdminOrRedirect } from "@/shared/auth/session";
+import { requireAdminOrRedirect } from "@/shared/auth/adminSession";
 
 /**
  * ---------------------------------------------

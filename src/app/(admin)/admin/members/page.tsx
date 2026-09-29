@@ -4,7 +4,7 @@ import { AdminPage } from "@/components/admin/AdminPage";
 import { Badge } from "@/components/shared/Badge";
 import { Card } from "@/components/shared/Card";
 import { listAccounts } from "@/shared/auth/accounts";
-import { requireAdminOrRedirect } from "@/shared/auth/session";
+import { requireAdminOrRedirect } from "@/shared/auth/adminSession";
 
 /**
  * ---------------------------------------------
@@ -30,7 +30,7 @@ export const metadata: Metadata = { title: "회원 관리" };
 export const dynamic = "force-dynamic";
 
 export default async function AdminMembers() {
-  const viewer = await requireAdminOrRedirect();
+  await requireAdminOrRedirect();
   const accounts = await listAccounts();
 
   const admins = accounts.filter((account) => account.role === "admin");
@@ -48,7 +48,7 @@ export default async function AdminMembers() {
       }
       titleKo="회원 관리"
     >
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="grid gap-3 sm:grid-cols-2">
         <Card title="전체 계정">
           <span className="font-mono text-2xl tabular-nums">
             {accounts.length}
@@ -58,9 +58,6 @@ export default async function AdminMembers() {
           <span className="font-mono text-2xl text-accent tabular-nums">
             {admins.length}
           </span>
-        </Card>
-        <Card title="현재 계정">
-          <span className="font-mono text-sm">{viewer.email ?? viewer.id}</span>
         </Card>
       </div>
 

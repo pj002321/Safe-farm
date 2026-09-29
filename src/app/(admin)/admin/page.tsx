@@ -4,7 +4,7 @@ import { AdminPage } from "@/components/admin/AdminPage";
 import { AdminPlanned } from "@/components/admin/AdminPlanned";
 import { Card } from "@/components/shared/Card";
 import { getAdminOverview } from "@/features/admin/overviewStore";
-import { requireAdminOrRedirect } from "@/shared/auth/session";
+import { requireAdminOrRedirect } from "@/shared/auth/adminSession";
 
 /**
  * ---------------------------------------------

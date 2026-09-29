@@ -1,4 +1,3 @@
-import { redirect } from "next/navigation";
 import { getSupabaseServer } from "@/shared/supabase/server";
 
 /**
@@ -21,7 +20,6 @@ import { getSupabaseServer } from "@/shared/supabase/server";
  * [Usage]
  * ```ts
  * const viewer = await getViewer();          // 없으면 null
- * const admin = await requireAdmin();        // 아니면 throw
  * ```
  * ---------------------------------------------
  */
@@ -94,20 +92,5 @@ function isMissingSessionError(error: {
 export async function requireUser(): Promise<Viewer> {
   const viewer = await getViewer();
   if (!viewer) throw new Error("UNAUTHENTICATED");
-  return viewer;
-}
-
-/** Server Action 전용. 관리자가 아니면 던진다. */
-export async function requireAdmin(): Promise<Viewer> {
-  const viewer = await requireUser();
-  if (!viewer.isAdmin) throw new Error("FORBIDDEN");
-  return viewer;
-}
-
-/** 페이지·레이아웃 전용. 던지는 대신 보낸다. */
-export async function requireAdminOrRedirect(): Promise<Viewer> {
-  const viewer = await getViewer();
-  if (!viewer) redirect("/login");
-  if (!viewer.isAdmin) redirect("/dashboard");
   return viewer;
 }
