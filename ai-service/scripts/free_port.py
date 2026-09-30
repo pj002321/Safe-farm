@@ -17,8 +17,9 @@ PORT = 8000
 def free_port(port: int = PORT) -> None:
     if sys.platform == "win32":
         out = subprocess.run(
-            ["netstat", "-ano", "-p", "TCP"], capture_output=True, text=True
+            ["netstat", "-ano", "-p", "TCP"], capture_output=True, text=True, errors="ignore"
         ).stdout
+        
         pids = {
             line.split()[-1]
             for line in out.splitlines()
@@ -28,7 +29,7 @@ def free_port(port: int = PORT) -> None:
             subprocess.run(["taskkill", "/PID", pid, "/F"], capture_output=True)
     else:
         out = subprocess.run(
-            ["lsof", "-ti", f":{port}"], capture_output=True, text=True
+                    ["lsof", "-ti", f":{port}"], capture_output=True, text=True, errors="ignore"
         ).stdout
         for pid in out.split():
             subprocess.run(["kill", "-9", pid], capture_output=True)
