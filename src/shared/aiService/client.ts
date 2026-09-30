@@ -364,6 +364,52 @@ export interface VariantRecommendation {
   maturityType: "EARLY" | "MID" | "LATE";
 }
 
+/** 관리자 AI 분석 항목 하나. `evidence` 는 ai-service 가 실제 기록과 대조해 남긴 id 다. */
+export type InsightFinding = { text: string; evidence: string[] };
+
+export type MemberInsight = {
+  summary: string;
+  segment: "활발" | "정착중" | "이탈위험" | "휴면" | null;
+  risks: InsightFinding[];
+  actions: InsightFinding[];
+  dropped: number;
+  facts: { id: string; text: string }[];
+};
+
+export type QuestionTopic = {
+  name: string;
+  suggestion: string;
+  evidence: string[];
+  count: number;
+  down: number;
+};
+
+export type QuestionTrends = {
+  total: number;
+  unassigned: number;
+  topics: QuestionTopic[];
+  facts: { id: string; text: string }[];
+};
+
+export type AtRiskMember = {
+  userId: string;
+  score: number;
+  reasons: string[];
+  plots: string[];
+  warnings: string[];
+  /** 가드레일을 통과한 안내문 초안. 못 통과했거나 LLM 이 빠뜨리면 null. */
+  draft: string | null;
+};
+
+export type AtRiskReport = { asOf: string | null; members: AtRiskMember[] };
+
+export type WeeklyBriefing = {
+  points: InsightFinding[];
+  /** 지표 id 를 못 댔거나 지표에 없는 숫자를 써서 버린 문장 수. */
+  dropped: number;
+  metrics: { id: string; label: string; cur: number; prev: number }[];
+};
+
 export type AiResult<T> =
   | { ok: true; data: T }
   | { ok: false; reason: AiFailure; detail?: string };
@@ -638,11 +684,39 @@ export const aiService = {
    * 작물 사진 한 장을 즉석에서 진단한다. 저장하지 않는 일회성 호출이라
    * `userId` 를 넘기지 않는다 — 이력도, 일일 한도도 없다(ai-service `api/diagnose.py`).
    */
-  diagnoseImage: (imageDataUrl: string, question: string | null) =>
+  diagnoseImage: (userId: string, imageDataUrl: string, question: string | null) =>
     call<DiagnoseImageResult>("/v1/diagnose/image", {
       method: "POST",
-      body: JSON.stringify({ image_data_url: imageDataUrl, question }),
+      body: JSON.stringify({ user_id: userId, image_data_url: imageDataUrl, question }),
       timeoutMs: DIAGNOSE_TIMEOUT_MS,
+    }),
+
+  /** 관리자용 회원 분석. LLM 한 번이라 오래 걸린다. */
+  memberInsight: (userId: string) =>
+    call<MemberInsight>(`/v1/admin/members/${encodeURIComponent(userId)}/insight`, {
+      method: "POST",
+      timeoutMs: 60_000,
+    }),
+
+  /** 관리자용 질문 트렌드. 질문 최대 200개를 LLM 한 번에 넘긴다. */
+  questionTrends: () =>
+    call<QuestionTrends>("/v1/admin/questions/trends", {
+      method: "POST",
+      timeoutMs: 90_000,
+    }),
+
+  /** 관리자용 주간 운영 브리핑. 숫자는 ai-service 가 세고 LLM 은 해석만 한다. */
+  weeklyBriefing: () =>
+    call<WeeklyBriefing>("/v1/admin/briefing", {
+      method: "POST",
+      timeoutMs: 60_000,
+    }),
+
+  /** 관리자용 주간 위험 회원. 규칙 점수 상위 10명에 LLM 안내문 초안을 붙인다. */
+  atRiskMembers: () =>
+    call<AtRiskReport>("/v1/admin/members/at-risk", {
+      method: "POST",
+      timeoutMs: 90_000,
     }),
 
   /** 답변 하나에 up/down 평가와 사유를 남긴다. */

@@ -9,7 +9,6 @@
 # ─────────────────────────────────────────────────────────────
 secrets/
 *serviceAccount*.json
-*-firebase-adminsdk-*.json
 .env.local
 .env.*.local
 
@@ -21,7 +20,6 @@ out
 .github
 .claude
 coverage
-.firebase
 *.log
 .DS_Store
 

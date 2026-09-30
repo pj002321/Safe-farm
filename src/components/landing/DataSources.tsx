@@ -56,7 +56,7 @@ const EYES: readonly Eye[] = [
       { termKo: "주기", valueKo: "하루 1회" },
       { termKo: "받는 것", valueKo: "최고·최저기온, 강수, 풍속" },
       { termKo: "특이", valueKo: "초상온도 TG_MIN" },
-      { termKo: "확보", valueKo: "실측 166일치" },
+      { termKo: "확보", valueKo: "2026/09/13 기준 실측 166일치" },
     ],
     Icon: GroundStationIcon,
   },

@@ -1,8 +1,7 @@
 -- ─────────────────────────────────────────────────────────────
 -- profiles — auth.users 의 그림자 테이블
 --
--- Firebase Firestore 의 `profiles` 컬렉션을 그대로 옮긴 것이다. 필드 이름은
--- TypeScript 쪽 `Profile` 타입과 1:1 로 맞춰 두었다(스네이크 케이스로만 바뀐다).
+-- 필드 이름은 TypeScript 쪽 `Profile` 타입과 1:1 로 맞춰 두었다(스네이크 케이스로만 바뀐다).
 --
 -- ⚠️ **RLS 3종 세트를 한 단위로 쓴다** (AGENTS.md).
 --      grant → enable row level security → create policy

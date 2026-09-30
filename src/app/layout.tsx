@@ -14,7 +14,7 @@ import "./globals.css";
  * - metadataBase 를 **비워 두지 않는다.** 비우면 Next 가 상대 경로 OG/canonical 을
  *   `http://localhost:3000` 기준으로 해석하고 빌드마다 경고를 낸다. 도메인을
  *   하드코딩하지 않기 위해 `siteUrl()` 로 환경에서 읽는다 —
- *   로컬 / Firebase Hosting 기본 도메인 / 커스텀 도메인이 각각 다른 값을 준다.
+ *   로컬 / Railway 기본 도메인 / 커스텀 도메인이 각각 다른 값을 준다.
  *
  * [Usage]
  * ```tsx

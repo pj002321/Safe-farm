@@ -12,7 +12,7 @@ describe("resolveSiteUrl", () => {
     );
   });
 
-  it("Firebase 프로젝트 ID 가 있으면 기본 호스팅 도메인을 쓴다", () => {
+  it("RAILWAY_PUBLIC_DOMAIN 이 있으면 https 를 붙여 쓴다", () => {
     const url = resolveSiteUrl({
       RAILWAY_PUBLIC_DOMAIN: "safe-farm.up.railway.app",
     });

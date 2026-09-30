@@ -29,12 +29,59 @@ import { kstDateString } from "@/shared/utils/kstDate";
  * ```
  * ---------------------------------------------
  */
+/** `summarizeWeather()` 결과. 아래 문구 함수들이 숫자를 여기서 꺼낸다. */
+type WeatherSummary = NonNullable<ReturnType<typeof summarizeWeather>>;
+
+/**
+ * 상황별 머리글·본문. 키는 `weatherTasks()` 가 내는 작업 id 다.
+ *
+ * - **숫자를 여기 적지 않고 `summary` 에서 꺼낸다.** 손으로 적은 숫자는 데이터가
+ *   바뀌어도 안 따라오고, 그 순간 위쪽 #today 의 "꾸며낸 숫자가 하나도
+ *   없습니다" 가 거짓이 된다.
+ * - **급한 순서는 여기서 정하지 않는다.** `weatherTasks()` 가 폭염·서리를 앞에
+ *   두므로 그 첫 항목을 그대로 받는다 — #today 의 조언 박스도 같은 첫 항목을
+ *   쓰므로 두 섹션이 서로 다른 상황을 말하지 않는다.
+ * - 조건이 늘면 여기에 한 줄만 더한다. 표에 없는 id 는 DEFAULT_COPY 로 떨어진다.
+ */
+const HEADLINES: Record<
+  string,
+  (summary: WeatherSummary) => { headKo: string; leadKo: string }
+> = {
+  // dry·wet 은 rainfallMm 이 null 이 아닐 때만 나오므로 "—" 까지 가지 않는다.
+  "weather-dry": (s) => ({
+    headKo: `이레 동안 비가 ${s.rainfallMm?.toFixed(1) ?? "—"}mm.`,
+    leadKo: "상주의 배추밭은 오늘 물을 줘야 합니다.",
+  }),
+  "weather-wet": (s) => ({
+    headKo: `이레 동안 비가 ${s.rainfallMm?.toFixed(1) ?? "—"}mm.`,
+    leadKo: "상주의 배추밭은 고랑 물길을 터야 합니다.",
+  }),
+  "weather-cold": (s) => ({
+    headKo: `밤 기온이 ${Math.round(s.avgTempMinC)}도까지 내려갔습니다.`,
+    leadKo: "상주의 배추밭은 오늘 밤 덮개가 필요합니다.",
+  }),
+  "weather-heat": (s) => ({
+    headKo: `한낮 기온이 ${Math.round(s.avgTempMaxC)}도까지 올랐습니다.`,
+    leadKo: "상주의 배추밭은 물주기 시각을 옮겨야 합니다.",
+  }),
+};
+
+/** 급한 일이 없거나 관측이 사흘도 안 모였을 때. 숫자를 말하지 않는다. */
+const DEFAULT_COPY = {
+  headKo: "상주의 밭은 오늘 조용합니다.",
+  leadKo: "상주의 배추밭은 지금 급한 일이 없습니다.",
+};
+
 export async function CallToAction() {
   const plot = await getDemoPlot();
   const today = kstDateString();
   const weather = plot ? await loadWeatherSeries(plot, today, 7, 6) : null;
   const summary = weather ? summarizeWeather(weather.series) : null;
-  const isDry = weatherTasks(summary).some((task) => task.id === "weather-dry");
+  // 가장 급한 것 하나만 쓴다. #today 의 조언 박스도 같은 [0] 을 보므로
+  // 두 섹션이 늘 같은 상황을 말한다.
+  const topTask = weatherTasks(summary)[0] ?? null;
+  const copy =
+    (summary && topTask && HEADLINES[topTask.id]?.(summary)) || DEFAULT_COPY;
 
   return (
     <section
@@ -68,19 +115,14 @@ export async function CallToAction() {
           </p>
 
           <h2 className="text-balance font-semibold text-3xl text-space-fg tracking-tight md:text-display">
-            이레 동안 비가{" "}
-            {summary?.rainfallMm != null ? summary.rainfallMm.toFixed(1) : "—"}
-            mm.
+            {copy.headKo}
             <br />
             알고 계셨나요?
           </h2>
 
           <p className="max-w-xl text-pretty text-space-muted leading-relaxed">
-            {isDry
-              ? "상주의 배추밭은 오늘 물을 줘야 합니다."
-              : "상주의 배추밭은 지금 물 걱정이 없습니다."}{" "}
-            밭 하나를 등록하시면 같은 계산을 당신의 좌표로 돌려, 내일 아침 첫
-            리포트를 보내 드립니다.
+            {copy.leadKo} 밭 하나를 등록하시면 같은 계산을 당신의 좌표로 돌려,
+            내일 아침 첫 리포트를 보내 드립니다.
           </p>
 
           <div className="mt-2 flex flex-col items-center gap-3 sm:flex-row">

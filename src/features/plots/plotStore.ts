@@ -5,7 +5,10 @@ import { getSupabaseServer } from "@/shared/supabase/server";
 import {
   type CultivationRecord,
   type CultivationRecordRow,
+  type Embedded,
+  one,
   toCultivationRecord,
+  toYieldKg,
 } from "./domain/cultivationRecord";
 import type { PlotEditInput } from "./domain/editPlot";
 import {
@@ -337,12 +340,17 @@ export async function softDeletePlot(
   if (tasksDeleted.error) throw new Error(tasksDeleted.error.message);
 }
 
+// ⚠️ 한 줄짜리 리터럴로 둔다. 이어 붙이면 supabase-js 가 select 를 타입 수준에서
+//    못 읽어 결과가 `GenericStringError[]` 로 추론된다(`eventStore.ts` 와 같은 함정).
 const RECORD_SELECT =
-  "id, sowing_date, harvested_at, plots!inner(name, user_id), crop_variants(crops(name))";
+  "id, variant_id, sowing_date, harvested_at, failed_at, yield_kg, plot_name_at_end, plots!inner(id, name, user_id), crop_variants(crops(name))";
 
 /**
- * 마이페이지 지난 재배 기록. `status = HARVESTED` 인 것만 담는다 — 진행 중인
- * 재배는 대시보드가 다룬다.
+ * 마이페이지 지난 재배 기록. **끝난 것만** 담는다 — 진행 중인 재배는 대시보드가 다룬다.
+ *
+ * ⚠️ **실패도 '끝난' 것이다.** 예전에는 `HARVESTED` 만 봤는데, 밭 화면이 끝난 재배를
+ *    접기로 내리면서(교안 §1-5) 여기가 유일한 입구가 됐다. `FAILED` 를 빼 두면
+ *    중단한 재배는 **아무 데서도 못 들어간다** — 주소를 손으로 쳐야만 열린다.
  *
  * `plots!inner` 로 조인해야 `.eq("plots.user_id", ...)` 가 루트 행(cultivations)
  * 자체를 거른다 — `!inner` 없이 걸면 내 소유가 아닌 밭은 값이 비워질 뿐, 그
@@ -356,7 +364,7 @@ export async function listCultivationRecords(
   const { data, error } = await supabase
     .from("cultivations")
     .select(RECORD_SELECT)
-    .eq("status", "HARVESTED")
+    .in("status", ["HARVESTED", "FAILED"])
     .eq("plots.user_id", userId)
     .is("deleted_at", null);
 
@@ -365,4 +373,97 @@ export async function listCultivationRecords(
   return ((data ?? []) as unknown as CultivationRecordRow[])
     .map(toCultivationRecord)
     .filter((record): record is CultivationRecord => record !== null);
+}
+
+/**
+ * PostgREST 가 돌려주는 날것.
+ *
+ * 중첩 모양(`Embedded`)과 그 껍질을 벗기는 `one()` 은 **`domain/cultivationRecord`
+ * 의 것을 그대로 쓴다** — 같은 조인이라 여기서 다시 적으면 사본이 하나 더 는다.
+ */
+interface ExportRow {
+  id: string;
+  variant_id: number;
+  sowing_date: string | null;
+  sowing_type: string | null;
+  harvested_at: string | null;
+  failed_at: string | null;
+  failure_reason: string | null;
+  /** ⚠️ `numeric` 은 문자열로 온다 — `CultivationRecordRow.yield_kg` 와 같다. */
+  yield_kg: number | string | null;
+  plot_name_at_end: string | null;
+  plots: Embedded<{ name: string | null }>;
+  crop_variants: Embedded<{ crops: Embedded<{ name: string | null }> }>;
+}
+
+/** 내보내기 한 건이 쓰는 재배 한 행. 타임라인·CSV 가 필요로 하는 칸만 모았다. */
+export interface ExportCultivationRow {
+  id: string;
+  variantId: number;
+  cropKo: string;
+  plotKo: string;
+  sowingDate: string | null;
+  sowingType: "SEED" | "SEEDLING";
+  harvestedAt: string | null;
+  failedAt: string | null;
+  failureReason: string | null;
+  yieldKg: number | null;
+}
+
+// 내보내기용. 위 `RECORD_SELECT` 와 칸이 달라(작형·실패 사유·수확량·박아 둔 밭 이름)
+// 합치지 않고 나란히 둔다 — 대신 **같은 방식**으로 적는다.
+// ⚠️ 여기도 한 줄짜리 리터럴이어야 한다(위 RECORD_SELECT 의 ⚠ 와 같은 함정).
+const EXPORT_SELECT =
+  "id, variant_id, sowing_date, sowing_type, harvested_at, failed_at, failure_reason, yield_kg, plot_name_at_end, plots!inner(name, user_id), crop_variants(crops(name))";
+
+/**
+ * 내보낼 재배들. **주인 것만** 돌려준다.
+ *
+ * 🔴 **여기가 IDOR 을 막는 자리다.** id 목록은 브라우저가 보내는 값이라 남의 재배
+ *    id 를 섞어 넣을 수 있다. `plots!inner` 로 조인해 `plots.user_id` 를 걸어야
+ *    루트 행(cultivations) 자체가 걸러진다 — `!inner` 가 없으면 남의 밭은 값만
+ *    비워진 채 **재배 행은 그대로 남는다**(PostgREST 임베디드 필터 규칙).
+ *
+ * ⚠️ 못 찾은 id 는 조용히 빠진다. 던지지 않는 이유는 그 편이 안전해서다 — 남의
+ *    id 를 넣었을 때 "없다" 와 "네 것이 아니다" 를 구별해 주면 그것도 정보다.
+ *
+ * ⚠️ 기르는 중인 재배도 나온다. 상세 화면이 자기 한 건을 뽑을 때 쓰는 길이라
+ *    상태로 거르지 않는다 — 무엇을 내보낼지는 부르는 쪽이 정한다.
+ */
+export async function listCultivationsForExport(
+  userId: string,
+  cultivationIds: readonly string[],
+): Promise<ExportCultivationRow[]> {
+  if (cultivationIds.length === 0) return [];
+
+  const supabase = await getSupabaseServer();
+  const { data, error } = await supabase
+    .from("cultivations")
+    .select(EXPORT_SELECT)
+    .in("id", [...cultivationIds])
+    .eq("plots.user_id", userId)
+    .is("deleted_at", null)
+    // ⚠️ 순서를 정하지 않으면 PostgREST 가 주는 대로다 — 같은 것을 두 번 받아도
+    //    파일 안에서 재배 차례가 달라진다. 심은 순서로 세우고, 같은 날이면 등록 순.
+    .order("sowing_date", { ascending: true, nullsFirst: false })
+    .order("created_at", { ascending: true });
+
+  if (error) throw new Error(error.message);
+
+  return ((data ?? []) as unknown as ExportRow[]).map((row) => {
+    const plot = one(row.plots);
+    return {
+      id: row.id,
+      variantId: row.variant_id,
+      cropKo: one(one(row.crop_variants)?.crops)?.name ?? "이름 없는 작물",
+      // 끝낸 시점에 박아 둔 이름이 먼저다. 기르는 중이면 비어 있어 지금 이름을 쓴다
+      plotKo: row.plot_name_at_end ?? plot?.name ?? "이름 없는 밭",
+      sowingDate: row.sowing_date,
+      sowingType: row.sowing_type === "SEEDLING" ? "SEEDLING" : "SEED",
+      harvestedAt: row.harvested_at,
+      failedAt: row.failed_at,
+      failureReason: row.failure_reason,
+      yieldKg: toYieldKg(row.yield_kg),
+    };
+  });
 }
