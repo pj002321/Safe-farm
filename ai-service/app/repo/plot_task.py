@@ -111,3 +111,19 @@ def add_task(
     task = PlotTask(plot_id=plot_id, title=title, reason=reason, priority=priority)
     db.add(task)
     return task
+
+
+def overdue_open(db: Session, plot_ids: list[uuid.UUID], before: datetime) -> list[PlotTask]:
+    """`before` 전에 만들어졌는데 아직 안 끝났고 만료되지도 않은 카드. 오래된 순."""
+    if not plot_ids:
+        return []
+    return list(db.scalars(
+        select(PlotTask)
+        .where(
+            PlotTask.plot_id.in_(plot_ids),
+            PlotTask.done.is_(False),
+            PlotTask.expired_at.is_(None),
+            PlotTask.generated_at < before,
+        )
+        .order_by(PlotTask.generated_at)
+    ))

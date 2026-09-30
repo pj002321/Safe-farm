@@ -32,6 +32,11 @@ def find_chunks_to_embed(db: Session, limit: int | None = None) -> list[Chunk]:
     return query.all()
 
 
+def count_chunks_to_embed(db: Session) -> int:
+    """임베딩이 빠진 조각 수. find_chunks_to_embed 와 같은 조건."""
+    return db.query(Chunk).filter(Chunk.embedding.is_(None)).count()
+
+
 def save_embeddings(db: Session, chunks: list[Chunk], vectors: list[list[float]]) -> None:
     """
     # summary

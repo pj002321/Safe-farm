@@ -30,7 +30,7 @@ def facts_block(facts: list[Fact]) -> str:
     return "\n".join(f"[{f.id}] {f.text}" for f in facts)
 
 
-def _findings(items: object, known: set[str]) -> tuple[list[dict], int]:
+def verified_findings(items: object, known: set[str]) -> tuple[list[dict], int]:
     kept, dropped = [], 0
     for item in items if isinstance(items, list) else []:
         text = str(item.get("text", "")).strip() if isinstance(item, dict) else ""
@@ -43,8 +43,8 @@ def _findings(items: object, known: set[str]) -> tuple[list[dict], int]:
 
 
 def parse_insight(data: dict, known_ids: set[str]) -> dict:
-    risks, d1 = _findings(data.get("risks"), known_ids)
-    actions, d2 = _findings(data.get("actions"), known_ids)
+    risks, d1 = verified_findings(data.get("risks"), known_ids)
+    actions, d2 = verified_findings(data.get("actions"), known_ids)
     segment = data.get("segment")
     return {
         "summary": str(data.get("summary", "")).strip(),

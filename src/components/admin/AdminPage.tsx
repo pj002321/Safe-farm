@@ -14,7 +14,7 @@ import type { ReactNode } from "react";
  * [Usage]
  * ```tsx
  * <AdminPage titleKo="배치 관리" descriptionKo="무엇이 돌았고 무엇이 비었는지를 보는 자리입니다.">
- *   <AdminPlanned items={PLANNED} />
+ *   <Card title="데이터 신선도">…</Card>
  * </AdminPage>
  * ```
  * ---------------------------------------------
