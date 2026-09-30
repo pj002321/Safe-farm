@@ -35,3 +35,32 @@ def job_of(content: str | None) -> str | None:
     except ValueError:
         return None
     return data.get("job") if isinstance(data, dict) else None
+
+
+def route_stats(records: list[tuple[datetime, str, int, float]]) -> list[dict]:
+    """경로별 호출 수·평균·p95(ms)·5xx 수. 느린 경로가 위로."""
+    by_route: dict[str, list[tuple[int, float]]] = {}
+    for _, route, status, ms in records:
+        by_route.setdefault(route, []).append((status, ms))
+    out = []
+    for route, rows in by_route.items():
+        times = sorted(ms for _, ms in rows)
+        out.append({
+            "route": route,
+            "count": len(rows),
+            "avgMs": round(sum(times) / len(times)),
+            # ponytail: 최근접 순위 p95. 표본이 적으면 최댓값에 가깝다
+            "p95Ms": round(times[min(len(times) - 1, int(len(times) * 0.95))]),
+            "errors": sum(1 for status, _ in rows if status >= 500),
+        })
+    return sorted(out, key=lambda r: -r["p95Ms"])
+
+
+def hourly_counts(times: list[datetime], hours: int, now: datetime) -> list[int]:
+    """최근 hours 시간을 1시간 칸으로 나눈 개수. 마지막 칸이 지금."""
+    counts = [0] * hours
+    for t in times:
+        age = int((now - t).total_seconds() // 3600)
+        if 0 <= age < hours:
+            counts[hours - 1 - age] += 1
+    return counts

@@ -435,6 +435,7 @@ export type BatchStatus = {
     /** null 이면 주기가 없는 데이터라 판정하지 않는다. */
     stale: boolean | null;
   }[];
+  rerun: RerunState;
 };
 
 export type BatchDiagnosis = {
@@ -451,6 +452,66 @@ export type IndexStatus = {
     chunks: number;
     embedded: number;
     latest: string | null;
+  }[];
+};
+
+export type SystemStatus = {
+  /** 집계 시작 시각. ai-service 가 재시작하면 그때부터다(메모리 기록). */
+  since: string;
+  restartedAt: string;
+  requests: {
+    count: number;
+    avgMs: number | null;
+    errors: number;
+    routes: { route: string; count: number; avgMs: number; p95Ms: number; errors: number }[];
+    hourly: number[];
+  };
+  outbound: { host: string; count: number; failed: number; hourly: number[] }[];
+  staleFeeds: string[];
+  errors: { at: string; severity: "error" | "warning"; source: string; message: string }[];
+};
+
+export type RerunJob = "tasks" | "alerts" | "weather";
+
+export type RerunState = {
+  job: RerunJob | null;
+  running: boolean;
+  startedAt: string | null;
+  finishedAt: string | null;
+  result: string | null;
+};
+
+export type RetrievalArm = {
+  key: "A" | "B" | "C";
+  label: string;
+  n: number;
+  recall: number;
+  mrr: number;
+  hint: number;
+};
+
+export type RetrievalEval = {
+  k: number;
+  arms: RetrievalArm[];
+  questions: { question: string; expected: string; A: number; B: number; C: number }[];
+};
+
+export type StageAccuracy = {
+  summary: {
+    n: number;
+    excluded: number;
+    mae: number | null;
+    bias: number | null;
+    byStage: { stage: string; n: number; mae: number }[];
+  };
+  history: {
+    kind: "STAGE_SET" | "STAGE_ADD";
+    occurredOn: string;
+    createdAt: string;
+    actual: string | null;
+    predicted: string | null;
+    error?: number | null;
+    note: string | null;
   }[];
 };
 
@@ -748,6 +809,36 @@ export const aiService = {
       method: "POST",
       timeoutMs: 90_000,
     }),
+
+  /** 관리자 개요: 요청 지연·오류 로그·외부 API 호출량(ai-service 메모리 기록 + pg_net 실패). */
+  systemStatus: () => call<SystemStatus>("/v1/admin/system"),
+
+  /** 배치를 백그라운드로 다시 돌린다. 거절(진행 중·기간 오류)도 200 으로 온다. */
+  rerunBatch: (job: RerunJob, dateFrom: string | null, dateTo: string | null) =>
+    call<({ started: true } & RerunState) | { started: false; error: string }>(
+      "/v1/admin/batches/rerun",
+      {
+        method: "POST",
+        body: JSON.stringify({ job, date_from: dateFrom, date_to: dateTo }),
+      },
+    ),
+
+  /** 임베딩이 빠진 조각만 채운다(한 번에 최대 2,000개). */
+  embedMissing: () =>
+    call<{ embedded: number; remaining: number }>("/v1/admin/index/embed-missing", {
+      method: "POST",
+      timeoutMs: 120_000,
+    }),
+
+  /** 골든셋 검색 지표와 3군 비교. 문항마다 임베딩 1회. */
+  retrievalEval: () =>
+    call<RetrievalEval>("/v1/admin/retrieval/eval", {
+      method: "POST",
+      timeoutMs: 180_000,
+    }),
+
+  /** 사용자 단계 보정 대비 생육단계 예측 오차. */
+  stageAccuracy: () => call<StageAccuracy>("/v1/admin/accuracy", { timeoutMs: 30_000 }),
 
   /** 관리자 배치 관리: cron 요약 · 실제 HTTP 결과 · 데이터 신선도. */
   batchStatus: () => call<BatchStatus>("/v1/admin/batches"),

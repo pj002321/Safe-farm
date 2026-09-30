@@ -16,6 +16,8 @@
 
 from __future__ import annotations
 
+import time
+
 from fastapi import FastAPI
 
 from app.api import admin as admin_api
@@ -32,7 +34,7 @@ from app.api import tasks as tasks_api
 from app.api import typhoon as typhoon_api
 from app.api import variety as variety_api
 from app.api import weather as weather_api
-from app.core import config, measure
+from app.core import config, measure, ops_log
 
 app = FastAPI(
     title="Safe Farm AI Service",
@@ -90,6 +92,25 @@ async def _measure_request(request, call_next):  # noqa: ANN001, ANN202
     response = await call_next(request)
     if not response.headers.get("content-type", "").startswith(STREAM_MEDIA_TYPE):
         measure.finish()
+    return response
+
+
+ops_log.install()
+
+
+@app.middleware("http")
+async def _ops_log_request(request, call_next):  # noqa: ANN001, ANN202
+    """관리자 시스템 상태·오류 로그용(`core/ops_log`). 헬스체크는 세지 않는다 — 30초마다 와서 평균을 덮는다."""
+    if request.url.path == "/health":
+        return await call_next(request)
+    started = time.perf_counter()
+    try:
+        response = await call_next(request)
+    except Exception as exc:
+        ops_log.record_request(ops_log.route_of(request), 500, started)
+        ops_log.record_error(ops_log.route_of(request), exc)
+        raise
+    ops_log.record_request(ops_log.route_of(request), response.status_code, started)
     return response
 
 

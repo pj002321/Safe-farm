@@ -1,11 +1,12 @@
 import type { Metadata } from "next";
 import { AdminPage } from "@/components/admin/AdminPage";
-import { AdminPlanned } from "@/components/admin/AdminPlanned";
+import { HourlyBars } from "@/components/admin/HourlyBars";
 import { Badge } from "@/components/shared/Badge";
 import { Card } from "@/components/shared/Card";
 import { requireAdminOrRedirect } from "@/shared/auth/adminSession";
 import { aiService } from "@/shared/aiService/client";
 import { BatchDiagnosePanel } from "./BatchDiagnosePanel";
+import { RerunPanel } from "./RerunPanel";
 
 /**
  * ---------------------------------------------
@@ -17,8 +18,9 @@ import { BatchDiagnosePanel } from "./BatchDiagnosePanel";
  * - **cron 의 "성공"을 믿지 않는다.** pg_cron 은 HTTP 요청을 큐에 넣으면 성공이다.
  *   실제 결과(`net._http_response`)와 데이터가 실제로 새로 들어왔는지(신선도)를 같이 본다.
  *   HTTP 결과는 pg_net 이 몇 시간만 보관한다 — 길게 보려면 적재 표가 필요하다.
- * - 재실행(V1-104)은 버튼이 생기는 순간 Server Action 이고, 그 파일 첫 줄이
- *   `requireAdmin()` 이어야 한다. 레이아웃 검사는 액션에 미치지 않는다.
+ * - 재실행(V1-104)은 ai-service 가 백그라운드 스레드로 돌린다 — 할 일 생성은 동기로 부르면
+ *   Next 쪽 타임아웃(50초)을 넘긴다. 액션(`actions.ts`)은 첫 줄에서 `requireAdmin()` 을 부른다.
+ * - API 호출량(V1-106)은 ai-service 가 밖으로 낸 호출을 호스트별로 센 것이다(메모리 기록).
  * ---------------------------------------------
  */
 
@@ -26,10 +28,6 @@ export const metadata: Metadata = { title: "배치 관리" };
 
 export const dynamic = "force-dynamic";
 
-const PLANNED = [
-  { code: "V1-104", nameKo: "수동 재실행 (기간 지정)" },
-  { code: "V1-106", nameKo: "API 호출량 추이" },
-] as const;
 
 const dateFormat = new Intl.DateTimeFormat("ko-KR", {
   timeZone: "Asia/Seoul",
@@ -43,7 +41,10 @@ const at = (iso: string | null) => (iso ? dateFormat.format(new Date(iso)) : "�
 
 export default async function AdminBatches() {
   await requireAdminOrRedirect();
-  const result = await aiService.batchStatus();
+  const [result, system] = await Promise.all([
+    aiService.batchStatus(),
+    aiService.systemStatus(),
+  ]);
 
   return (
     <AdminPage
@@ -58,7 +59,7 @@ export default async function AdminBatches() {
         </Card>
       ) : (
         <>
-          <Card title="데이터 신선도 (V1-105 · V1-107)">
+          <Card title="데이터 신선도">
             <table className="w-full text-sm">
               <tbody>
                 {result.data.feeds.map((f) => (
@@ -87,7 +88,9 @@ export default async function AdminBatches() {
 
           <BatchDiagnosePanel />
 
-          <Card title="스케줄 (최근 7일, V1-103)">
+          <RerunPanel state={result.data.rerun} />
+
+          <Card title="스케줄 (최근 7일)">
             <table className="w-full text-sm">
               <tbody>
                 {result.data.cron.map((c) => (
@@ -128,7 +131,33 @@ export default async function AdminBatches() {
         </>
       )}
 
-      <AdminPlanned items={PLANNED} />
+      <Card title="외부 API 호출량 (최근 24시간)">
+        {!system.ok ? (
+          <p className="text-sm text-unsuitable">
+            ai-service 에서 못 읽었습니다: {system.detail ?? system.reason}
+          </p>
+        ) : system.data.outbound.length === 0 ? (
+          <p className="text-fg-muted text-sm">
+            집계 시작({at(system.data.since)}) 이후 밖으로 나간 호출이 없습니다.
+          </p>
+        ) : (
+          <ul className="flex flex-col gap-3 text-sm">
+            {system.data.outbound.map((h) => (
+              <li key={h.host}>
+                <p className="mb-1 flex flex-wrap items-baseline gap-2">
+                  <span className="font-mono text-xs">{h.host}</span>
+                  <span className="tabular-nums">{h.count}건</span>
+                  {h.failed > 0 && <span className="text-unsuitable text-xs">실패 {h.failed}</span>}
+                </p>
+                <HourlyBars counts={h.hourly} label={h.host} />
+              </li>
+            ))}
+          </ul>
+        )}
+        <p className="mt-2 text-fg-subtle text-xs">
+          호출 한도는 기관마다 달라 여기서 판정하지 않습니다. ai-service 가 재시작하면 다시 셉니다.
+        </p>
+      </Card>
     </AdminPage>
   );
 }
