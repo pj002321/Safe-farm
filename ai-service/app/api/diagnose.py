@@ -14,6 +14,7 @@ from app.core.config import DAILY_ASK_LIMIT, OPENAI_MODEL
 from app.core.db import get_db
 from app.core.security import require_service_token
 from app.domain.image_upload import validate_image_data_url
+from app.domain.guardrail import BLOCKED_MESSAGE, is_blocked_topic
 from app.knowledge.embedder import get_client
 from app.schemas.diagnose import DiagnoseImageRequest, DiagnoseImageResponse
 from app.service.ask_history import complete_answer, record_question, today_ask_count
@@ -39,6 +40,9 @@ def diagnose_image(request: DiagnoseImageRequest, db: Session = Depends(get_db))
     error = validate_image_data_url(request.image_data_url)
     if error:
         raise HTTPException(status_code=400, detail=error)
+    
+    if request.question and is_blocked_topic(request.question):
+        return DiagnoseImageResponse(diagnosis=BLOCKED_MESSAGE)
 
     if today_ask_count(db, request.user_id) >= DAILY_ASK_LIMIT:
         return DiagnoseImageRequest(diagnosis=DAILY_LIMIT_MESSAGE)
