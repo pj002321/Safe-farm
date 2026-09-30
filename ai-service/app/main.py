@@ -18,6 +18,7 @@ from __future__ import annotations
 
 from fastapi import FastAPI
 
+from app.api import admin as admin_api
 from app.api import alerts as alerts_api
 from app.api import ask as ask_api
 from app.api import crop as crop_api
@@ -57,6 +58,7 @@ app.include_router(reports_api.router)
 app.include_router(alerts_api.router)
 app.include_router(satellite_api.router)
 app.include_router(typhoon_api.router)
+app.include_router(admin_api.router)
 
 # before/after 비교용. `MEASURE=1` 이 아니면 아래 둘 다 통과만 한다(`core/measure`).
 measure.install()

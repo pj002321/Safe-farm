@@ -4,6 +4,7 @@ import { AdminPlanned } from "@/components/admin/AdminPlanned";
 import { Card } from "@/components/shared/Card";
 import { type AskRow, getAskQuality} from "@/features/admin/qualityStore"
 import { requireAdminOrRedirect } from "@/shared/auth/adminSession";
+import { QuestionTrendPanel } from "./QuestionTrendPanel";
 
 /**
  * ---------------------------------------------
@@ -90,6 +91,8 @@ export default async function AdminQuality() {
         <Metric label="👎" value={quality.down} />
         <Metric label="가드레일 차단" value={quality.blocked} />
       </div>
+
+      <QuestionTrendPanel />
 
       <Card title="👎 받은 답변 (V1-114)">
         <AskList empty="최근 7일 👎 가 없습니다." rows={quality.recentDown} />

@@ -5,6 +5,7 @@ import { Badge } from "@/components/shared/Badge";
 import { Card } from "@/components/shared/Card";
 import { getAccount } from "@/shared/auth/accounts";
 import { requireAdminOrRedirect } from "@/shared/auth/adminSession";
+import { MemberInsightPanel } from "./MemberInsightPanel";
 
 /**
  * ---------------------------------------------
@@ -81,6 +82,8 @@ export default async function AdminMemberDetail({
           </div>
         </dl>
       </Card>
+
+      <MemberInsightPanel userId={account.id} />
     </main>
   );
 }

@@ -364,6 +364,33 @@ export interface VariantRecommendation {
   maturityType: "EARLY" | "MID" | "LATE";
 }
 
+/** 관리자 AI 분석 항목 하나. `evidence` 는 ai-service 가 실제 기록과 대조해 남긴 id 다. */
+export type InsightFinding = { text: string; evidence: string[] };
+
+export type MemberInsight = {
+  summary: string;
+  segment: "활발" | "정착중" | "이탈위험" | "휴면" | null;
+  risks: InsightFinding[];
+  actions: InsightFinding[];
+  dropped: number;
+  facts: { id: string; text: string }[];
+};
+
+export type QuestionTopic = {
+  name: string;
+  suggestion: string;
+  evidence: string[];
+  count: number;
+  down: number;
+};
+
+export type QuestionTrends = {
+  total: number;
+  unassigned: number;
+  topics: QuestionTopic[];
+  facts: { id: string; text: string }[];
+};
+
 export type AiResult<T> =
   | { ok: true; data: T }
   | { ok: false; reason: AiFailure; detail?: string };
@@ -643,6 +670,20 @@ export const aiService = {
       method: "POST",
       body: JSON.stringify({ user_id: userId, image_data_url: imageDataUrl, question }),
       timeoutMs: DIAGNOSE_TIMEOUT_MS,
+    }),
+
+  /** 관리자용 회원 분석. LLM 한 번이라 오래 걸린다. */
+  memberInsight: (userId: string) =>
+    call<MemberInsight>(`/v1/admin/members/${encodeURIComponent(userId)}/insight`, {
+      method: "POST",
+      timeoutMs: 60_000,
+    }),
+
+  /** 관리자용 질문 트렌드. 질문 최대 200개를 LLM 한 번에 넘긴다. */
+  questionTrends: () =>
+    call<QuestionTrends>("/v1/admin/questions/trends", {
+      method: "POST",
+      timeoutMs: 90_000,
     }),
 
   /** 답변 하나에 up/down 평가와 사유를 남긴다. */
