@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 from datetime import datetime, timedelta
 
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import OPENAI_MODEL
@@ -14,7 +13,7 @@ from app.domain.kst import KST
 from app.domain.member_insight import Fact, facts_block, mask_pii
 from app.domain.question_trend import parse_topics
 from app.knowledge.embedder import get_client
-from app.models.farm import AskHistory
+from app.repo.admin import recent_questions
 
 WINDOW_DAYS = 30
 # ponytail: 최근 200개만 본다. 넘치면 주 단위로 나눠 묶고 주제 이름으로 합칠 것.
@@ -34,15 +33,7 @@ def analyze_questions(db: Session) -> dict:
     if not OPENAI_MODEL:
         raise RuntimeError("OPENAI_MODEL 이 없습니다. ai-service/.env 를 확인하세요.")
     since = datetime.now(KST) - timedelta(days=WINDOW_DAYS)
-    rows = db.scalars(
-        select(AskHistory)
-        .where(
-            AskHistory.created_at >= since,
-            AskHistory.message.is_distinct_from(BLOCKED_MESSAGE),
-        )
-        .order_by(AskHistory.created_at.desc())
-        .limit(MAX_QUESTIONS)
-    ).all()
+    rows = recent_questions(db, since, BLOCKED_MESSAGE, MAX_QUESTIONS)
     if not rows:
         return {"total": 0, "unassigned": 0, "topics": [], "facts": []}
 
