@@ -22,6 +22,7 @@ import inspect
 import pathlib
 
 from app.api import (
+    admin,
     alerts,
     ask,
     crop,
@@ -38,6 +39,7 @@ from app.api import (
 )
 
 API_MODULES = (
+    admin,
     alerts,
     ask,
     crop,

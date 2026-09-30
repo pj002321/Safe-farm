@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 from datetime import datetime, timedelta
 
-from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.api.diagnose import DIAGNOSE_MARK
@@ -14,6 +13,7 @@ from app.domain.briefing import WINDOW_DAYS, Metric, metrics_block, parse_briefi
 from app.domain.guardrail import BLOCKED_MESSAGE
 from app.domain.kst import KST
 from app.knowledge.embedder import get_client
+from app.repo.admin import count_windows
 
 # (id, 이름, 표, 시각 컬럼, 추가 조건). 전부 코드 상수라 f-string 으로 SQL 을 짜도 안전하다.
 METRICS = (
@@ -45,15 +45,7 @@ def collect_metrics(db: Session) -> list[Metric]:
     }
     metrics = []
     for mid, label, table, col, extra in METRICS:
-        row = db.execute(
-            text(
-                f"select count(*) filter (where {col} >= :cur), "
-                f"count(*) filter (where {col} < :cur) "
-                f"from {table} where {col} >= :prev {extra}"
-            ),
-            params,
-        ).one()
-        metrics.append(Metric(mid, label, row[0], row[1]))
+        metrics.append(Metric(mid, label, *count_windows(db, table, col, extra, params)))
     return metrics
 
 

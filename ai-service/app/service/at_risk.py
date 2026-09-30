@@ -6,7 +6,6 @@ import json
 from collections import defaultdict
 from datetime import datetime, timedelta
 
-from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from app.core.config import OPENAI_MODEL
@@ -14,7 +13,8 @@ from app.domain.at_risk import assess, parse_drafts
 from app.domain.kst import KST
 from app.domain.member_insight import mask_pii
 from app.knowledge.embedder import get_client
-from app.models.farm import Plot
+from app.repo import admin as repo
+from app.repo.plot import all_live_plots
 from app.service.sigungu_ref import sigungu_code_at
 from app.service.warn_region import (
     sigungu_warn_regions,
@@ -24,34 +24,6 @@ from app.service.warn_region import (
 
 WINDOW_DAYS = 14
 TOP_N = 10
-
-# 밭 등록도 활동으로 센다 — 그래서 밭이 있는 회원은 마지막 활동 시각이 항상 있다.
-LAST_ACTIVITY_SQL = text("""
-    select user_id, max(at) as last_at from (
-        select user_id, created_at as at from plots where deleted_at is null
-        union all
-        select user_id, created_at from ask_history
-        union all
-        select p.user_id, e.created_at from cultivation_events e
-            join cultivations c on c.id = e.cultivation_id
-            join plots p on p.id = c.plot_id
-        union all
-        select p.user_id, t.done_at from plot_tasks t
-            join plots p on p.id = t.plot_id where t.done
-    ) a group by user_id
-""")
-
-OPEN_TASKS_SQL = text("""
-    select p.user_id, count(*) as n from plot_tasks t join plots p on p.id = t.plot_id
-    where p.deleted_at is null and not t.done and t.expired_at is null
-      and t.generated_at < now() - interval '3 days'
-    group by p.user_id
-""")
-
-DOWNS_SQL = text("""
-    select user_id, count(*) as n from ask_history
-    where rating = 'down' and created_at >= :since group by user_id
-""")
 
 SYSTEM_PROMPT = (
     "너는 농업 서비스 운영자다. 아래 [회원]마다 운영자가 보낼 안내 메시지를 존댓말 두 문장 "
@@ -68,7 +40,7 @@ def collect_candidates(db: Session) -> tuple[list[dict], datetime | None]:
     )
 
     by_user: dict = defaultdict(lambda: {"plots": [], "warnings": []})
-    for p in db.scalars(select(Plot).where(Plot.deleted_at.is_(None))):
+    for p in all_live_plots(db):
         user = by_user[p.user_id]
         user["plots"].append(mask_pii(p.name or p.region_ko))
         # ponytail: 밭마다 좌표→시군구 판정. 밭이 수천 개로 늘면 plots 에 시군구 코드를 저장할 것.
@@ -77,9 +49,9 @@ def collect_candidates(db: Session) -> tuple[list[dict], datetime | None]:
             if wrn not in user["warnings"]:
                 user["warnings"].append(wrn)
 
-    last_at = dict(db.execute(LAST_ACTIVITY_SQL).all())
-    open_tasks = dict(db.execute(OPEN_TASKS_SQL).all())
-    downs = dict(db.execute(DOWNS_SQL, {"since": now - timedelta(days=WINDOW_DAYS)}).all())
+    last_at = repo.last_activity_by_user(db)
+    open_tasks = repo.open_tasks_by_user(db)
+    downs = repo.downs_by_user(db, now - timedelta(days=WINDOW_DAYS))
 
     candidates = []
     for user_id, user in by_user.items():
