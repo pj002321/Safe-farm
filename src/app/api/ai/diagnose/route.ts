@@ -14,7 +14,7 @@ import { requireConsent } from "@/shared/auth/consentGate";
  * - 브라우저가 ai-service 를 직접 부르지 못하게 하는 자리다 — `/api/ai/ask` 와 같은
  *   이유(서비스 토큰 노출 방지).
  * - `requireConsent()` 를 첫 줄에서 부른다. 로그인 여부만 확인할 뿐 저장은 하지
- *   않으므로 viewer.id 를 ai-service 에 넘기지 않는다(일회성, 이력 없음).
+ *   않으므로 한도 계산을 위해 viewer.id 를 넘긴다.
  * - 스트리밍하지 않는다 — 진단은 근거 조각 없이 한 번에 온다(`/ask` 와 다른 점).
  *
  * [Usage]
@@ -56,7 +56,18 @@ export async function POST(request: Request): Promise<Response> {
     return NextResponse.json({ error: image.error }, { status: 400 });
   }
 
+  let viwerId: string;
+  try {
+    viwerId = (await requireConsent()).viewer.id;
+  } catch {
+    return NextResponse.json(
+      { error: "로그인이 필요합니다." },
+      { status: 401},
+    );
+  }
+
   const result = await aiService.diagnoseImage(
+    viwerId,
     image.value,
     parseDiagnoseQuestion(payload.question),
   );

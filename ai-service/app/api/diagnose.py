@@ -7,14 +7,20 @@ python-multipart 의존성을 새로 안 들이고, 이 서비스의 다른 라�
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.orm import Session
 
-from app.core.config import OPENAI_MODEL
+from app.api.ask import DAILY_LIMIT_MESSAGE
+from app.core.config import DAILY_ASK_LIMIT, OPENAI_MODEL
+from app.core.db import get_db
 from app.core.security import require_service_token
 from app.domain.image_upload import validate_image_data_url
 from app.knowledge.embedder import get_client
 from app.schemas.diagnose import DiagnoseImageRequest, DiagnoseImageResponse
+from app.service.ask_history import complete_answer, record_question, today_ask_count
 
 router = APIRouter(prefix="/v1", tags=["diagnose"])
+
+DIAGNOSE_MARK = "사진 진단"
 
 SYSTEM_PROMPT = (
     "너는 작물 사진을 보고 상태를 진단하는 농업 컨설턴트다. 사진에서 보이는 병해충·"
@@ -26,13 +32,19 @@ DEFAULT_QUESTION = "이 작물 사진을 보고 상태를 진단해줘."
 
 
 @router.post("/diagnose/image", dependencies=[Depends(require_service_token)])
-def diagnose_image(request: DiagnoseImageRequest) -> DiagnoseImageResponse:
-    """사진 + 선택 질문으로 진단 문장을 한 번에 받는다. /ask 와 달리 근거 조각이
-    없어 스트리밍하지 않는다 — 중간에 보여줄 게 없다.
+def diagnose_image(request: DiagnoseImageRequest, db: Session = Depends(get_db)) -> DiagnoseImageResponse:
+    """사진 + 선택 질문으로 진단 문장을 한 번에 받는다. /ask 와 같은 일일 한도를 쓰며, 비전 호출이
+    텍스트보다 비싸서 한도 밖에 두면 요금이 이곳으로 센다.
     """
     error = validate_image_data_url(request.image_data_url)
     if error:
         raise HTTPException(status_code=400, detail=error)
+
+    if today_ask_count(db, request.user_id) >= DAILY_ASK_LIMIT:
+        return DiagnoseImageRequest(diagnosis=DAILY_LIMIT_MESSAGE)
+
+    question = request.question or DEFAULT_QUESTION
+    history = record_question(db, request.user_id, question, message=DIAGNOSE_MARK)
 
     response = get_client().chat.completions.create(
         model=OPENAI_MODEL,
@@ -41,10 +53,12 @@ def diagnose_image(request: DiagnoseImageRequest) -> DiagnoseImageResponse:
             {
                 "role": "user",
                 "content": [
-                    {"type": "text", "text": request.question or DEFAULT_QUESTION},
+                    {"type": "text", "text": question},
                     {"type": "image_url", "image_url": {"url": request.image_data_url}},
                 ],
             },
         ],
     )
-    return DiagnoseImageResponse(diagnosis=response.choices[0].message.content or "")
+    diagnosis = response.choices[0].message.content or ""
+    complete_answer(db, history, diagnosis)
+    return DiagnoseImageResponse(diagnosis=diagnosis)

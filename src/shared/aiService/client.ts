@@ -638,10 +638,10 @@ export const aiService = {
    * 작물 사진 한 장을 즉석에서 진단한다. 저장하지 않는 일회성 호출이라
    * `userId` 를 넘기지 않는다 — 이력도, 일일 한도도 없다(ai-service `api/diagnose.py`).
    */
-  diagnoseImage: (imageDataUrl: string, question: string | null) =>
+  diagnoseImage: (userId: string, imageDataUrl: string, question: string | null) =>
     call<DiagnoseImageResult>("/v1/diagnose/image", {
       method: "POST",
-      body: JSON.stringify({ image_data_url: imageDataUrl, question }),
+      body: JSON.stringify({ user_id: userId, image_data_url: imageDataUrl, question }),
       timeoutMs: DIAGNOSE_TIMEOUT_MS,
     }),
 
