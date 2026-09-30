@@ -11,6 +11,7 @@ import {
   PLOT_ONBOARDING_PATH,
   PlotStrip,
 } from "@/components/dashboard/PlotStrip";
+import { FieldBackdrop } from "@/components/dashboard/FieldBackdrop";
 import { DataFreshness } from "@/components/dashboard/StatusBanners";
 import { SAMPLE_FRESHNESS } from "@/components/dashboard/sample";
 import { TaskBoard } from "@/components/dashboard/TaskBoard";
@@ -137,6 +138,7 @@ export default async function DashboardPage({
 
   return (
     <main className="mx-auto flex max-w-6xl flex-col gap-7 px-6 py-6 sm:py-8">
+      <FieldBackdrop />
       {/* ── 최상단 고정 알림 ─────────────────────────
           특보만 여기 둔다. 생육 편차(중 우선순위)까지 위에 쌓으면 화면 맨 위를
           두 덩어리가 먹어, 정작 봐야 할 할 일이 접힌 곳 아래로 밀린다.
