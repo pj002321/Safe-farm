@@ -22,6 +22,7 @@ import inspect
 import pathlib
 
 from app.api import (
+    admin,
     alerts,
     ask,
     crop,
@@ -35,9 +36,11 @@ from app.api import (
     typhoon,
     variety,
     weather,
+    welcome,
 )
 
 API_MODULES = (
+    admin,
     alerts,
     ask,
     crop,
@@ -51,6 +54,7 @@ API_MODULES = (
     typhoon,
     variety,
     weather,
+    welcome,
 )
 
 #: 검사에서 빼는 이름. 표준 라이브러리·서드파티·데코레이터는 우리 책임이 아니다.

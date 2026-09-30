@@ -410,6 +410,122 @@ export type WeeklyBriefing = {
   metrics: { id: string; label: string; cur: number; prev: number }[];
 };
 
+export type BatchStatus = {
+  cron: {
+    jobname: string;
+    schedule: string;
+    runs: number;
+    failed: number;
+    last_run: string | null;
+  }[];
+  /** pg_net 이 몇 시간만 보관하는 실제 HTTP 결과. cron 의 succeeded 와 다를 수 있다. */
+  http: {
+    at: string;
+    job: string | null;
+    status: number | null;
+    ok: boolean;
+    detail: string | null;
+  }[];
+  feeds: {
+    key: string;
+    label: string;
+    loader: string;
+    latest: string | null;
+    maxAgeHours: number | null;
+    /** null 이면 주기가 없는 데이터라 판정하지 않는다. */
+    stale: boolean | null;
+  }[];
+  rerun: RerunState;
+};
+
+export type BatchDiagnosis = {
+  causes: InsightFinding[];
+  actions: InsightFinding[];
+  dropped: number;
+  facts: { id: string; text: string }[];
+};
+
+export type IndexStatus = {
+  sources: {
+    source: string;
+    documents: number;
+    chunks: number;
+    embedded: number;
+    latest: string | null;
+  }[];
+};
+
+export type SystemStatus = {
+  /** 집계 시작 시각. ai-service 가 재시작하면 그때부터다(메모리 기록). */
+  since: string;
+  restartedAt: string;
+  requests: {
+    count: number;
+    avgMs: number | null;
+    errors: number;
+    routes: { route: string; count: number; avgMs: number; p95Ms: number; errors: number }[];
+    hourly: number[];
+  };
+  outbound: { host: string; count: number; failed: number; hourly: number[] }[];
+  staleFeeds: string[];
+  errors: { at: string; severity: "error" | "warning"; source: string; message: string }[];
+};
+
+export type RerunJob = "tasks" | "alerts" | "weather";
+
+export type RerunState = {
+  job: RerunJob | null;
+  running: boolean;
+  startedAt: string | null;
+  finishedAt: string | null;
+  result: string | null;
+};
+
+export type RetrievalArm = {
+  key: "A" | "B" | "C";
+  label: string;
+  n: number;
+  recall: number;
+  mrr: number;
+  hint: number;
+};
+
+export type RetrievalEval = {
+  k: number;
+  arms: RetrievalArm[];
+  questions: { question: string; expected: string; A: number; B: number; C: number }[];
+};
+
+export type StageAccuracy = {
+  summary: {
+    n: number;
+    excluded: number;
+    mae: number | null;
+    bias: number | null;
+    byStage: { stage: string; n: number; mae: number }[];
+  };
+  history: {
+    kind: "STAGE_SET" | "STAGE_ADD";
+    occurredOn: string;
+    createdAt: string;
+    actual: string | null;
+    predicted: string | null;
+    error?: number | null;
+    note: string | null;
+  }[];
+};
+
+export type WelcomeBack =
+  | { show: false }
+  | {
+      show: true;
+      idleDays: number;
+      /** 마지막 활동 시각. "닫기"가 이 부재를 기억하는 키로 쓴다. */
+      since: string;
+      greeting: string;
+      items: InsightFinding[];
+    };
+
 export type AiResult<T> =
   | { ok: true; data: T }
   | { ok: false; reason: AiFailure; detail?: string };
@@ -705,6 +821,49 @@ export const aiService = {
       timeoutMs: 90_000,
     }),
 
+  /** 관리자 개요: 요청 지연·오류 로그·외부 API 호출량(ai-service 메모리 기록 + pg_net 실패). */
+  systemStatus: () => call<SystemStatus>("/v1/admin/system"),
+
+  /** 배치를 백그라운드로 다시 돌린다. 거절(진행 중·기간 오류)도 200 으로 온다. */
+  rerunBatch: (job: RerunJob, dateFrom: string | null, dateTo: string | null) =>
+    call<({ started: true } & RerunState) | { started: false; error: string }>(
+      "/v1/admin/batches/rerun",
+      {
+        method: "POST",
+        body: JSON.stringify({ job, date_from: dateFrom, date_to: dateTo }),
+      },
+    ),
+
+  /** 임베딩이 빠진 조각만 채운다(한 번에 최대 2,000개). */
+  embedMissing: () =>
+    call<{ embedded: number; remaining: number }>("/v1/admin/index/embed-missing", {
+      method: "POST",
+      timeoutMs: 120_000,
+    }),
+
+  /** 골든셋 검색 지표와 3군 비교. 문항마다 임베딩 1회. */
+  retrievalEval: () =>
+    call<RetrievalEval>("/v1/admin/retrieval/eval", {
+      method: "POST",
+      timeoutMs: 180_000,
+    }),
+
+  /** 사용자 단계 보정 대비 생육단계 예측 오차. */
+  stageAccuracy: () => call<StageAccuracy>("/v1/admin/accuracy", { timeoutMs: 30_000 }),
+
+  /** 관리자 배치 관리: cron 요약 · 실제 HTTP 결과 · 데이터 신선도. */
+  batchStatus: () => call<BatchStatus>("/v1/admin/batches"),
+
+  /** 배치 실패·지연을 LLM 이 진단한다. 근거 없는 항목은 ai-service 가 버린다. */
+  diagnoseBatches: () =>
+    call<BatchDiagnosis>("/v1/admin/batches/diagnose", {
+      method: "POST",
+      timeoutMs: 60_000,
+    }),
+
+  /** 관리자 품질 관리: 출처별 문서·조각·임베딩 수. */
+  indexStatus: () => call<IndexStatus>("/v1/admin/index"),
+
   /** 관리자용 주간 운영 브리핑. 숫자는 ai-service 가 세고 LLM 은 해석만 한다. */
   weeklyBriefing: () =>
     call<WeeklyBriefing>("/v1/admin/briefing", {
@@ -717,6 +876,16 @@ export const aiService = {
     call<AtRiskReport>("/v1/admin/members/at-risk", {
       method: "POST",
       timeoutMs: 90_000,
+    }),
+
+  /**
+   * 오랜만에 온 사용자에게 밭 걱정거리를 알리는 인사. LLM 을 부르므로 사용자별로
+   * 6시간 캐시한다 — 경로에 userId 가 들어 있어 캐시 키가 사람마다 갈린다.
+   */
+  welcomeBack: (userId: string) =>
+    call<WelcomeBack>(`/v1/welcome-back/${encodeURIComponent(userId)}`, {
+      timeoutMs: 30_000,
+      revalidateSec: 6 * 60 * 60,
     }),
 
   /** 답변 하나에 up/down 평가와 사유를 남긴다. */

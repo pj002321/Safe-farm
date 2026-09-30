@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { AdminPage } from "@/components/admin/AdminPage";
-import { AdminPlanned } from "@/components/admin/AdminPlanned";
 import { Card } from "@/components/shared/Card";
 import { getAdminOverview } from "@/features/admin/overviewStore";
 import { requireAdminOrRedirect } from "@/shared/auth/adminSession";
 import { BriefingPanel } from "./BriefingPanel";
+import { SystemStatusSection } from "./SystemStatusSection";
 
 /**
  * ---------------------------------------------
@@ -14,9 +14,8 @@ import { BriefingPanel } from "./BriefingPanel";
  * [Description]
  * - 관리자 셸의 첫 화면. 핵심 지표(V1-100)는 `features/admin/overviewStore.ts` 가
  *   센다. DAU 는 접속 기록 테이블이 없어 빠졌다.
- * - 시스템 상태(V1-101)·오류 로그(V1-102)는 아직 적재 경로가 없어 자리만 둔다.
- *   pg_cron 실행 이력(`cron.job_run_details`)은 PostgREST 에 노출되지 않는
- *   스키마라 조회 함수(RPC)를 따로 만들어야 한다.
+ * - 시스템 상태(V1-101)·오류 로그(V1-102)는 ai-service 가 읽어 준다
+ *   (`SystemStatusSection.tsx` 머리말).
  * - 레이아웃이 이미 관리자를 걸렀지만 여기서 한 번 더 부른다. 이 파일만 보고도
  *   무엇이 보호하는지 알 수 있어야 하고, 라우트 그룹이 바뀌어도 살아남는다.
  * - 접근 차단은 세 겹이다: proxy(UX 리다이렉트, `/dashboard` 로) → (admin)/layout.tsx
@@ -30,10 +29,6 @@ export const metadata: Metadata = { title: "관리자" };
 /** 지표는 매 요청 최신이어야 한다. */
 export const dynamic = "force-dynamic";
 
-const PLANNED = [
-  { code: "V1-101", nameKo: "시스템 상태 — 배치 · 외부 API 한도 · 평균 응답" },
-  { code: "V1-102", nameKo: "오류 로그 — 최근 24시간, 심각도순" },
-] as const;
 
 function Metric({ label, value }: { label: string; value: string | number }) {
   return (
@@ -98,7 +93,7 @@ export default async function AdminHome() {
         )}
       </Card>
 
-      <AdminPlanned items={PLANNED} />
+      <SystemStatusSection />
     </AdminPage>
   );
 }

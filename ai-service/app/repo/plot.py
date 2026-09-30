@@ -13,8 +13,9 @@
 from __future__ import annotations
 
 import uuid
+from datetime import datetime
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
 from app.models.farm import Plot
@@ -146,3 +147,29 @@ def all_live_plots(db: Session) -> list[Plot]:
         len(all_live_plots(db))  -> 12
     """
     return list(db.scalars(select(Plot).where(Plot.deleted_at.is_(None))))
+
+
+def last_activity_of_user(db: Session, user_id: uuid.UUID) -> datetime | None:
+    """
+    # summary
+    이 사용자가 **스스로 한** 마지막 일의 시각 — 밭 등록·질문·영농일지·할 일 완료.
+
+    화면을 연 것은 세지 않는다(접속 기록 표가 없다). 그래서 "오랜만에 왔다"는
+    "오랫동안 아무것도 안 했다"로 판정한다. 관리자 위험 회원 리포트
+    (`repo/admin.last_activity_by_user`)와 같은 기준이다 — 둘이 다르면 관리자가 본
+    "N일째 활동 없음"과 사용자가 받는 인사가 어긋난다.
+    """
+    return db.execute(text("""
+        select max(at) from (
+            select created_at as at from plots where user_id = :uid and deleted_at is null
+            union all
+            select created_at from ask_history where user_id = :uid
+            union all
+            select e.created_at from cultivation_events e
+                join cultivations c on c.id = e.cultivation_id
+                join plots p on p.id = c.plot_id where p.user_id = :uid
+            union all
+            select t.done_at from plot_tasks t
+                join plots p on p.id = t.plot_id where p.user_id = :uid and t.done
+        ) a
+    """), {"uid": user_id}).scalar()
