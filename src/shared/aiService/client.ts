@@ -515,6 +515,17 @@ export type StageAccuracy = {
   }[];
 };
 
+export type WelcomeBack =
+  | { show: false }
+  | {
+      show: true;
+      idleDays: number;
+      /** 마지막 활동 시각. "닫기"가 이 부재를 기억하는 키로 쓴다. */
+      since: string;
+      greeting: string;
+      items: InsightFinding[];
+    };
+
 export type AiResult<T> =
   | { ok: true; data: T }
   | { ok: false; reason: AiFailure; detail?: string };
@@ -865,6 +876,16 @@ export const aiService = {
     call<AtRiskReport>("/v1/admin/members/at-risk", {
       method: "POST",
       timeoutMs: 90_000,
+    }),
+
+  /**
+   * 오랜만에 온 사용자에게 밭 걱정거리를 알리는 인사. LLM 을 부르므로 사용자별로
+   * 6시간 캐시한다 — 경로에 userId 가 들어 있어 캐시 키가 사람마다 갈린다.
+   */
+  welcomeBack: (userId: string) =>
+    call<WelcomeBack>(`/v1/welcome-back/${encodeURIComponent(userId)}`, {
+      timeoutMs: 30_000,
+      revalidateSec: 6 * 60 * 60,
     }),
 
   /** 답변 하나에 up/down 평가와 사유를 남긴다. */

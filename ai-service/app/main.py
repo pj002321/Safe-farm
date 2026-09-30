@@ -34,6 +34,7 @@ from app.api import tasks as tasks_api
 from app.api import typhoon as typhoon_api
 from app.api import variety as variety_api
 from app.api import weather as weather_api
+from app.api import welcome as welcome_api
 from app.core import config, measure, ops_log
 
 app = FastAPI(
@@ -61,6 +62,7 @@ app.include_router(alerts_api.router)
 app.include_router(satellite_api.router)
 app.include_router(typhoon_api.router)
 app.include_router(admin_api.router)
+app.include_router(welcome_api.router)
 
 # before/after 비교용. `MEASURE=1` 이 아니면 아래 둘 다 통과만 한다(`core/measure`).
 measure.install()

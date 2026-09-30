@@ -15,6 +15,7 @@ import { DataFreshness } from "@/components/dashboard/StatusBanners";
 import { SAMPLE_FRESHNESS } from "@/components/dashboard/sample";
 import { TaskBoard } from "@/components/dashboard/TaskBoard";
 import { VegetationBannerSlot } from "@/components/dashboard/VegetationBannerSlot";
+import { WelcomeBackSlot } from "@/components/dashboard/WelcomeBackSlot";
 import { MapPinIcon } from "@/components/icons";
 import { ButtonLink } from "@/components/shared/Button";
 import { SectionHeading } from "@/components/shared/SectionHeading";
@@ -146,6 +147,12 @@ export default async function DashboardPage({
             requestedPlotId={requestedPlotId}
             userId={profile.id}
           />
+        </Suspense>
+      )}
+      {/* 오랜만에 온 사용자에게만 뜬다. LLM 을 부르므로 특보와 따로 기다린다. */}
+      {profile && (
+        <Suspense fallback={null}>
+          <WelcomeBackSlot userId={profile.id} />
         </Suspense>
       )}
 
