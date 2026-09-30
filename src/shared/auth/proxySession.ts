@@ -14,16 +14,15 @@ import { safeNextPath } from "./redirect";
  *   ①이 이 파일의 존재 이유다 — Server Component 는 쿠키를 쓸 수 없어서
  *   토큰을 새로 받아 내려보낼 수 있는 곳이 여기뿐이다. 지우면 사용자가
  *   무작위로 로그아웃된다.
- * - **공개 경로에서도 갱신은 한다.** Firebase 판은 공개 경로에서 조기 return
- *   했는데(세션 쿠키를 서버가 갱신하지 않아 그래도 됐다), Supabase 는 refresh
- *   token 을 돌리므로 랜딩만 보다가 토큰이 만료되면 그 다음 `/dashboard` 에서
- *   튕긴다. 그래서 갱신을 먼저 하고 분기는 그 뒤에 한다.
+ * - **공개 경로에서도 갱신은 한다.** Supabase 는 refresh token 을 돌리므로
+ *   랜딩만 보다가 토큰이 만료되면 그 다음 `/dashboard` 에서 튕긴다. 그래서
+ *   갱신을 먼저 하고 분기는 그 뒤에 한다.
  * - **모든 리다이렉트가 `redirectKeepingCookies` 를 탄다.**
  *   `NextResponse.redirect()` 는 새 응답이라 방금 심은 갱신 쿠키를 버린다.
  *   그대로 두면 브라우저가 옛 토큰을 계속 들고 있어 무한 루프가 난다.
- * - 역할 검사는 **UX 게이트일 뿐 보안 경계가 아니다.** matcher 가 바뀌거나 경로가
- *   옮겨지면 조용히 빠진다. 실제 차단은 `(admin)/layout.tsx` 의
- *   `requireAdminOrRedirect` 와, 데이터를 만지는 액션의 `requireAdmin()` 이 한다.
+ * - `/admin` 은 여기서 막지 않는다. 관리자는 Supabase 계정이 아니라
+ *   `ADMIN_PASSWORD` 세션으로 들어오고, 그 검사는 `(admin)/layout.tsx` 의
+ *   `requireAdminOrRedirect` 와 액션의 `requireAdmin()` 이 한다.
  *
  * [Usage]
  * ```ts
@@ -86,8 +85,12 @@ function isPublicPath(pathname: string): boolean {
   );
 }
 
-/** 관리자 전용 경로. 이 접두사 아래는 role=admin 만 통과한다. */
+/** 관리자 경로. 사용자 로그인 대신 관리자 세션(ADMIN_PASSWORD)으로 막는다. */
 const ADMIN_PREFIX = "/admin";
+
+function isAdminPath(pathname: string): boolean {
+  return pathname === ADMIN_PREFIX || pathname.startsWith(`${ADMIN_PREFIX}/`);
+}
 
 export async function updateSession(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
@@ -126,7 +129,9 @@ export async function updateSession(request: NextRequest) {
   }
 
   // ③ 공개 경로는 여기서 끝. 갱신된 쿠키를 실은 응답을 그대로 돌려준다.
-  if (isPublicPath(pathname)) return response;
+  //    관리자 경로도 사용자 로그인과 무관하다 — 관리자 세션 검사는
+  //    `(admin)/layout.tsx` 와 액션의 `requireAdmin()` 이 한다(adminSession.ts).
+  if (isPublicPath(pathname) || isAdminPath(pathname)) return response;
 
   // ④ 비로그인 사용자를 로그인으로. 원래 가려던 곳을 들려 보낸다.
   //    `next` 는 사용자가 주소창에서 고칠 수 있으므로 safeNextPath 로
@@ -134,14 +139,6 @@ export async function updateSession(request: NextRequest) {
   if (!signedIn) {
     const next = encodeURIComponent(safeNextPath(`${pathname}${search}`));
     return redirectKeepingCookies(request, "/login", response, `?next=${next}`);
-  }
-
-  // ⑤ 관리자가 아닌 사람이 관리자 경로에 들어오면 앱 홈으로.
-  if (
-    user.role !== "admin" &&
-    (pathname === ADMIN_PREFIX || pathname.startsWith(`${ADMIN_PREFIX}/`))
-  ) {
-    return redirectKeepingCookies(request, "/dashboard", response);
   }
 
   return response;

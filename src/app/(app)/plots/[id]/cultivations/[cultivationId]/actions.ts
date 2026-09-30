@@ -192,8 +192,13 @@ async function openContext(formData: FormData): Promise<{
   plotId: string;
   cultivationId: string;
   path: string;
-  /** 이미 읽은 밭. 날씨를 박을 때 좌표가 필요해 버리지 않고 같이 돌려준다. */
-  plot: { latitude: number; longitude: number };
+  /**
+   * 이미 읽은 밭. 날씨를 박을 때 좌표가 필요해 버리지 않고 같이 돌려준다.
+   *
+   * `nameKo` 도 같이 든다 — 재배를 끝낼 때 **그 시점 밭 이름**을 박아야 해서다
+   * (`markFailed`). 이미 읽어 온 행이라 조회가 늘지 않는다.
+   */
+  plot: { latitude: number; longitude: number; nameKo: string | null };
 }> {
   const { viewer } = await requireConsent();
 
@@ -391,13 +396,20 @@ export async function addStage(formData: FormData): Promise<void> {
  * 되돌린다 — 폼이 깨진 것과 사용자가 기타를 고른 것은 다른 일이다.
  */
 export async function failCultivation(formData: FormData): Promise<void> {
-  const { plotId, cultivationId, path } = await openContext(formData);
+  const { plotId, cultivationId, path, plot } = await openContext(formData);
 
   const reason = parseFailureReason(formData.get("reason"));
   if (reason === null) fail(path, "중단 사유를 골라 주세요.");
 
   try {
-    await markFailed(plotId, cultivationId, kstDateString(), reason);
+    // 밭 이름은 **끝내는 이 순간**에만 얻을 수 있는 값이다(`markHarvested` 와 같다).
+    await markFailed(
+      plotId,
+      cultivationId,
+      kstDateString(),
+      reason,
+      plot.nameKo,
+    );
   } catch {
     fail(path, "중단 처리에 실패했습니다. 새로 고친 뒤 다시 시도해 주세요.");
   }

@@ -14,8 +14,7 @@ import { publicConfig, serverConfig } from "./config";
  *   가므로 RLS 가 그대로 걸린다. Server Component·Route Handler·Server Action
  *   에서 쓰는 기본값이다.
  * - `getSupabaseAdmin()` — **RLS 를 우회**한다. 역할 부여처럼 사용자 권한으로는
- *   할 수 없는 일에만 쓴다. Firebase 의 Admin SDK 와 같은 급이고, 브라우저로
- *   나가는 순간 전 사용자 데이터가 열린다.
+ *   할 수 없는 일에만 쓴다. 브라우저로 나가는 순간 전 사용자 데이터가 열린다.
  * - **쿠키 어댑터는 `getAll`/`setAll` 만 쓴다.** 공식 문서가 `get`/`set`/`remove`
  *   개별 메서드에 대해 "Break in production", "Cause authentication loops" 라고
  *   못 박는다. 이름이 비슷해 헷갈리기 쉬우니 고치지 말 것.

@@ -1,19 +1,25 @@
 import type { Metadata } from "next";
-import { Badge } from "@/components/shared/Badge";
+import Link from "next/link";
+import { AdminPage } from "@/components/admin/AdminPage";
+import { AdminPlanned } from "@/components/admin/AdminPlanned";
 import { Card } from "@/components/shared/Card";
-import { listAccounts } from "@/shared/auth/accounts";
-import { requireAdminOrRedirect } from "@/shared/auth/session";
+import { getAdminOverview } from "@/features/admin/overviewStore";
+import { requireAdminOrRedirect } from "@/shared/auth/adminSession";
+import { BriefingPanel } from "./BriefingPanel";
 
 /**
  * ---------------------------------------------
- * [Feature]: 관리자 홈  →  /admin
+ * [Feature]: 관리자 개요  →  /admin   (V1-100~102)
  *
  * [Description]
- * - 지금 이 화면이 하는 일은 **권한 현황을 보여주는 것 하나**다. 여기서 권한을
- *   바꾸는 버튼을 두지 않았다 — 관리자 임명은 서비스 계정 키를 가진 사람만
- *   할 수 있어야 하고(`npm run role`), 화면에 두면 그 화면 자체가 권한 상승
- *   경로가 된다. 첫 관리자를 만들 방법도 없다(닭과 달걀).
- * - 접근 차단은 세 겹이다: proxy(UX 리다이렉트) → 이 레이아웃
+ * - 관리자 셸의 첫 화면. 핵심 지표(V1-100)는 `features/admin/overviewStore.ts` 가
+ *   센다. DAU 는 접속 기록 테이블이 없어 빠졌다.
+ * - 시스템 상태(V1-101)·오류 로그(V1-102)는 아직 적재 경로가 없어 자리만 둔다.
+ *   pg_cron 실행 이력(`cron.job_run_details`)은 PostgREST 에 노출되지 않는
+ *   스키마라 조회 함수(RPC)를 따로 만들어야 한다.
+ * - 레이아웃이 이미 관리자를 걸렀지만 여기서 한 번 더 부른다. 이 파일만 보고도
+ *   무엇이 보호하는지 알 수 있어야 하고, 라우트 그룹이 바뀌어도 살아남는다.
+ * - 접근 차단은 세 겹이다: proxy(UX 리다이렉트, `/dashboard` 로) → (admin)/layout.tsx
  *   (`requireAdminOrRedirect`) → 데이터를 만지는 액션(각자 `requireAdmin`).
  *   앞의 둘은 편의고, **보안 경계는 마지막 하나**다.
  * ---------------------------------------------
@@ -21,111 +27,78 @@ import { requireAdminOrRedirect } from "@/shared/auth/session";
 
 export const metadata: Metadata = { title: "관리자" };
 
-/** 사용자 목록은 매 요청 최신이어야 한다 — 권한을 바꾸고 새로고침하면 보여야 한다. */
+/** 지표는 매 요청 최신이어야 한다. */
 export const dynamic = "force-dynamic";
 
-export default async function AdminHome() {
-  const viewer = await requireAdminOrRedirect();
-  const accounts = await listAccounts();
+const PLANNED = [
+  { code: "V1-101", nameKo: "시스템 상태 — 배치 · 외부 API 한도 · 평균 응답" },
+  { code: "V1-102", nameKo: "오류 로그 — 최근 24시간, 심각도순" },
+] as const;
 
-  const admins = accounts.filter((account) => account.role === "admin");
+function Metric({ label, value }: { label: string; value: string | number }) {
+  return (
+    <Card title={label}>
+      <span className="font-mono text-2xl tabular-nums">{value}</span>
+    </Card>
+  );
+}
+
+export default async function AdminHome() {
+  await requireAdminOrRedirect();
+  const overview = await getAdminOverview();
+
+  const { total, done } = overview.tasksToday;
+  const doneRate = total === 0 ? "—" : `${Math.round((done / total) * 100)}%`;
+  const maxCrop = overview.topCrops[0]?.count ?? 0;
 
   return (
-    <main className="mx-auto flex max-w-5xl flex-col gap-6 p-8">
-      <div>
-        <h1 className="font-semibold text-2xl tracking-tight">관리자</h1>
-        <p className="mt-2 text-fg-muted text-sm">
-          전체 계정과 권한 현황입니다. 권한 변경은 서비스 계정 키가 있어야 하며{" "}
-          <code className="rounded-sm bg-surface-2 px-1.5 py-0.5 font-mono text-xs">
-            npm run role -- grant &lt;email&gt;
-          </code>{" "}
-          로 합니다.
-        </p>
-      </div>
-
+    <AdminPage
+      descriptionKo={
+        <>
+          오늘의 상태를 한 눈에 보는 자리입니다. 계정과 권한은{" "}
+          <Link className="underline hover:text-accent" href="/admin/members">
+            회원 관리
+          </Link>
+          에 있습니다.
+        </>
+      }
+      titleKo="개요"
+    >
       <div className="grid gap-3 sm:grid-cols-3">
-        <Card title="전체 계정">
-          <span className="font-mono text-2xl tabular-nums">
-            {accounts.length}
-          </span>
-        </Card>
-        <Card title="관리자">
-          <span className="font-mono text-2xl text-accent tabular-nums">
-            {admins.length}
-          </span>
-        </Card>
-        <Card title="현재 계정">
-          <span className="font-mono text-sm">{viewer.email ?? viewer.id}</span>
-        </Card>
+        <Metric label="가입자" value={overview.members} />
+        <Metric label="활성 밭" value={overview.activePlots} />
+        <Metric label="재배 중" value={overview.growing} />
+        <Metric label="오늘 할 일 완료율" value={doneRate} />
+        <Metric label="오늘 할 일" value={`${done} / ${total}`} />
+        <Metric label="AI 질문 (최근 7일)" value={overview.asksLast7Days} />
       </div>
 
-      {accounts.length === 0 ? (
-        // 빈 상태를 빈 표로 두지 않는다 — "아직 아무도 없는 것"과 "불러오기 실패"를
-        // 화면에서 구분할 수 있어야 한다.
-        <Card tone="default">
-          <p className="text-fg-muted">
-            아직 가입한 계정이 없습니다. 로그인 화면에서 첫 계정을 만들어
-            보세요.
-          </p>
-        </Card>
-      ) : (
-        <Card padding="sm" tone="elevated">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <caption className="sr-only">
-                가입한 계정과 권한, 로그인 수단 목록
-              </caption>
-              <thead>
-                <tr className="border-border border-b text-fg-muted text-xs">
-                  <th className="px-3 py-2 text-left font-medium" scope="col">
-                    이메일
-                  </th>
-                  <th className="px-3 py-2 text-left font-medium" scope="col">
-                    권한
-                  </th>
-                  <th className="px-3 py-2 text-left font-medium" scope="col">
-                    로그인 수단
-                  </th>
-                  <th className="px-3 py-2 text-left font-medium" scope="col">
-                    가입일
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {accounts.map((account) => (
-                  <tr
-                    className="border-border/60 border-b last:border-0"
-                    key={account.id}
-                  >
-                    <th
-                      className="px-3 py-2.5 text-left font-normal"
-                      scope="row"
-                    >
-                      {account.email ?? (
-                        <span className="text-fg-subtle">(이메일 없음)</span>
-                      )}
-                    </th>
-                    <td className="px-3 py-2.5">
-                      <Badge
-                        size="sm"
-                        tone={account.role === "admin" ? "accent" : "neutral"}
-                      >
-                        {account.role === "admin" ? "관리자" : "사용자"}
-                      </Badge>
-                    </td>
-                    <td className="px-3 py-2.5 font-mono text-fg-muted text-xs">
-                      {account.providers.join(", ") || "—"}
-                    </td>
-                    <td className="px-3 py-2.5 font-mono text-fg-muted text-xs tabular-nums">
-                      {account.createdAtKo}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </Card>
-      )}
-    </main>
+      <BriefingPanel />
+
+      <Card title="재배 중인 작물 상위 5">
+        {overview.topCrops.length === 0 ? (
+          <p className="text-fg-muted">재배 중인 작물이 없습니다.</p>
+        ) : (
+          <ul className="flex flex-col gap-2">
+            {overview.topCrops.map((crop) => (
+              <li className="flex items-center gap-3" key={crop.nameKo}>
+                <span className="w-20 shrink-0">{crop.nameKo}</span>
+                <span className="h-2 flex-1 rounded-full bg-surface-2">
+                  <span
+                    className="block h-full rounded-full bg-accent"
+                    style={{ width: `${(crop.count / maxCrop) * 100}%` }}
+                  />
+                </span>
+                <span className="w-8 text-right font-mono tabular-nums">
+                  {crop.count}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
+
+      <AdminPlanned items={PLANNED} />
+    </AdminPage>
   );
 }

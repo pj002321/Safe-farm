@@ -86,9 +86,13 @@ export function RecordTimeline({
         return (
           <li
             key={entry.id}
-            className="flex gap-3 rounded-lg border border-border bg-surface px-4 py-3"
+            className="flex flex-col gap-1 rounded-lg border border-border bg-surface px-4 py-3 sm:flex-row sm:gap-3"
           >
-            <time className="w-20 shrink-0 text-fg-muted text-xs">
+            {/* ⚠️ 좁은 화면에서는 날짜를 **위로 올린다.** 옆에 두면 `w-20`(80px)
+                이 본문에서 그만큼을 떼어 가는데, 360px 폰에서 남는 폭이 156px
+                이라 펼친 칸이 `강수 / 량 / mm` 로 쪼개졌다(2026-09-22 실측).
+                올리면 248px 이 되어 한 줄에 들어간다. */}
+            <time className="shrink-0 text-fg-muted text-xs sm:w-20">
               {entry.occurredOn.slice(5)}
             </time>
 

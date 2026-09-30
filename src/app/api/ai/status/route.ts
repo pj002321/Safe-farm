@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { aiService } from "@/shared/aiService/client";
-import { requireAdmin } from "@/shared/auth/session";
+import { requireAdmin } from "@/shared/auth/adminSession";
 
 /**
  * ---------------------------------------------

@@ -1,204 +1,139 @@
+<div align="center">
+
+<img src="./docs/thumbnail.png" alt="Safe Farm" width="100%" />
+
 # Safe Farm AI
 
-![Safe Farm — 위성이 보는 땅, AI가 읽는 내일](./docs/thumbnail.png)
+기상 · 위성 데이터로 농작물 위험을 먼저 알려 주고,<br/>
+내 밭의 생육단계에 맞춰 할 일을 정리해 주는 농업 서비스
 
-기후·위성 데이터로 농작물 위험을 감지하고 개선을 추천하는 LLM 서비스.
-**https://safe-farm-ai.web.app**
+[서비스 바로가기](https://safe-farm-production.up.railway.app)
 
-**Next.js 16** (App Router) · **Firebase** (Auth/Firestore/Hosting) · **Cloud Run** · **LangGraph** (JS + Python) · **three.js** · **Tailwind v4** · **Biome** · **Vitest**
+![Next.js](https://img.shields.io/badge/Next.js_16-000?logo=nextdotjs)
+![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white)
+![LangGraph](https://img.shields.io/badge/LangGraph-1C3C3C?logo=langchain&logoColor=white)
+![Supabase](https://img.shields.io/badge/Supabase-3FCF8E?logo=supabase&logoColor=white)
+![Railway](https://img.shields.io/badge/Railway-0B0D0E?logo=railway&logoColor=white)
 
-> ⚠️ 아래 문서 대부분은 **Supabase 시절에 쓰인 것이라 현재 구조와 맞지 않습니다.**
-> (RLS · `app_metadata` · `NEXT_PUBLIC_SUPABASE_*` · `supabase/migrations` 등)
-> 최신 규칙은 [AGENTS.md](./AGENTS.md) 를 보세요. 이 README 는 갱신 예정입니다.
+</div>
 
----
+<br/>
 
-## 시작하기
+## 소개
 
-```bash
-npm install
-cp .env .env.local     # 실제 키는 .env.local 에 (git 추적 안 됨)
-npm run dev            # http://localhost:3000
+서리 · 폭염 · 태풍 같은 기상 위험은 대개 피해가 난 뒤에야 알게 됩니다.
+Safe Farm AI는 기상청 관측 · 예보, 기상특보, 위성 영상을 매일 모아 **내 밭이 있는 지역**의 위험을 먼저 보여 주고,
+재배 중인 작물의 생육단계에 맞춰 **오늘 해야 할 일**을 정리합니다.
+
+## 주요 기능
+
+| 기능 | 설명 |
+|---|---|
+| **지역 위험 지도** | 시군구 단위로 적산온도 · 강수 · 강풍 · 기상특보 · 태풍 경로를 지도에 겹쳐 표시 |
+| **밭 · 재배 관리** | 실제 기온으로 생육단계(GDD)를 계산하고, 영농일지를 기록 · CSV로 내보내기 |
+| **오늘 할 일** | 매일 자정 모든 밭의 날씨와 생육단계를 판정해 작업 카드 생성 |
+| **AI 질의응답** | 농업 문서 검색(RAG)에 내 밭 정보를 더해 답변, 답변별 피드백 수집 |
+| **병해충 진단** | 증상 설명을 농촌진흥청 NCPMS 병해충 정보와 대조해 의심 병해충과 방제법 제시 |
+| **생육 리포트 · 작물 추천** | 재배 기간의 기상 · 생육 이력을 리포트로 정리하고, 지역 기후에 맞는 작물 · 품종 추천 |
+
+**사용 흐름** &nbsp; 가입 → 밭 등록 → 재배 시작(작물 · 파종일) → 대시보드에서 할 일 · 위험 확인 → 영농일지 기록 → 수확 후 리포트
+
+## 아키텍처
+
+```mermaid
+flowchart LR
+    U[브라우저] -->|HTTPS| WEB
+
+    subgraph Railway
+        WEB[Next.js 16<br/>화면 · 인증 · API]
+        AI[ai-service<br/>FastAPI · LangGraph<br/>비공개]
+        WEB -->|내부망 + 서비스 토큰| AI
+    end
+
+    subgraph Supabase[Supabase · 서울]
+        AUTH[Auth]
+        PG[(Postgres<br/>RLS · pgvector · pg_cron)]
+    end
+
+    U -->|조회 · CRUD, RLS 보호| PG
+    WEB --> AUTH
+    WEB --> PG
+    AI --> PG
+    AI --> LLM[OpenAI]
+    AI --> EXT[기상청 · Open-Meteo<br/>Sentinel Hub · NCPMS]
 ```
 
-`.env` 는 플레이스홀더 템플릿이고 git에 추적됩니다. Supabase 프로젝트를 만든 뒤
-**Northeast Asia (Seoul) / ap-northeast-2** 리전으로 잡고 값을 채우세요.
+- **AI 서버는 공개하지 않습니다.** LLM 비용이 드는 엔드포인트라 Railway 내부망으로만 받고, 서비스 토큰으로 한 번 더 인증합니다.
+- **권한은 DB가 판단합니다.** 브라우저가 DB에 직접 붙어도 RLS가 본인 데이터만 허용하고, 관리자 역할은 사용자가 고칠 수 없는 `app_metadata`에서 읽습니다.
+- **기능 단위로 나눴습니다.** 화면 · 로직 · 저장을 `plots`, `ask`, `weather` 같은 기능별로 묶고, 기능끼리는 서로 import하지 않습니다.
 
-| 명령 | 하는 일 |
+### AI 질의응답 그래프
+
+계획과 문서 검색을 동시에 시작해 첫 응답까지의 대기 시간을 줄였습니다.
+
+```mermaid
+flowchart LR
+    Q[질문] --> P[plan<br/>밭 정보가 필요한가]
+    Q --> R[retrieve<br/>pgvector 검색]
+    P -->|필요| T[run_tools<br/>밭 · 생육단계 · 날씨]
+    P -->|불필요| G
+    T --> G[generate<br/>답변 스트리밍]
+    R --> G
+```
+
+### 배치
+
+Supabase `pg_cron`이 Next.js `/api/cron/*`를 호출하면, Next.js가 내부망으로 ai-service에 넘겨 처리합니다.
+
+| 배치 | 주기 | 내용 |
+|---|---|---|
+| `tasks` | 매일 00:00 KST | 모든 밭의 오늘 할 일 카드 생성 |
+| `alerts` | 30분 | 기상청 기상특보 스냅샷 적재 |
+
+## 기술 스택
+
+| 영역 | 사용 기술 |
 |---|---|
-| `npm run dev` | 개발 서버 (3000) |
-| `npm run build` | 프로덕션 빌드 |
-| `npm test` | Vitest 1회 실행 |
-| `npm run test:watch` | 변경 감지 |
-| `npm run typecheck` | `tsc --noEmit` |
-| `npm run lint` | Biome (린트 + 포맷 검사) |
-| `npm run format` | Biome 포맷 적용 |
+| Frontend | Next.js 16 (App Router), React 19, TypeScript, Tailwind CSS v4, React Three Fiber, Kakao Map |
+| AI Server | Python 3.12, FastAPI, LangGraph, LangChain, OpenAI, SQLAlchemy |
+| Database | Supabase Postgres, pgvector, pg_cron, Row Level Security |
+| Data | 기상청 API, Open-Meteo, Sentinel Hub, NCPMS |
+| Infra | Railway (Docker), Supabase (서울 리전) |
+| Quality | Vitest, pytest, Biome, Ruff |
 
----
-
-## 폴더 구조
+## 프로젝트 구조
 
 ```
 src/
-├── app/                       라우팅 전용. 로직 금지
-│   ├── layout.tsx               <html>/<body>/globals.css
-│   ├── globals.css              디자인 토큰 전부 (3층 구조)
-│   ├── (app)/                   사용자 셸 — URL에 안 나타남
-│   ├── (admin)/                 관리자 셸 + 접근 차단
-│   └── login/                   로그인 (셸 없음)
-│
-├── proxy.ts                   세션 갱신. 지우면 안 됨 (아래 참조)
-│
-├── components/                화면 조각
-│   ├── shared/                  Button, Card — 도메인을 몰라야 함
-│   └── <feature>/               피쳐 전용. 도메인 의미는 여기서 입힘
-│
-├── features/<도메인>/          로직. 화면 아님
-│   ├── domain/                  순수 함수 + 테스트  ← 여기가 제품의 핵심
-│   ├── graph/                   LangGraph (있는 경우)
-│   ├── api.ts                   브라우저 → Supabase 직결
-│   ├── actions.ts               'use server' — 얇게
-│   ├── server/                  DAL (인가 + 소유권 검사)
-│   └── types.ts
-│
-└── shared/                    전 피쳐 공용
-    ├── supabase/                client(브라우저) / server(서버) / proxy(세션갱신)
-    ├── auth/session.ts          getViewer · requireUser · requireAdmin
-    ├── langgraph/               checkpointer 배선
-    └── utils/                   format.ts 등 — 파일명이 책임을 말해야 함
-
+  app/            라우팅 — (app) 사용자 화면, (admin) 관리자 화면, api
+  features/       기능별 로직 (plots, cultivations, ask, diagnose, report …)
+  shared/         Supabase · 인증 · AI 클라이언트 등 공용 코드
+ai-service/
+  app/            API, LangGraph 그래프, RAG, 생육 · 위험 판정
+  pipeline/       외부 데이터 수집 · 적재
 supabase/
-└── migrations/                *.sql — YYYYMMDDHHmmss_name.sql (UTC)
+  migrations/     스키마 · RLS 정책 · 배치 스케줄
 ```
 
-### 새 파일을 어디에 둘 것인가
+## 로컬 실행
 
-| 만들려는 것 | 위치 |
-|---|---|
-| 새 화면(URL) | `app/(app)/<경로>/page.tsx` — 조립만 |
-| 여러 곳에서 쓰는 버튼·입력·카드 | `components/shared/` |
-| 특정 기능 전용 화면 조각 | `components/<feature>/` |
-| 계산·판정·변환 로직 | `features/<도메인>/domain/` + **테스트 같이** |
-| 브라우저에서 하는 조회 | `features/<도메인>/api.ts` |
-| 비밀이 필요한 서버 작업 | `features/<도메인>/actions.ts` + `server/` |
-| DB 스키마 변경 | `npx supabase migration new <이름>` |
-| 여러 피쳐가 쓰는 헬퍼 | `shared/utils/<목적>.ts` |
+Node.js 22+, Python 3.10+, Supabase 프로젝트가 필요합니다.
 
-> **`utils.ts` 같은 파일은 만들지 않습니다.** 목적별로 쪼개세요 (`format.ts`, `date.ts`).
+```bash
+# 웹
+npm install
+cp .env .env.local    # 값 채우기
+npm run dev           # http://localhost:3000
 
----
-
-## 규칙
-
-### 의존성은 단방향
-
-```
-shared  →  features  →  app
+# AI 서버
+cd ai-service
+python -m pip install -e ".[dev]"
 ```
 
-features끼리 import 금지 — 조합은 `app/`에서 합니다. `components/shared/` 는 도메인
-타입을 import하지 않습니다(그래야 재사용됩니다).
+AI 서버 실행과 데이터 적재는 [ai-service/README.md](./ai-service/README.md)를 참고하세요.
 
-### MVC 아님
+## 더 보기
 
-`controllers/` `models/` `views/` 를 만들지 마세요. App Router는 계층이 아니라
-**실행 경계**(서버/클라이언트)로 나뉩니다. 기능 단위 수직 분할을 씁니다.
-
-### 통신 방법 4가지
-
-| 상황 | 방법 |
-|---|---|
-| 일반 조회·CRUD·실시간 | 브라우저 → Supabase 직결 (`features/*/api.ts`) |
-| 폼 제출·변경 중 비밀 필요 | Server Action (`features/*/actions.ts`) |
-| 스트리밍·웹훅·외부 호출 | Route Handler (`app/api/*/route.ts`) |
-| 정적 셸·레이아웃 | Server Component |
-
-### 스타일은 토큰만
-
-```tsx
-<div className="bg-surface text-fg border-border" />   // ✅
-<div className="bg-white text-gray-900" />              // ❌ 다크모드 깨짐
-```
-
-토큰은 `src/app/globals.css` 3층 구조입니다:
-원시 팔레트(`--leaf-*`) → 시맨틱(`--fg`, `--accent`) → `@theme inline` 유틸리티.
-컴포넌트는 **시맨틱만** 씁니다.
-
-### 테스트는 `domain/` 에만
-
-`domain/` 순수 함수와 LangGraph 조건부 엣지에만 씁니다. 컴포넌트 렌더링 테스트,
-스냅샷, Supabase 연동 목킹은 하지 않습니다 — 유지비가 가치를 넘습니다.
-
-> async Server Component는 Vitest 공식 미지원입니다. 그쪽 검증이 필요해지면
-> Playwright를 그때 추가합니다.
-
----
-
-## 보안 — 지키지 않으면 사고가 나는 것
-
-### `src/proxy.ts` 를 지우지 마세요
-
-Server Component는 쿠키를 쓸 수 없어 **여기서만** 토큰을 갱신할 수 있습니다.
-없으면 사용자가 무작위로 로그아웃됩니다.
-
-`shared/supabase/proxy.ts` 의 `setAll` **두 번째 인자 `headers`** 를 응답에 얹는
-루프도 지우면 안 됩니다 — 빠뜨리면 인증된 응답이 CDN에 캐시되어 **세션이 샙니다.**
-(Vercel 공식 템플릿이 이걸 누락하고 있습니다.)
-
-### 역할은 `app_metadata`
-
-```ts
-claims.app_metadata.role   // ✅ service_role 로만 변경 가능
-claims.user_metadata.role  // ❌ 사용자가 직접 고칠 수 있음
-```
-
-### Server Action = 공개 엔드포인트
-
-`'use server'` 파일의 **export 하나하나가 직접 POST 가능한 공개 엔드포인트**입니다.
-UI에 폼을 안 그려도 호출됩니다.
-
-- 헬퍼·타입·상수를 같은 파일에서 export하지 마세요
-- 모든 액션 첫 줄에서 `requireUser()` / `requireAdmin()` 을 다시 부르세요
-- 페이지·레이아웃의 권한 검사는 **액션까지 이어지지 않습니다**
-- 삭제·수정은 `.eq("owner_id", user.id)` 로 소유권을 함께 거세요 (IDOR 방어)
-
-### 마이그레이션은 3종 세트
-
-```sql
-grant ... on <table> to authenticated;
-alter table <table> enable row level security;
-create policy ... on <table> ...;
-```
-
-SQL 에디터·마이그레이션·MCP로 만든 테이블은 **RLS가 자동으로 켜지지 않습니다.**
-로컬(`supabase start`)은 anon 자동 노출이 기본이라 **로컬만 되고 프로덕션에서
-죽는** 일이 흔합니다.
-
-> PostgREST가 42501 에러와 함께 주는 `GRANT ... TO anon` 힌트를 그대로 따르지
-> 마세요. RLS가 꺼진 테이블에 실행하면 그 즉시 전체 공개됩니다.
-
-### 환경변수 경계
-
-| 변수 | 브라우저 |
-|---|---|
-| `NEXT_PUBLIC_SUPABASE_URL` | ✅ |
-| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | ✅ RLS가 방어선 |
-| `SUPABASE_SECRET_KEY` | ❌ RLS 우회 |
-| `POSTGRES_URL` | ❌ postgres 특권 롤 |
-
-`NEXT_PUBLIC_` 접두가 붙은 값은 **빌드 시 번들에 문자열로 박혀** 전 세계에
-공개됩니다. 변수 이름이 아니라 **접두만** 판단 기준입니다.
-
----
-
-## 브랜치 전략
-
-```
-feature/* → development → production
-```
-
-- `feature/*` 는 `development` 기준으로 생성
-- `development` / `production` 에 직접 커밋 금지
-- `development` 검증 후 `production` 으로 승격
-
-상세와 에이전트용 규칙은 [AGENTS.md](./AGENTS.md) 참조.
+- [개발 규칙](./AGENTS.md) — 브랜치 전략, 아키텍처 · 보안 규칙, 커밋 컨벤션
+- [ai-service 개발 가이드](./ai-service/README.md) — 설치, 테스트, 데이터 적재

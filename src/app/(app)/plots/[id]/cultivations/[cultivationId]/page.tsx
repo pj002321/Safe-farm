@@ -222,7 +222,7 @@ export default async function Page({
             plotId={plot.id}
             stageNames={stageNames}
           />
-          <DiaryExportButton />
+          <DiaryExportButton cultivationId={card.id} />
         </div>
       </Card>
 

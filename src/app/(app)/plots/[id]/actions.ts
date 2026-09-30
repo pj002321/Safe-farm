@@ -56,16 +56,44 @@ function readIds(formData: FormData): {
   };
 }
 
-/** 재배 한 건을 수확 완료로 표시한다. */
+/**
+ * 폼에서 온 수확량. **빈 칸은 `null`** 이고 0 으로 바꾸지 않는다 — `0kg 흉작` 과
+ * `안 적음` 은 다른 값이라 연도별 합계가 그 둘을 갈라 읽는다.
+ *
+ * 숫자로 안 읽히거나 음수면 `null` 이다. 칸이 `type="number" min="0"` 이라 브라우저가
+ * 이미 막고, 여기까지 오는 그런 값은 폼을 거치지 않은 요청이다 — 되돌려 보내 봐야
+ * 읽을 사람이 없다.
+ */
+function toYieldKg(value: FormDataEntryValue | null): number | null {
+  const raw = typeof value === "string" ? value.trim() : "";
+  if (!raw) return null;
+
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+}
+
+/** 재배 한 건을 수확 완료로 표시한다. 수확량을 같이 적었으면 그것도 넣는다. */
 export async function harvestCultivation(formData: FormData): Promise<void> {
-  await requireConsent();
+  const { viewer } = await requireConsent();
 
   const plotId = String(formData.get("plotId") ?? "");
   const cultivationId = String(formData.get("cultivationId") ?? "");
   if (!plotId || !cultivationId) redirect("/plots");
 
+  // 밭을 먼저 읽는 이유가 둘이다 — 소유 확인(이 파일의 다른 액션들과 같은 규칙),
+  // 그리고 **끝낸 시점의 밭 이름**을 박기 위해서다. 나중에 이름을 고쳐도 지난
+  // 기록이 따라 바뀌지 않게 하는 값이라, 끝내는 이 순간에만 얻을 수 있다.
+  const plot = await getPlotDetail(viewer.id, plotId);
+  if (!plot) fail(plotId, "밭을 찾지 못했습니다.");
+
   try {
-    await markHarvested(plotId, cultivationId, kstDateString());
+    await markHarvested(
+      plotId,
+      cultivationId,
+      kstDateString(),
+      toYieldKg(formData.get("yieldKg")),
+      plot.nameKo,
+    );
   } catch {
     fail(
       plotId,

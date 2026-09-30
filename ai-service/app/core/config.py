@@ -66,16 +66,9 @@ KMA_API_KEY = os.getenv("KMA_API_KEY")
 SH_CLIENT_ID = os.getenv("SH_CLIENT_ID")
 SH_CLIENT_SECRET = os.getenv("SH_CLIENT_SECRET")
 
-# 사용자당 하루 질문 수 상한. 지금은 등급 없이 고정값 — 결제 체계가 들어오면
-# 등급별 값으로 바뀔 자리다.
-#
-# 화면에 찍히는 "남은 횟수"도 이 값에서 나온다. 웹에 상수를 또 두지 않는다 —
-# 두 벌이 되면 한쪽만 바뀌어 "3회 남음"이라 해놓고 막히는 일이 생긴다.
-#
-# ponytail: 무료 체험 기간 동안 임시로 사실상 무제한(1000)으로 풀어둠. 한도를
-# 다시 걸 때는 이 값을 원래대로(예: 10) 되돌리면 됨 — 차단 로직(app/api/ask.py)은
-# 그대로 있다.
-DAILY_ASK_LIMIT = _env_int("DAILY_ASK_LIMIT", 1000)
+# 사용자당 하루 AI 사용(질문 + 사진 진단) 상한. 결제 체계가 들어오면 등급별 값으로 바뀔 자리다.
+# 화면에 찍히는 "남은 횟수"도 이 값에서 나온다. 웹에 상수를 또 두지 않는다.
+DAILY_ASK_LIMIT = _env_int("DAILY_ASK_LIMIT", 20)
 
 # --- 임베딩 ---
 # 아래 넷은 일부러 env 로 빼지 않는다. 바꾸면 쌓인 벡터가 무의미해지고(공간이 갈린다),

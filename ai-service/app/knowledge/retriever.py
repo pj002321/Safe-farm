@@ -97,7 +97,9 @@ TOP_K = 5
 
 
 def find_matches(
-    db: Session, question: str, fallback_crops: Collection[str] | None = None
+    db: Session, question: str,
+    fallback_crops: Collection[str] | None = None,
+    exclude_sources: Collection[str] = (),
 ) -> list[tuple[Chunk, float]]:
     """
     # summary
@@ -124,6 +126,7 @@ def find_matches(
     candidates = retrieve_with_score(db, question, CANDIDATES, crops=crops)
     # 축산 문서는 이 서비스가 다루지 않는다 — 자세한 사정은 domain/livestock.py 머리말
     candidates = [m for m in candidates if not is_livestock(m[0].document.title)]
+    candidates = [m for m in candidates if m[0].document.source not in exclude_sources]
     picked = diversify(
         candidates, key=lambda m: m[0].document.source, per_key=PER_SOURCE, limit=TOP_K
     )

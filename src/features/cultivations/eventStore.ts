@@ -70,6 +70,78 @@ function toKind(raw: string): EventKind | null {
 }
 
 /**
+ * DB 행 → 타임라인 줄. **모르는 `kind` 는 버린다**(null).
+ *
+ * ⚠️ 한 건짜리 조회와 `in` 절 조회가 **같은 함수를 쓴다.** 두 벌로 적으면 칸을 하나
+ *    더할 때 한쪽만 고쳐져 화면과 파일이 다른 값을 든다.
+ */
+function toTimelineRow(row: EventRow): TimelineEventRow | null {
+  const kind = toKind(row.kind);
+  if (kind === null) return null;
+  return {
+    id: row.id,
+    kind,
+    occurredOn: row.occurred_on,
+    body: row.body,
+    stageOrder: row.stage_order,
+    forecastOn: row.forecast_on,
+    createdAt: row.created_at,
+    workKind: row.work_kind,
+    taskNote: row.task_note,
+    adviceText: row.advice_text,
+    weather: {
+      skyKo: row.sky_ko,
+      tempMaxC: row.temp_max_c,
+      tempMinC: row.temp_min_c,
+      rainfallMm: row.rainfall_mm,
+      humidityPct: row.humidity_pct,
+      windMs: row.wind_ms,
+      windDirDeg: row.wind_dir_deg,
+      sunriseAt: row.sunrise_at,
+      sunsetAt: row.sunset_at,
+    },
+  };
+}
+
+/**
+ * 재배 **여러 건**의 기록을 한 번에. 재배 id → 그 재배의 줄 목록.
+ *
+ * ⚠️ `listCultivationEvents` 를 반복해 부르면 **N+1** 이 된다. 내보내기는 한 해치를
+ *    통째로 뽑으므로 재배가 서른이면 왕복이 서른 번이다.
+ * ⚠️ 기존 한 건짜리 함수를 고치지 않는다 — 재배 상세가 계속 그쪽을 쓴다.
+ *
+ * ⚠️ **주인 확인을 여기서 하지 않는다.** 부르는 쪽이 이미 자기 소유로 좁힌 id 만
+ *    넘긴다(`app/api/me/diary-csv`). 그래도 RLS 가 `cultivations → plots` 를 타고
+ *    한 번 더 거른다 — 남의 id 를 섞어 넣어도 빈 줄이 온다.
+ */
+export async function listEventsByCultivations(
+  cultivationIds: readonly string[],
+): Promise<Map<string, TimelineEventRow[]>> {
+  const byId = new Map<string, TimelineEventRow[]>();
+  if (cultivationIds.length === 0) return byId;
+
+  const supabase = await getSupabaseServer();
+  const { data, error } = await supabase
+    .from("cultivation_events")
+    // ⚠ `cultivation_id` 를 같이 받는다. 어느 재배 줄인지 갈라 담아야 한다
+    .select(`cultivation_id, ${EVENT_SELECT}`)
+    .in("cultivation_id", [...cultivationIds])
+    .is("deleted_at", null)
+    .order("occurred_on", { ascending: false });
+
+  if (error) throw new Error(error.message);
+
+  for (const raw of (data ?? []) as (EventRow & { cultivation_id: string })[]) {
+    const row = toTimelineRow(raw);
+    if (row === null) continue;
+    const bucket = byId.get(raw.cultivation_id);
+    if (bucket) bucket.push(row);
+    else byId.set(raw.cultivation_id, [row]);
+  }
+  return byId;
+}
+
+/**
  * 재배 한 건의 기록 전부. 최신순 정렬은 `buildTimeline` 이 다시 한다.
  *
  * 여기서 정렬을 맞춰 두는 이유는 건수가 많아졌을 때 인덱스
@@ -90,33 +162,8 @@ export async function listCultivationEvents(
   if (error) throw new Error(error.message);
 
   return ((data ?? []) as EventRow[]).flatMap((row) => {
-    const kind = toKind(row.kind);
-    if (kind === null) return [];
-    return [
-      {
-        id: row.id,
-        kind,
-        occurredOn: row.occurred_on,
-        body: row.body,
-        stageOrder: row.stage_order,
-        forecastOn: row.forecast_on,
-        createdAt: row.created_at,
-        workKind: row.work_kind,
-        taskNote: row.task_note,
-        adviceText: row.advice_text,
-        weather: {
-          skyKo: row.sky_ko,
-          tempMaxC: row.temp_max_c,
-          tempMinC: row.temp_min_c,
-          rainfallMm: row.rainfall_mm,
-          humidityPct: row.humidity_pct,
-          windMs: row.wind_ms,
-          windDirDeg: row.wind_dir_deg,
-          sunriseAt: row.sunrise_at,
-          sunsetAt: row.sunset_at,
-        },
-      },
-    ];
+    const mapped = toTimelineRow(row);
+    return mapped === null ? [] : [mapped];
   });
 }
 

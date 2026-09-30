@@ -146,6 +146,11 @@ export function cardTitle(card: CultivationCard): string {
  * 수확·실패한 건을 아래로 내리는 이유는 "지금 뭘 해야 하나"가 이 화면의 목적이라
  * 끝난 작물이 위에 있으면 답을 흐리기 때문이다. 파종일을 모르는 건은 등록 순으로
  * 뒤에 붙인다.
+ *
+ * ⚠️ **2026-09-22 부터 밭 화면은 끝난 건을 이 정렬로 만나지 않는다.** 그쪽이
+ *    `HARVESTED`·`FAILED` 를 `지난 재배 N건 보기` 접기로 갈라 냈다
+ *    (`app/(app)/plots/[id]/page.tsx`). 그래도 두 순위를 남겨 둔다 — **접기
+ *    안에서도 같은 차례로 서야 하고**, 이 함수를 쓰는 다른 화면이 생길 수 있다.
  */
 const STATUS_RANK: Record<CultivationStatus, number> = {
   GROWING: 0,
