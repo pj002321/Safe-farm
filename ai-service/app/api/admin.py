@@ -9,12 +9,18 @@ from sqlalchemy.orm import Session
 
 from app.core.db import get_db
 from app.core.security import require_service_token
+from app.service.at_risk import at_risk_report
 from app.service.member_insight import analyze_member
 from app.service.question_trend import analyze_questions
 
 router = APIRouter(
     prefix="/v1/admin", tags=["admin"], dependencies=[Depends(require_service_token)]
 )
+
+
+@router.post("/members/at-risk")
+def members_at_risk(db: Session = Depends(get_db)) -> dict:
+    return at_risk_report(db)
 
 
 @router.post("/members/{user_id}/insight")

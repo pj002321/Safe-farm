@@ -5,6 +5,7 @@ import { Badge } from "@/components/shared/Badge";
 import { Card } from "@/components/shared/Card";
 import { listAccounts } from "@/shared/auth/accounts";
 import { requireAdminOrRedirect } from "@/shared/auth/adminSession";
+import { AtRiskPanel } from "./AtRiskPanel";
 
 /**
  * ---------------------------------------------
@@ -60,6 +61,8 @@ export default async function AdminMembers() {
           </span>
         </Card>
       </div>
+
+      <AtRiskPanel />
 
       {accounts.length === 0 ? (
         // 빈 상태를 빈 표로 두지 않는다 — "아직 아무도 없는 것"과 "불러오기 실패"를

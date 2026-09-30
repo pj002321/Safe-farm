@@ -391,6 +391,18 @@ export type QuestionTrends = {
   facts: { id: string; text: string }[];
 };
 
+export type AtRiskMember = {
+  userId: string;
+  score: number;
+  reasons: string[];
+  plots: string[];
+  warnings: string[];
+  /** 가드레일을 통과한 안내문 초안. 못 통과했거나 LLM 이 빠뜨리면 null. */
+  draft: string | null;
+};
+
+export type AtRiskReport = { asOf: string | null; members: AtRiskMember[] };
+
 export type AiResult<T> =
   | { ok: true; data: T }
   | { ok: false; reason: AiFailure; detail?: string };
@@ -682,6 +694,13 @@ export const aiService = {
   /** 관리자용 질문 트렌드. 질문 최대 200개를 LLM 한 번에 넘긴다. */
   questionTrends: () =>
     call<QuestionTrends>("/v1/admin/questions/trends", {
+      method: "POST",
+      timeoutMs: 90_000,
+    }),
+
+  /** 관리자용 주간 위험 회원. 규칙 점수 상위 10명에 LLM 안내문 초안을 붙인다. */
+  atRiskMembers: () =>
+    call<AtRiskReport>("/v1/admin/members/at-risk", {
       method: "POST",
       timeoutMs: 90_000,
     }),
