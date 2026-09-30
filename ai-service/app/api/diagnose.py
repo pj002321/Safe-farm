@@ -46,6 +46,8 @@ SYSTEM_PROMPT = (
 DEFAULT_QUESTION = "이 작물 사진을 보고 상태를 진단해줘."
 NO_CONTEXT = "(찾은 자료 없음)"
 DIAGNOSE_MARK = "사진 진단"
+DIAGNOSE_EXCLUDE = ("variety_summary", "variety_body")
+
 
 def _image_message(text: str, image_data_url: str) -> dict:
     return {
@@ -83,7 +85,9 @@ def diagnose_image(
     ).choices[0].message.content or ""
 
     # 사용자 질문을 앞에 둔다 — 작물 이름을 직접 적었으면 그게 사진 추측보다 정확하다.
-    matches = find_matches(db, f"{request.question or ''} {observed}".strip())
+    matches = find_matches(
+        db, f"{request.question or ''} {observed}".strip(), exclude_sources=DIAGNOSE_EXCLUDE
+    )
     context = build_context(matches) if matches else NO_CONTEXT
 
     diagnosis = client.chat.completions.create(
