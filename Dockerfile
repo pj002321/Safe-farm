@@ -3,16 +3,14 @@
 # ─────────────────────────────────────────────────────────────
 # Safe Farm AI — Cloud Run 실행 이미지
 #
-# 왜 정적 배포(firebase deploy 만)가 아니라 컨테이너인가:
-#   이 앱은 서버가 있어야 돌아간다. 세션 쿠키를 굽는 Route Handler
-#   (/api/auth/session), 요청 쿠키를 읽는 Server Component, 경로를 막는
-#   proxy.ts, 그리고 서비스 계정 권한이 필요한 Admin SDK 가 전부 서버 쪽이다.
-#   `output: "export"` 로 빌드하면 /login 에서 바로 깨진다.
+# 왜 정적 배포가 아니라 컨테이너인가:
+#   이 앱은 서버가 있어야 돌아간다. 세션 쿠키를 갱신하고 경로를 막는
+#   proxy.ts, 요청 쿠키를 읽는 Server Component, RLS 를 우회하는 service
+#   role 클라이언트가 전부 서버 쪽이다. `output: "export"` 로 빌드하면
+#   /login 에서 바로 깨진다.
 #
-# 서비스 계정 키는 이 이미지에 **들어가지 않는다**(.dockerignore 가 막는다).
-#   Cloud Run 에서는 런타임 서비스 계정의 ADC 를 admin.ts 가 자동으로 쓴다.
-#   admin.ts 는 secrets/firebase-adminsdk.json 이 없으면 applicationDefault()
-#   로 넘어가게 이미 돼 있다 — 로컬은 파일, 배포는 ADC.
+# 비밀값은 이 이미지에 **들어가지 않는다**(.dockerignore 가 막는다).
+#   SUPABASE_SERVICE_ROLE 등은 배포 환경변수로만 받는다.
 # ─────────────────────────────────────────────────────────────
 
 # ── 1) 의존성 ────────────────────────────────────────────────

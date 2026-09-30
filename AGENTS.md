@@ -1,8 +1,8 @@
 # Safe Farm AI
 
-기상 · 위성 데이터로 농작물 위험을 감지하고 LLM으로 대응을 추천하는 서비스.
-웹은 Next.js 16(App Router) + Supabase(Auth · Postgres · RLS), AI 코어(LangGraph · 임베딩 ·
-벡터 검색)는 `ai-service/`에 Python(FastAPI)으로 둔다. ai-service 규칙은 `ai-service/AGENTS.md`.
+기후,위성 데이터 기반으로 하는 농작물 위험 감지 및 개선 LLM 추천 서비스
+Next.js 16(App Router) + Supabase(Auth · Postgres · pgvector).
+AI 코어(LangGraph · 임베딩 · 벡터 검색)는 `ai-service/` 에 Python 으로 둔다.
 
 ## 브랜치 전략
 
@@ -17,11 +17,28 @@ feature/* → development → production
 
 ## 인프라
 
-| 구성 | 위치 |
-|---|---|
-| 웹 (Next.js) | Railway, 루트 `Dockerfile`, 공개 도메인 |
-| AI 서버 (FastAPI) | Railway, `ai-service/Dockerfile`, **내부망 전용** |
-| DB · Auth · 배치 | Supabase 서울 리전, 스키마는 `supabase/migrations/` |
+2. **승격**
+   - 작업이 끝나면 `feature/작업명`을 `development`에 머지한다.
+   - 머지 후 해당 feature 브랜치는 삭제 여부를 확인한다.
+
+3. **배포**
+   - `development` 머지 → 개발 환경 반영.
+   - 개발 환경 검증 완료 후 `development`를 `production`으로 머지 → 운영 배포.
+
+4. **직접 커밋 금지**
+   - `development`와 `production`에 직접 커밋하지 않는다. 항상 feature 브랜치를 거친다.
+
+### 인프라
+
+DB 는 Supabase(서울) 하나, 앱(Next · ai-service)은 Railway 에 둔다.
+Next ↔ ai-service 통신 규약은 `docs/architecture/service-communication.md`.
+
+- **ai-service 에 공개 도메인을 붙이지 않는다.** LLM 을 호출하므로 열면 남이 우리
+  OpenAI 요금을 쓴다. 브라우저는 ai-service 를 직접 부르지 않고 항상 Next 서버를 거친다.
+- `.env` 는 키 **이름**만 공유하는 템플릿이라 git 에 올라간다. **값을 넣지 않는다.**
+  실제 값은 로컬 `.env.local`(gitignore), 배포는 Railway 환경변수에만 둔다.
+- service role 키(`DB_SERVICE_ROLE`)는 RLS 를 통째로 우회한다. 이 키 하나가 DB 전체
+  권한이다.
 
 - `SUPABASE_SERVICE_ROLE` 키와 `AI_SERVICE_TOKEN`은 **저장소에 넣지 않는다.** 로컬은
   `.env.local`, 배포는 Railway 환경변수에만 둔다. 추적되는 `.env`에는 키 이름만 적는다.
@@ -33,22 +50,42 @@ feature/* → development → production
 
 - `src/app/`은 **라우팅 전용**. 로직은 `src/features/<도메인>/`에 둔다. 수직 분할.
 - 의존성은 단방향: `shared → features → app`. features끼리 import 금지.
-- Supabase 클라이언트는 `src/shared/supabase/` 한 곳에서만 만든다.
-  - `client.ts` — 브라우저용. 로그인 · 가입에만 쓰고 **권한 판단에 쓰지 않는다.**
-  - `server.ts` — `getSupabaseServer()`는 사용자 세션으로 질의해 RLS가 걸린다(기본값).
-    `getSupabaseAdmin()`은 **RLS를 우회**한다. 사용자 권한으로 못 하는 일에만 쓴다.
-    `server-only`라 클라이언트 번들에 섞이면 빌드가 깨진다 — 이 import를 지우지 말 것.
-- 서버의 인가 판단은 `getUser()`로 한다. `getSession()`은 쿠키를 그대로 믿으므로 근거가 못 된다.
-- **`src/proxy.ts`를 지우지 말 것.** Supabase 토큰 갱신과 경로 분기를 맡는다. 지우면
-  사용자가 무작위로 로그아웃된다. **`config.matcher`의 정적 확장자 목록도 지우지 말 것.**
-  빠뜨리면 `public/` 에셋이 `/login`으로 리다이렉트되어 `Unexpected token '<'`로 죽는다.
-- 역할은 JWT의 **`app_metadata.role`**에서 읽는다(`shared/auth/session.ts`). 사용자가 쓸 수
-  있는 `profiles` 컬럼은 권한 판단에 쓰지 않는다. 부여 · 회수는 `npm run role`로만 한다.
-- `'use server'` 파일은 **export 하나가 곧 공개 POST 엔드포인트**다. 헬퍼를 같이 export하지
-  말고, 모든 액션 첫 줄에서 `requireUser()` / `requireAdmin()`을 부른다. 페이지 · 레이아웃의
-  검사는 액션에 미치지 않는다. Route Handler(`src/app/api/`)도 같은 규칙이다.
-- **스키마와 RLS 정책은 한 마이그레이션으로 바꾼다.** 테이블을 추가하면 `enable row level
-  security`와 정책을 같은 파일에 넣는다. RLS 없는 테이블은 anon 키로 누구나 읽는다.
+- Supabase 클라이언트는 `shared/supabase/` 에 모여 있다. 섞지 말 것:
+  `client.ts`(브라우저) · `server.ts`(서버 — `getSupabaseServer()` 는 사용자 권한,
+  `getSupabaseAdmin()` 은 **RLS 우회**) · `proxy.ts`(proxy 전용).
+  설정 값은 `shared/supabase/config.ts` 가 한 곳에서 읽는다.
+- **서버 전용 모듈은 첫 줄에 `import "server-only"` 를 둔다.** Client Component 가
+  import 하면 빌드가 막는다. `getSupabaseAdmin()` · service role 키가 번들에 섞이면
+  DB 전체 권한이 브라우저로 나간다.
+- **권한 판단은 서버의 `shared/auth/session.ts` 한 곳이 한다.** 클라이언트가 보낸 값은
+  믿지 않는다.
+  - **`getUser()` 를 쓴다. `getSession()` 을 쓰지 말 것.** `getSession()` 은 쿠키의
+    JWT 를 검증 없이 디코드해서, 쿠키를 조작하면 아무 사용자나 될 수 있다.
+  - 역할은 **`app_metadata.role`** 에서 읽는다. `user_metadata` 는 사용자가
+    `updateUser()` 로 고칠 수 있어 권한 상승 경로가 된다. `profiles.role` 컬럼은
+    표시용 사본이다.
+  - 역할 부여·회수는 화면이 아니라 `npm run role` 스크립트로만 한다. 회수할 때는
+    세션까지 지운다 — 안 지우면 토큰 수명 동안 권한이 남는다.
+- **관리자는 Supabase 계정과 별개다.** `/admin/login` 에서 `ADMIN_PASSWORD` 를 맞히면
+  서명된 httpOnly 쿠키(`admin_session`)를 받는다(`shared/auth/adminSession.ts`).
+  페이지·레이아웃은 `requireAdminOrRedirect()`, 액션·Route Handler 는 `requireAdmin()`.
+- **`src/proxy.ts` 를 지우지 말 것.** 역할은 ① Supabase 액세스 토큰 갱신 ② 경로 분기다.
+  Server Component 는 쿠키를 쓸 수 없어 토큰을 갱신할 수 있는 곳이 여기뿐이다 —
+  지우면 사용자가 무작위로 로그아웃된다. 리다이렉트는 `redirectKeepingCookies` 를
+  탄다(`NextResponse.redirect()` 는 갱신 쿠키를 버려 무한 루프가 난다).
+  **`config.matcher` 의 정적 확장자 목록도 지우지 말 것.** 빠뜨리면 `public/` 의
+  에셋이 미들웨어를 타고, 세션이 없어 `/login` 으로 리다이렉트된다. 브라우저는 JS 를
+  기대한 자리에서 HTML 을 받아 `Unexpected token '<'` 로 죽는다.
+- `'use server'` 파일은 **export 하나가 곧 공개 POST 엔드포인트**다. 헬퍼를 같이
+  export하지 말고, 모든 액션 첫 줄에서 `requireUser()` / `requireAdmin()` 을 부른다.
+  페이지·레이아웃의 검사는 액션에 미치지 않는다. Route Handler 에도 같은 규칙이
+  그대로 적용된다.
+- **스키마 정본은 `supabase/migrations/*.sql` 이다.** 테이블을 추가하면 RLS 정책과
+  grant 를 같은 마이그레이션에 넣는다. ai-service 의 `models/` 는 복사본이라 컬럼을
+  더하면 둘 다 고친다.
+  - service role(`getSupabaseAdmin()`)은 RLS 를 우회한다. 그 경로의 권한 검사는
+    RLS 가 아니라 코드가 한다.
+  - 조회에서 `deleted_at is null` 을 빠뜨리지 않는다 — 지운 밭이 되살아난다.
 - 테스트는 `domain/` 순수 함수에만 쓴다. async Server Component는 Vitest 공식 미지원.
 - 스타일은 `src/app/globals.css`의 시맨틱 토큰만 쓴다(`text-fg`, `bg-surface`, `text-accent`).
 

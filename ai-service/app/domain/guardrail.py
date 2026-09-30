@@ -13,7 +13,12 @@ is_blocked_topic("농약 희석배수 얼마나 해?")  # -> True
 ---
 """
 
-_BLOCKED_KEYWORDS = ("희석배수","살포량","투여량")
+import re
+
+_BLOCKED_KEYWORDS = ("희석배수","희석비율","희석농도","살포량","투여량","배액")
+
+_PESTICIDE = re.compile(r"농약|살충제|살균제|제초제|살비제|약제|방제약")
+_DOSE = re.compile(r"몇배|\d+배|몇(ml|cc|g|그램|미리|밀리)|얼마나(타|섞|희석)|몇대몇")
 
 BLOCKED_MESSAGE = (
     "농약 희석배수·살포량·투여량은 여기서 답변하지 않습니다. "
@@ -21,6 +26,8 @@ BLOCKED_MESSAGE = (
 )
 
 def is_blocked_topic(question: str) -> bool:
-    """질문에 금지 키워드가 하나라도 있으면 True."""
-    return any(keyword in question for keyword in _BLOCKED_KEYWORDS)
-
+    """농약 분량을 묻는 질문이면 True."""
+    q = question.replace(" ", "").lower()
+    if any(keyword in q for keyword in _BLOCKED_KEYWORDS):
+        return True
+    return bool(_PESTICIDE.search(q) and _DOSE.search(q))

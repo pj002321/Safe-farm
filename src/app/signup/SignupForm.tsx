@@ -22,9 +22,8 @@ import { signUpWithEmail } from "@/shared/auth/supabaseSignIn";
  * [Feature]: 이메일 회원가입 폼
  *
  * [Description]
- * - **Server Action 이 아니라 `onSubmit` 이다.** Firebase 는 계정 생성도 브라우저
- *   SDK 가 한다(서버에는 비밀번호를 넘길 방법 자체가 없다). 그 결과로 얻은
- *   ID 토큰을 세션 라우트에 넘겨 쿠키를 굽는 뒷부분은 `signUpWithEmail` 안에 있다.
+ * - **Server Action 이 아니라 `onSubmit` 이다.** 로그인과 같은 이유로 계정 생성도
+ *   브라우저 Supabase 클라이언트가 한다. 호출은 `signUpWithEmail` 안에 있다.
  * - 동의는 이제 hidden input 이 아니라 **인자**로 넘어간다. 예전에는 한 `<input>` 이
  *   한 `<form>` 에만 속하는 제약 때문에 두 폼이 같은 값을 각각 실어야 했는데,
  *   호출이 자바스크립트 함수가 된 지금은 그냥 값을 건네면 된다.
@@ -40,7 +39,7 @@ import { signUpWithEmail } from "@/shared/auth/supabaseSignIn";
  * ---------------------------------------------
  */
 
-/** Firebase Auth 의 최소 비밀번호 길이. 더 짧으면 `auth/weak-password` 로 거절된다. */
+/** 최소 비밀번호 길이. 서버(Supabase Auth)도 짧으면 `weak_password` 로 거절한다. */
 const MIN_PASSWORD_LENGTH = 8;
 
 interface SignupFormProps {

@@ -16,8 +16,7 @@ import { publicConfig } from "./config";
  * - **리다이렉트에도 쿠키를 실어야 한다**(`redirectKeepingCookies`).
  *   `NextResponse.redirect()` 는 새 응답이라 방금 심은 쿠키를 버린다. 그러면
  *   "로그인했는데 계속 로그인 화면으로 튕기는" 무한 루프가 된다.
- *   Firebase 세션 쿠키는 서버가 갱신하지 않아 이 코드가 필요 없었지만,
- *   Supabase 는 refresh token 을 돌리므로 다시 필요하다. **지우지 말 것.**
+ *   Supabase 는 refresh token 을 돌리므로 반드시 필요하다. **지우지 말 것.**
  * - `getUser()` 를 쓴다. `getSession()` 은 쿠키 내용을 그대로 믿으므로 인가
  *   판단의 근거가 못 된다.
  *

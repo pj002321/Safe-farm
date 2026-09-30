@@ -11,6 +11,7 @@ from datetime import datetime, timedelta, timezone
 
 from sqlalchemy.orm import Session
 
+from app.domain.kst import KST
 from app.domain.history_context import HISTORY_TURNS, Turn
 from app.models.farm.ask_history import AskHistory
 from app.repo.ask_history import add as add_question
@@ -22,8 +23,8 @@ SESSION_WINDOW_MINUTES = 30
 
 
 def today_ask_count(db: Session, user_id: uuid.UUID) -> int:
-    """이 사용자가 오늘(UTC 자정 기준) 보낸 질문 수. 일일 한도 계산용."""
-    start_of_day = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    """이 사용자가 오늘(KTC 자정 기준) 보낸 질문 수. 일일 한도 계산용."""
+    start_of_day = datetime.now(KST).replace(hour=0, minute=0, second=0, microsecond=0)
     return count_since(db, user_id, start_of_day)
 
 

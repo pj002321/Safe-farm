@@ -19,10 +19,9 @@ import { signInWithEmail } from "@/shared/auth/supabaseSignIn";
  * [Feature]: 로그인 입력 폼
  *
  * [Description]
- * - **Server Action 이 아니라 `onSubmit` 이다.** Firebase Auth 는 비밀번호를
- *   서버에서 검증할 수 없어서, 인증 자체가 브라우저 SDK 로 내려왔다. 그 대가로
- *   JS 없이 동작하던 폼은 유지할 수 없다 — 플랫폼이 강제하는 제약이다.
- *   대신 세션 쿠키는 서버가 굽고, 보호 경로는 전부 서버가 다시 검증한다.
+ * - **Server Action 이 아니라 `onSubmit` 이다.** 로그인은 브라우저 Supabase
+ *   클라이언트가 하고 세션 쿠키도 거기서 심긴다(`shared/supabase/client.ts`).
+ *   그 대가로 JS 없이 동작하는 폼은 없다. 보호 경로는 전부 서버가 다시 검증한다.
  * - `useFormStatus()` 는 Server Action 전용이라 더 쓰지 않는다. pending 을 직접
  *   들고, 그 값으로 버튼을 잠가 연타를 막는다(`Button` 이 loading 시 disabled).
  * - 실패는 이 폼 **안에서** `role="alert"` 로 보여준다. 예전처럼 `?error=` 로

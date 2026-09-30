@@ -1,4 +1,3 @@
-import { redirect } from "next/navigation";
 import { getSupabaseServer } from "@/shared/supabase/server";
 
 /**
@@ -21,7 +20,6 @@ import { getSupabaseServer } from "@/shared/supabase/server";
  * [Usage]
  * ```ts
  * const viewer = await getViewer();          // 없으면 null
- * const admin = await requireAdmin();        // 아니면 throw
  * ```
  * ---------------------------------------------
  */
@@ -70,14 +68,22 @@ export async function getViewer(): Promise<Viewer | null> {
  * supabase-js 는 세션 없음도, 토큰 만료도, 설정 오류도 모두 `AuthError` 로
  * 준다. 앞의 둘은 사용자가 다시 로그인하면 풀리지만 뒤쪽은 우리가 고쳐야 한다.
  * 전부 null 로 뭉개면 **권한 설정이 틀려도 "비로그인"으로 보여** 아무도 눈치
- * 못 챈다 — Firebase 판에서 실제로 밟았던 함정이라 여기서도 나눈다.
+ * 못 챈다.
  */
-function isMissingSessionError(error: { message?: string; status?: number }) {
+function isMissingSessionError(error: {
+  message?: string;
+  status?: number;
+  code?: string;
+}) {
   const message = error.message ?? "";
   return (
     message.includes("Auth session missing") ||
     message.includes("session_not_found") ||
     message.includes("JWT expired") ||
+    // 쿠키의 refresh token 이 서버에 없거나 이미 쓰였다(로그아웃·DB 초기화·다른 탭에서
+    // 먼저 갱신). 400 으로 오지만 설정 오류가 아니라 다시 로그인하면 풀리는 경우다.
+    error.code === "refresh_token_not_found" ||
+    error.code === "refresh_token_already_used" ||
     error.status === 401
   );
 }
@@ -86,20 +92,5 @@ function isMissingSessionError(error: { message?: string; status?: number }) {
 export async function requireUser(): Promise<Viewer> {
   const viewer = await getViewer();
   if (!viewer) throw new Error("UNAUTHENTICATED");
-  return viewer;
-}
-
-/** Server Action 전용. 관리자가 아니면 던진다. */
-export async function requireAdmin(): Promise<Viewer> {
-  const viewer = await requireUser();
-  if (!viewer.isAdmin) throw new Error("FORBIDDEN");
-  return viewer;
-}
-
-/** 페이지·레이아웃 전용. 던지는 대신 보낸다. */
-export async function requireAdminOrRedirect(): Promise<Viewer> {
-  const viewer = await getViewer();
-  if (!viewer) redirect("/login");
-  if (!viewer.isAdmin) redirect("/dashboard");
   return viewer;
 }

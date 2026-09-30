@@ -20,7 +20,7 @@ import { POST_LOGIN_COOKIE, safeNextPath } from "./redirect";
  * - **"이메일이 없다"와 "비밀번호가 틀렸다"를 구분하지 않는다.** 구분해서
  *   알려주면 공격자가 가입된 이메일 목록을 만들 수 있다(user enumeration).
  *   Supabase 도 같은 이유로 둘 다 `invalid_credentials` 로 준다.
- * - 구글 로그인은 **페이지를 떠난다.** Firebase 의 팝업과 달라서, 이 함수는
+ * - 구글 로그인은 **페이지를 떠난다.** 팝업이 아니라서 이 함수는
  *   성공을 돌려주지 않고 브라우저가 그대로 구글로 이동한다. 돌아오는 곳은
  *   `/auth/callback` 이다.
  *
