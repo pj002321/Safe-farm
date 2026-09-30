@@ -64,7 +64,7 @@ function AskList({ rows, empty }: { rows: AskRow[]; empty: string }) {
             </details>
           )}
           {row.feedbackReason && (
-            <span className="text-danger">사유: {row.feedbackReason}</span>
+            <span className="text-unsuitable">사유: {row.feedbackReason}</span>
           )}
         </li>
       ))}
