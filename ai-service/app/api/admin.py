@@ -12,6 +12,7 @@ from app.core.security import require_service_token
 from app.service.at_risk import at_risk_report
 from app.service.briefing import weekly_briefing
 from app.service.member_insight import analyze_member
+from app.service.ops_status import batch_status, diagnose_batches, index_status
 from app.service.question_trend import analyze_questions
 
 router = APIRouter(
@@ -37,3 +38,18 @@ def member_insight(user_id: uuid.UUID, db: Session = Depends(get_db)) -> dict:
 @router.post("/questions/trends")
 def question_trends(db: Session = Depends(get_db)) -> dict:
     return analyze_questions(db)
+
+
+@router.get("/batches")
+def batches(db: Session = Depends(get_db)) -> dict:
+    return batch_status(db)
+
+
+@router.post("/batches/diagnose")
+def batches_diagnose(db: Session = Depends(get_db)) -> dict:
+    return diagnose_batches(db)
+
+
+@router.get("/index")
+def index(db: Session = Depends(get_db)) -> dict:
+    return index_status(db)

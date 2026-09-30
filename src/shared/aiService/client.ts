@@ -410,6 +410,50 @@ export type WeeklyBriefing = {
   metrics: { id: string; label: string; cur: number; prev: number }[];
 };
 
+export type BatchStatus = {
+  cron: {
+    jobname: string;
+    schedule: string;
+    runs: number;
+    failed: number;
+    last_run: string | null;
+  }[];
+  /** pg_net 이 몇 시간만 보관하는 실제 HTTP 결과. cron 의 succeeded 와 다를 수 있다. */
+  http: {
+    at: string;
+    job: string | null;
+    status: number | null;
+    ok: boolean;
+    detail: string | null;
+  }[];
+  feeds: {
+    key: string;
+    label: string;
+    loader: string;
+    latest: string | null;
+    maxAgeHours: number | null;
+    /** null 이면 주기가 없는 데이터라 판정하지 않는다. */
+    stale: boolean | null;
+  }[];
+};
+
+export type BatchDiagnosis = {
+  causes: InsightFinding[];
+  actions: InsightFinding[];
+  dropped: number;
+  facts: { id: string; text: string }[];
+};
+
+export type IndexStatus = {
+  sources: {
+    source: string;
+    documents: number;
+    chunks: number;
+    embedded: number;
+    latest: string | null;
+  }[];
+};
+
 export type AiResult<T> =
   | { ok: true; data: T }
   | { ok: false; reason: AiFailure; detail?: string };
@@ -704,6 +748,19 @@ export const aiService = {
       method: "POST",
       timeoutMs: 90_000,
     }),
+
+  /** 관리자 배치 관리: cron 요약 · 실제 HTTP 결과 · 데이터 신선도. */
+  batchStatus: () => call<BatchStatus>("/v1/admin/batches"),
+
+  /** 배치 실패·지연을 LLM 이 진단한다. 근거 없는 항목은 ai-service 가 버린다. */
+  diagnoseBatches: () =>
+    call<BatchDiagnosis>("/v1/admin/batches/diagnose", {
+      method: "POST",
+      timeoutMs: 60_000,
+    }),
+
+  /** 관리자 품질 관리: 출처별 문서·조각·임베딩 수. */
+  indexStatus: () => call<IndexStatus>("/v1/admin/index"),
 
   /** 관리자용 주간 운영 브리핑. 숫자는 ai-service 가 세고 LLM 은 해석만 한다. */
   weeklyBriefing: () =>
