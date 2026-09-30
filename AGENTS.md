@@ -1,7 +1,7 @@
 # Safe Farm AI
 
 기후,위성 데이터 기반으로 하는 농작물 위험 감지 및 개선 LLM 추천 서비스
-Next.js 16(App Router) + Firebase(Auth/Firestore/Storage).
+Next.js 16(App Router) + Supabase(Auth · Postgres · pgvector).
 AI 코어(LangGraph · 임베딩 · 벡터 검색)는 `ai-service/` 에 Python 으로 둔다.
 
 ## 브랜치 전략
@@ -31,54 +31,57 @@ feature/* → development → production
 
 ### 인프라
 
-Firebase 프로젝트를 쓴다. Firestore 리전은 **asia-northeast3 (서울)**.
-**리전은 생성 후 변경할 수 없다** — 잘못 고르면 프로젝트를 새로 만드는 수밖에 없다.
-`development` / `production` 은 Firebase 프로젝트를 각각 둔다. 데이터·사용자·보안
-규칙이 프로젝트 단위로 격리되므로 브랜치 기능 같은 건 없다.
+DB 는 Supabase(서울) 하나, 앱(Next · ai-service)은 Railway 에 둔다.
+Next ↔ ai-service 통신 규약은 `docs/architecture/service-communication.md`.
 
-서비스 계정 키(`FIREBASE_SERVICE_ACCOUNT`)는 **저장소에 넣지 않는다.** 로컬은
-`.env.local`, 배포는 Vercel 환경변수에만 둔다. 이 키 하나가 프로젝트 전체 권한이다.
+- **ai-service 에 공개 도메인을 붙이지 않는다.** LLM 을 호출하므로 열면 남이 우리
+  OpenAI 요금을 쓴다. 브라우저는 ai-service 를 직접 부르지 않고 항상 Next 서버를 거친다.
+- `.env` 는 키 **이름**만 공유하는 템플릿이라 git 에 올라간다. **값을 넣지 않는다.**
+  실제 값은 로컬 `.env.local`(gitignore), 배포는 Railway 환경변수에만 둔다.
+- service role 키(`DB_SERVICE_ROLE`)는 RLS 를 통째로 우회한다. 이 키 하나가 DB 전체
+  권한이다.
 
 
 ## 아키텍처 규칙
 
 - `src/app/`은 **라우팅 전용**. 로직은 `src/features/<도메인>/`에 둔다. MVC 아님 — 수직 분할.
 - 의존성은 단방향: `shared → features → app`. features끼리 import 금지.
-- Firebase SDK 는 2종. 섞지 말 것:
-  `shared/firebase/client.ts`(브라우저 SDK) · `shared/firebase/admin.ts`(Admin SDK, 서버 전용).
-  설정 값은 `shared/firebase/config.ts` 가 한 곳에서 읽는다.
-- **`admin.ts` 를 클라이언트에서 import 하지 말 것.** 번들에 섞이면 서비스 계정이
-  그대로 브라우저로 나간다. Admin SDK 는 보안 규칙을 통째로 우회하므로 이건 곧
-  프로젝트 전체 탈취다. Client Component 의 import 그래프에 admin 이 들어오는지
-  항상 확인한다. 서버 전용 코드에서만 부른다(Route Handler · Server Component ·
-  Server Action · proxy).
-- **Firebase Auth 는 비밀번호를 서버에서 검증할 수 없다.** `signInWithEmailAndPassword`
-  는 클라이언트 SDK 에만 있다. 그래서 로그인·가입은 브라우저에서 일어나고, JS 없이
-  동작하는 폼은 성립하지 않는다. 플랫폼 제약이지 설계 선택이 아니다. 흐름:
-  브라우저 로그인 → `getIdToken()` → `POST /api/auth/session` → 서버가
-  `verifyIdToken()` 후 `createSessionCookie()` 로 httpOnly `__session` 쿠키를 심는다.
-  **보호는 전부 서버의 세션 쿠키 검증이 한다** — 클라이언트가 보낸 상태는 신뢰하지 않는다.
-- **`src/proxy.ts` 를 지우지 말 것.** 역할은 **세션 쿠키 검증과 경로 분기**다
-  (토큰 갱신이 아니다 — 갱신은 클라이언트 SDK 가 알아서 한다).
+- Supabase 클라이언트는 `shared/supabase/` 에 모여 있다. 섞지 말 것:
+  `client.ts`(브라우저) · `server.ts`(서버 — `getSupabaseServer()` 는 사용자 권한,
+  `getSupabaseAdmin()` 은 **RLS 우회**) · `proxy.ts`(proxy 전용).
+  설정 값은 `shared/supabase/config.ts` 가 한 곳에서 읽는다.
+- **서버 전용 모듈은 첫 줄에 `import "server-only"` 를 둔다.** Client Component 가
+  import 하면 빌드가 막는다. `getSupabaseAdmin()` · service role 키가 번들에 섞이면
+  DB 전체 권한이 브라우저로 나간다.
+- **권한 판단은 서버의 `shared/auth/session.ts` 한 곳이 한다.** 클라이언트가 보낸 값은
+  믿지 않는다.
+  - **`getUser()` 를 쓴다. `getSession()` 을 쓰지 말 것.** `getSession()` 은 쿠키의
+    JWT 를 검증 없이 디코드해서, 쿠키를 조작하면 아무 사용자나 될 수 있다.
+  - 역할은 **`app_metadata.role`** 에서 읽는다. `user_metadata` 는 사용자가
+    `updateUser()` 로 고칠 수 있어 권한 상승 경로가 된다. `profiles.role` 컬럼은
+    표시용 사본이다.
+  - 역할 부여·회수는 화면이 아니라 `npm run role` 스크립트로만 한다. 회수할 때는
+    세션까지 지운다 — 안 지우면 토큰 수명 동안 권한이 남는다.
+- **관리자는 Supabase 계정과 별개다.** `/admin/login` 에서 `ADMIN_PASSWORD` 를 맞히면
+  서명된 httpOnly 쿠키(`admin_session`)를 받는다(`shared/auth/adminSession.ts`).
+  페이지·레이아웃은 `requireAdminOrRedirect()`, 액션·Route Handler 는 `requireAdmin()`.
+- **`src/proxy.ts` 를 지우지 말 것.** 역할은 ① Supabase 액세스 토큰 갱신 ② 경로 분기다.
+  Server Component 는 쿠키를 쓸 수 없어 토큰을 갱신할 수 있는 곳이 여기뿐이다 —
+  지우면 사용자가 무작위로 로그아웃된다. 리다이렉트는 `redirectKeepingCookies` 를
+  탄다(`NextResponse.redirect()` 는 갱신 쿠키를 버려 무한 루프가 난다).
   **`config.matcher` 의 정적 확장자 목록도 지우지 말 것.** 빠뜨리면 `public/` 의
   에셋이 미들웨어를 타고, 세션이 없어 `/login` 으로 리다이렉트된다. 브라우저는 JS 를
   기대한 자리에서 HTML 을 받아 `Unexpected token '<'` 로 죽는다.
-- 역할은 Firebase **custom claims** 의 `role` 에서 읽는다. custom claim 은 Admin SDK
-  로만 설정되므로 사용자가 고칠 수 없다. **클라이언트가 쓸 수 있는 Firestore 문서
-  필드는 권한 판단에 쓰지 않는다.**
 - `'use server'` 파일은 **export 하나가 곧 공개 POST 엔드포인트**다. 헬퍼를 같이
   export하지 말고, 모든 액션 첫 줄에서 `requireUser()` / `requireAdmin()` 을 부른다.
-  페이지·레이아웃의 검사는 액션에 미치지 않는다.
-  인증 자체(세션 쿠키 발급·파기)는 Server Action 이 아니라 Route Handler
-  `/api/auth/session` 이 담당한다 — 같은 검사 규칙이 그대로 적용된다.
-- **Firestore 보안 규칙(`firestore.rules`)은 스키마와 한 단위로 바꾼다.** 컬렉션을
-  추가하면 규칙도 같은 커밋에 추가하고 배포한다.
-  - 규칙 파일 맨 아래의 catch-all 거부를 빼먹지 말 것:
-    `match /{document=**} { allow read, write: if false; }`
-    없으면 컬렉션을 새로 만드는 순간 그 컬렉션이 기본 공개가 된다.
-  - **테스트 모드로 만든 DB 는 30일 뒤 전체 공개 상태로 남는다.** 콘솔에서 만들고
-    규칙을 올리지 않으면 만료일에 조용히 열린다. 프로젝트를 만들면 규칙부터 배포한다.
-  - Admin SDK 는 규칙을 우회한다. 서버 코드의 권한 검사는 규칙이 아니라 코드가 한다.
+  페이지·레이아웃의 검사는 액션에 미치지 않는다. Route Handler 에도 같은 규칙이
+  그대로 적용된다.
+- **스키마 정본은 `supabase/migrations/*.sql` 이다.** 테이블을 추가하면 RLS 정책과
+  grant 를 같은 마이그레이션에 넣는다. ai-service 의 `models/` 는 복사본이라 컬럼을
+  더하면 둘 다 고친다.
+  - service role(`getSupabaseAdmin()`)은 RLS 를 우회한다. 그 경로의 권한 검사는
+    RLS 가 아니라 코드가 한다.
+  - 조회에서 `deleted_at is null` 을 빠뜨리지 않는다 — 지운 밭이 되살아난다.
 - 테스트는 `domain/` 순수 함수에만 쓴다. async Server Component는 Vitest 공식 미지원.
 - 스타일은 `src/app/globals.css`의 시맨틱 토큰만 사용한다(`text-fg`, `bg-surface`, `text-accent`).
 
