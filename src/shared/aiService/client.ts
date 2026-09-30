@@ -403,6 +403,13 @@ export type AtRiskMember = {
 
 export type AtRiskReport = { asOf: string | null; members: AtRiskMember[] };
 
+export type WeeklyBriefing = {
+  points: InsightFinding[];
+  /** 지표 id 를 못 댔거나 지표에 없는 숫자를 써서 버린 문장 수. */
+  dropped: number;
+  metrics: { id: string; label: string; cur: number; prev: number }[];
+};
+
 export type AiResult<T> =
   | { ok: true; data: T }
   | { ok: false; reason: AiFailure; detail?: string };
@@ -696,6 +703,13 @@ export const aiService = {
     call<QuestionTrends>("/v1/admin/questions/trends", {
       method: "POST",
       timeoutMs: 90_000,
+    }),
+
+  /** 관리자용 주간 운영 브리핑. 숫자는 ai-service 가 세고 LLM 은 해석만 한다. */
+  weeklyBriefing: () =>
+    call<WeeklyBriefing>("/v1/admin/briefing", {
+      method: "POST",
+      timeoutMs: 60_000,
     }),
 
   /** 관리자용 주간 위험 회원. 규칙 점수 상위 10명에 LLM 안내문 초안을 붙인다. */

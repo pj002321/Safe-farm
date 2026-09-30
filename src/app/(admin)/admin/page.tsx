@@ -5,6 +5,7 @@ import { AdminPlanned } from "@/components/admin/AdminPlanned";
 import { Card } from "@/components/shared/Card";
 import { getAdminOverview } from "@/features/admin/overviewStore";
 import { requireAdminOrRedirect } from "@/shared/auth/adminSession";
+import { BriefingPanel } from "./BriefingPanel";
 
 /**
  * ---------------------------------------------
@@ -71,6 +72,8 @@ export default async function AdminHome() {
         <Metric label="오늘 할 일" value={`${done} / ${total}`} />
         <Metric label="AI 질문 (최근 7일)" value={overview.asksLast7Days} />
       </div>
+
+      <BriefingPanel />
 
       <Card title="재배 중인 작물 상위 5">
         {overview.topCrops.length === 0 ? (
