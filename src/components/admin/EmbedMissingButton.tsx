@@ -2,18 +2,24 @@
 
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
-import { embedMissingChunks } from "@/app/(admin)/admin/quality/actions";
 import { Button } from "@/components/shared/Button";
+import type { AiResult } from "@/shared/aiService/client";
 
 /** 임베딩이 빠진 조각만 채운다. 전량 재임베딩은 화면에 두지 않는다(ops_status.embed_missing 주석). */
-export function EmbedMissingButton({ missing }: { missing: number }) {
+export function EmbedMissingButton({
+  missing,
+  action,
+}: {
+  missing: number;
+  action: () => Promise<AiResult<{ embedded: number; remaining: number }>>;
+}) {
   const router = useRouter();
   const [message, setMessage] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
   const run = () =>
     startTransition(async () => {
-      const result = await embedMissingChunks();
+      const result = await action();
       setMessage(
         result.ok
           ? `${result.data.embedded}개 채움 · 남은 ${result.data.remaining}개`

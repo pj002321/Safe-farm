@@ -2,24 +2,32 @@
 
 import Link from "next/link";
 import { useState, useTransition } from "react";
-import { loadAtRiskReport } from "@/app/(admin)/admin/members/actions";
 import { Badge } from "@/components/shared/Badge";
 import { Button } from "@/components/shared/Button";
 import { Card } from "@/components/shared/Card";
+import type {
+  AiResult,
+  AtRiskMember,
+  AtRiskReport,
+} from "@/shared/aiService/client";
 
-type Report = Extract<
-  Awaited<ReturnType<typeof loadAtRiskReport>>,
-  { ok: true }
->["data"];
+/** 액션이 회원 이메일을 붙여 돌려준다. */
+type Report = Omit<AtRiskReport, "members"> & {
+  members: (AtRiskMember & { email: string | null })[];
+};
 
-export function AtRiskPanel() {
+export function AtRiskPanel({
+  action,
+}: {
+  action: () => Promise<AiResult<Report>>;
+}) {
   const [report, setReport] = useState<Report | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
   const run = () =>
     startTransition(async () => {
-      const result = await loadAtRiskReport();
+      const result = await action();
       if (result.ok) {
         setReport(result.data);
         setError(null);

@@ -1,21 +1,24 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { runRetrievalEval } from "@/app/(admin)/admin/quality/actions";
 import { Button } from "@/components/shared/Button";
 import { Card } from "@/components/shared/Card";
-import type { RetrievalEval } from "@/shared/aiService/client";
+import type { AiResult, RetrievalEval } from "@/shared/aiService/client";
 
 const pct = (v: number) => `${Math.round(v * 100)}%`;
 
-export function RetrievalEvalPanel() {
+export function RetrievalEvalPanel({
+  action,
+}: {
+  action: () => Promise<AiResult<RetrievalEval>>;
+}) {
   const [result, setResult] = useState<RetrievalEval | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
   const run = () =>
     startTransition(async () => {
-      const r = await runRetrievalEval();
+      const r = await action();
       if (r.ok) {
         setResult(r.data);
         setError(null);

@@ -7,6 +7,11 @@ import { Card } from "@/components/shared/Card";
 import { type AskRow, getAskQuality } from "@/features/admin/qualityStore";
 import { aiService } from "@/shared/aiService/client";
 import { requireAdminOrRedirect } from "@/shared/auth/adminSession";
+import {
+  analyzeQuestionTrends,
+  embedMissingChunks,
+  runRetrievalEval,
+} from "./actions";
 
 /**
  * ---------------------------------------------
@@ -94,7 +99,7 @@ export default async function AdminQuality() {
         <Metric label="가드레일 차단" value={quality.blocked} />
       </div>
 
-      <QuestionTrendPanel />
+      <QuestionTrendPanel action={analyzeQuestionTrends} />
 
       <Card title="👎 받은 답변">
         <AskList empty="최근 7일 👎 가 없습니다." rows={quality.recentDown} />
@@ -163,6 +168,7 @@ export default async function AdminQuality() {
         )}
         {index.ok && (
           <EmbedMissingButton
+            action={embedMissingChunks}
             missing={index.data.sources.reduce(
               (sum, x) => sum + x.chunks - x.embedded,
               0,
@@ -171,7 +177,7 @@ export default async function AdminQuality() {
         )}
       </Card>
 
-      <RetrievalEvalPanel />
+      <RetrievalEvalPanel action={runRetrievalEval} />
     </AdminPage>
   );
 }
