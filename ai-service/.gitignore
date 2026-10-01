@@ -10,3 +10,5 @@ sandbox/
 
 .env*.local
 .venv
+out.txt
+logs/

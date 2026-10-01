@@ -12,9 +12,8 @@
  *
  * [Usage]
  * ```ts
- * import { formatTemperature, formatScore } from "@/shared/utils/format";
+ * import { formatTemperature } from "@/shared/utils/format";
  * formatTemperature(22.456)  // "22.5°C"
- * formatScore(87)            // "87점"
  * ```
  * ---------------------------------------------
  */
@@ -53,11 +52,6 @@ export function hourMinuteOf(iso: string | null | undefined): string | null {
   const time = iso?.split("T")[1];
   if (time === undefined || time.length < 5) return null;
   return time.slice(0, 5);
-}
-
-/** 적합도 점수. 0~100 정수 전제. */
-export function formatScore(score: number): string {
-  return `${Math.round(score)}점`;
 }
 
 /** 날짜를 "9월 9일 (화)" 형태로. 농민이 요일을 먼저 본다는 전제. */
