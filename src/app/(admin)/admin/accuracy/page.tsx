@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import { AdminPage } from "@/components/admin/AdminPage";
 import { Badge } from "@/components/shared/Badge";
 import { Card } from "@/components/shared/Card";
-import { requireAdminOrRedirect } from "@/shared/auth/adminSession";
 import { aiService } from "@/shared/aiService/client";
+import { requireAdminOrRedirect } from "@/shared/auth/adminSession";
 
 /**
  * ---------------------------------------------
@@ -52,7 +52,10 @@ export default async function AdminAccuracy() {
       ) : (
         <>
           <div className="grid gap-3 sm:grid-cols-4">
-            <Metric label="GDD 모델 MAE (단계)" value={result.data.summary.mae ?? "—"} />
+            <Metric
+              label="GDD 모델 MAE (단계)"
+              value={result.data.summary.mae ?? "—"}
+            />
             <Metric
               label="치우침 (음수 = 늦게 봄)"
               value={result.data.summary.bias ?? "—"}
@@ -64,7 +67,8 @@ export default async function AdminAccuracy() {
           <Card title="단계별 오차">
             {result.data.summary.byStage.length === 0 ? (
               <p className="text-fg-muted text-sm">
-                오차를 잴 수 있는 보정이 아직 없습니다. 파종일이 있는 재배에서 사용자가 단계를 고치면 쌓입니다.
+                오차를 잴 수 있는 보정이 아직 없습니다. 파종일이 있는 재배에서
+                사용자가 단계를 고치면 쌓입니다.
               </p>
             ) : (
               <ul className="flex flex-col gap-1 text-sm">
@@ -89,18 +93,26 @@ export default async function AdminAccuracy() {
                     className="flex flex-wrap items-baseline gap-2"
                     key={`${h.createdAt}-${h.kind}`}
                   >
-                    <Badge size="sm" tone={h.kind === "STAGE_SET" ? "info" : "neutral"}>
+                    <Badge
+                      size="sm"
+                      tone={h.kind === "STAGE_SET" ? "info" : "neutral"}
+                    >
                       {KIND[h.kind]}
                     </Badge>
-                    <span className="font-mono text-fg-muted text-xs tabular-nums">{h.occurredOn}</span>
+                    <span className="font-mono text-fg-muted text-xs tabular-nums">
+                      {h.occurredOn}
+                    </span>
                     <span>실제 {h.actual ?? "—"}</span>
                     {h.kind === "STAGE_SET" && (
                       <span className="text-fg-muted">
                         · 모델 {h.predicted ?? "예측 없음"}
-                        {h.error != null && ` (${h.error > 0 ? "+" : ""}${h.error}단계)`}
+                        {h.error != null &&
+                          ` (${h.error > 0 ? "+" : ""}${h.error}단계)`}
                       </span>
                     )}
-                    {h.note && <span className="text-fg-subtle text-xs">{h.note}</span>}
+                    {h.note && (
+                      <span className="text-fg-subtle text-xs">{h.note}</span>
+                    )}
                   </li>
                 ))}
               </ul>

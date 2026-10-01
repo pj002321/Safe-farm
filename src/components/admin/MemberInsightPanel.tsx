@@ -1,11 +1,11 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { analyzeMember } from "@/app/(admin)/admin/members/[id]/actions";
 import { Badge } from "@/components/shared/Badge";
 import { Button } from "@/components/shared/Button";
 import { Card } from "@/components/shared/Card";
 import type { InsightFinding, MemberInsight } from "@/shared/aiService/client";
-import { analyzeMember } from "@/app/(admin)/admin/members/[id]/actions";
 
 const SEGMENT_TONE = {
   활발: "good",
@@ -14,7 +14,13 @@ const SEGMENT_TONE = {
   휴면: "caution",
 } as const;
 
-function Findings({ title, items }: { title: string; items: InsightFinding[] }) {
+function Findings({
+  title,
+  items,
+}: {
+  title: string;
+  items: InsightFinding[];
+}) {
   if (items.length === 0) return null;
   return (
     <div>
@@ -23,7 +29,9 @@ function Findings({ title, items }: { title: string; items: InsightFinding[] }) 
         {items.map((f) => (
           <li key={f.text}>
             {f.text}{" "}
-            <span className="font-mono text-fg-subtle text-xs">[{f.evidence.join(", ")}]</span>
+            <span className="font-mono text-fg-subtle text-xs">
+              [{f.evidence.join(", ")}]
+            </span>
           </li>
         ))}
       </ul>

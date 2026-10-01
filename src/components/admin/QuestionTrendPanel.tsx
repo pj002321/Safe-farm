@@ -1,11 +1,11 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { analyzeQuestionTrends } from "@/app/(admin)/admin/quality/actions";
 import { Badge } from "@/components/shared/Badge";
 import { Button } from "@/components/shared/Button";
 import { Card } from "@/components/shared/Card";
 import type { QuestionTrends } from "@/shared/aiService/client";
-import { analyzeQuestionTrends } from "@/app/(admin)/admin/quality/actions";
 
 export function QuestionTrendPanel() {
   const [trends, setTrends] = useState<QuestionTrends | null>(null);

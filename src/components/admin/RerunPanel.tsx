@@ -2,11 +2,11 @@
 
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
+import { rerunBatch } from "@/app/(admin)/admin/batches/actions";
 import { Badge } from "@/components/shared/Badge";
 import { Button } from "@/components/shared/Button";
 import { Card } from "@/components/shared/Card";
 import type { RerunState } from "@/shared/aiService/client";
-import { rerunBatch } from "@/app/(admin)/admin/batches/actions";
 
 const JOB_LABEL = {
   tasks: "오늘 할 일 생성",
@@ -30,7 +30,11 @@ export function RerunPanel({ state }: { state: RerunState }) {
         String(formData.get("from") ?? ""),
         String(formData.get("to") ?? ""),
       );
-      setMessage(result.started ? "시작했습니다. 새로 고치면 진행 상태가 보입니다." : result.error);
+      setMessage(
+        result.started
+          ? "시작했습니다. 새로 고치면 진행 상태가 보입니다."
+          : result.error,
+      );
       router.refresh();
     });
 
@@ -63,7 +67,13 @@ export function RerunPanel({ state }: { state: RerunState }) {
             </label>
           </>
         )}
-        <Button disabled={state.running} loading={pending} size="sm" type="submit" variant="secondary">
+        <Button
+          disabled={state.running}
+          loading={pending}
+          size="sm"
+          type="submit"
+          variant="secondary"
+        >
           실행
         </Button>
       </form>
@@ -72,14 +82,26 @@ export function RerunPanel({ state }: { state: RerunState }) {
         <p className="mt-3 flex flex-wrap items-center gap-2 text-sm">
           <span className="text-fg-muted text-xs">마지막 재실행</span>
           <span>{JOB_LABEL[state.job]}</span>
-          <Badge size="sm" tone={state.running ? "info" : state.result?.startsWith("실패") ? "unsuitable" : "good"}>
+          <Badge
+            size="sm"
+            tone={
+              state.running
+                ? "info"
+                : state.result?.startsWith("실패")
+                  ? "unsuitable"
+                  : "good"
+            }
+          >
             {state.running ? "진행 중" : "끝남"}
           </Badge>
-          {state.result && <span className="text-fg-muted">{state.result}</span>}
+          {state.result && (
+            <span className="text-fg-muted">{state.result}</span>
+          )}
         </p>
       )}
       <p className="mt-2 text-fg-subtle text-xs">
-        백그라운드로 돌고, 한 번에 하나만 실행됩니다. ai-service 가 재시작되면 진행 상태가 사라집니다.
+        백그라운드로 돌고, 한 번에 하나만 실행됩니다. ai-service 가 재시작되면
+        진행 상태가 사라집니다.
       </p>
     </Card>
   );

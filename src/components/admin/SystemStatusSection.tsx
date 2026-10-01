@@ -50,9 +50,13 @@ export async function SystemStatusSection() {
               5xx {requests.errors}건
             </Badge>
             <Badge dot size="sm" tone={staleFeeds.length ? "caution" : "good"}>
-              {staleFeeds.length ? `지연 데이터 ${staleFeeds.join(", ")}` : "배치 데이터 정상"}
+              {staleFeeds.length
+                ? `지연 데이터 ${staleFeeds.join(", ")}`
+                : "배치 데이터 정상"}
             </Badge>
-            <span className="text-fg-subtle text-xs">집계 시작 {at(since)}</span>
+            <span className="text-fg-subtle text-xs">
+              집계 시작 {at(since)}
+            </span>
           </div>
 
           <div>
@@ -64,24 +68,41 @@ export async function SystemStatusSection() {
 
           {requests.routes.length > 0 && (
             <table className="w-full text-xs">
-              <caption className="mb-1 text-left text-fg-muted">느린 경로 (p95 순)</caption>
+              <caption className="mb-1 text-left text-fg-muted">
+                느린 경로 (p95 순)
+              </caption>
               <thead>
                 <tr className="border-border border-b text-fg-muted">
-                  <th className="py-1 pr-3 text-left font-medium" scope="col">경로</th>
-                  <th className="py-1 pr-3 text-right font-medium" scope="col">호출</th>
-                  <th className="py-1 pr-3 text-right font-medium" scope="col">평균</th>
-                  <th className="py-1 pr-3 text-right font-medium" scope="col">p95</th>
-                  <th className="py-1 text-right font-medium" scope="col">5xx</th>
+                  <th className="py-1 pr-3 text-left font-medium" scope="col">
+                    경로
+                  </th>
+                  <th className="py-1 pr-3 text-right font-medium" scope="col">
+                    호출
+                  </th>
+                  <th className="py-1 pr-3 text-right font-medium" scope="col">
+                    평균
+                  </th>
+                  <th className="py-1 pr-3 text-right font-medium" scope="col">
+                    p95
+                  </th>
+                  <th className="py-1 text-right font-medium" scope="col">
+                    5xx
+                  </th>
                 </tr>
               </thead>
               <tbody className="font-mono tabular-nums">
                 {requests.routes.map((r) => (
-                  <tr className="border-border/60 border-b last:border-0" key={r.route}>
+                  <tr
+                    className="border-border/60 border-b last:border-0"
+                    key={r.route}
+                  >
                     <td className="py-1 pr-3">{r.route}</td>
                     <td className="py-1 pr-3 text-right">{r.count}</td>
                     <td className="py-1 pr-3 text-right">{r.avgMs}ms</td>
                     <td className="py-1 pr-3 text-right">{r.p95Ms}ms</td>
-                    <td className={`py-1 text-right${r.errors ? " text-unsuitable" : ""}`}>
+                    <td
+                      className={`py-1 text-right${r.errors ? " text-unsuitable" : ""}`}
+                    >
                       {r.errors}
                     </td>
                   </tr>
@@ -98,11 +119,19 @@ export async function SystemStatusSection() {
         ) : (
           <ul className="flex flex-col gap-1.5 text-sm">
             {errors.map((e) => (
-              <li className="flex flex-wrap items-baseline gap-2" key={`${e.at}-${e.message}`}>
-                <Badge size="sm" tone={e.severity === "error" ? "unsuitable" : "caution"}>
+              <li
+                className="flex flex-wrap items-baseline gap-2"
+                key={`${e.at}-${e.message}`}
+              >
+                <Badge
+                  size="sm"
+                  tone={e.severity === "error" ? "unsuitable" : "caution"}
+                >
                   {e.severity === "error" ? "오류" : "경고"}
                 </Badge>
-                <span className="font-mono text-fg-muted text-xs tabular-nums">{at(e.at)}</span>
+                <span className="font-mono text-fg-muted text-xs tabular-nums">
+                  {at(e.at)}
+                </span>
                 <span className="text-fg-muted text-xs">{e.source}</span>
                 <span className="break-all">{e.message}</span>
               </li>

@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { AdminPage } from "@/components/admin/AdminPage";
+import { BriefingPanel } from "@/components/admin/BriefingPanel";
+import { SystemStatusSection } from "@/components/admin/SystemStatusSection";
 import { Card } from "@/components/shared/Card";
 import { getAdminOverview } from "@/features/admin/overviewStore";
 import { requireAdminOrRedirect } from "@/shared/auth/adminSession";
-import { BriefingPanel } from "@/components/admin/BriefingPanel";
-import { SystemStatusSection } from "@/components/admin/SystemStatusSection";
 
 /**
  * ---------------------------------------------
@@ -28,7 +28,6 @@ export const metadata: Metadata = { title: "관리자" };
 
 /** 지표는 매 요청 최신이어야 한다. */
 export const dynamic = "force-dynamic";
-
 
 function Metric({ label, value }: { label: string; value: string | number }) {
   return (

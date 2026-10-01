@@ -1,12 +1,12 @@
 import type { Metadata } from "next";
 import { AdminPage } from "@/components/admin/AdminPage";
-import { Card } from "@/components/shared/Card";
-import { type AskRow, getAskQuality} from "@/features/admin/qualityStore"
-import { requireAdminOrRedirect } from "@/shared/auth/adminSession";
-import { aiService } from "@/shared/aiService/client";
 import { EmbedMissingButton } from "@/components/admin/EmbedMissingButton";
 import { QuestionTrendPanel } from "@/components/admin/QuestionTrendPanel";
 import { RetrievalEvalPanel } from "@/components/admin/RetrievalEvalPanel";
+import { Card } from "@/components/shared/Card";
+import { type AskRow, getAskQuality } from "@/features/admin/qualityStore";
+import { aiService } from "@/shared/aiService/client";
+import { requireAdminOrRedirect } from "@/shared/auth/adminSession";
 
 /**
  * ---------------------------------------------
@@ -27,7 +27,6 @@ import { RetrievalEvalPanel } from "@/components/admin/RetrievalEvalPanel";
 export const metadata: Metadata = { title: "품질 관리" };
 
 export const dynamic = "force-dynamic";
-
 
 const dateFormat = new Intl.DateTimeFormat("ko-KR", {
   timeZone: "Asia/Seoul",
@@ -80,7 +79,8 @@ export default async function AdminQuality() {
   ]);
 
   const rated = quality.up + quality.down;
-  const upRate = rated === 0 ? "—" : `${Math.round((quality.up / rated) * 100)}%`;
+  const upRate =
+    rated === 0 ? "—" : `${Math.round((quality.up / rated) * 100)}%`;
 
   return (
     <AdminPage
@@ -101,7 +101,10 @@ export default async function AdminQuality() {
       </Card>
 
       <Card title="가드레일 차단">
-        <AskList empty="최근 7일 차단이 없습니다." rows={quality.recentBlocked} />
+        <AskList
+          empty="최근 7일 차단이 없습니다."
+          rows={quality.recentBlocked}
+        />
       </Card>
 
       <Card title="문서 인덱스">
@@ -113,19 +116,36 @@ export default async function AdminQuality() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-border border-b text-fg-muted text-xs">
-                <th className="py-1 pr-3 text-left font-medium" scope="col">출처</th>
-                <th className="py-1 pr-3 text-right font-medium" scope="col">문서</th>
-                <th className="py-1 pr-3 text-right font-medium" scope="col">조각</th>
-                <th className="py-1 pr-3 text-right font-medium" scope="col">임베딩</th>
-                <th className="py-1 text-left font-medium" scope="col">최근 적재</th>
+                <th className="py-1 pr-3 text-left font-medium" scope="col">
+                  출처
+                </th>
+                <th className="py-1 pr-3 text-right font-medium" scope="col">
+                  문서
+                </th>
+                <th className="py-1 pr-3 text-right font-medium" scope="col">
+                  조각
+                </th>
+                <th className="py-1 pr-3 text-right font-medium" scope="col">
+                  임베딩
+                </th>
+                <th className="py-1 text-left font-medium" scope="col">
+                  최근 적재
+                </th>
               </tr>
             </thead>
             <tbody>
               {index.data.sources.map((s) => (
-                <tr className="border-border/60 border-b last:border-0" key={s.source}>
+                <tr
+                  className="border-border/60 border-b last:border-0"
+                  key={s.source}
+                >
                   <td className="py-1.5 pr-3 font-mono text-xs">{s.source}</td>
-                  <td className="py-1.5 pr-3 text-right tabular-nums">{s.documents}</td>
-                  <td className="py-1.5 pr-3 text-right tabular-nums">{s.chunks}</td>
+                  <td className="py-1.5 pr-3 text-right tabular-nums">
+                    {s.documents}
+                  </td>
+                  <td className="py-1.5 pr-3 text-right tabular-nums">
+                    {s.chunks}
+                  </td>
                   <td
                     className={`py-1.5 pr-3 text-right tabular-nums${
                       s.embedded < s.chunks ? " text-unsuitable" : ""
@@ -143,7 +163,10 @@ export default async function AdminQuality() {
         )}
         {index.ok && (
           <EmbedMissingButton
-            missing={index.data.sources.reduce((sum, x) => sum + x.chunks - x.embedded, 0)}
+            missing={index.data.sources.reduce(
+              (sum, x) => sum + x.chunks - x.embedded,
+              0,
+            )}
           />
         )}
       </Card>

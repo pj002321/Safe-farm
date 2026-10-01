@@ -1,4 +1,4 @@
-import "server-only"
+import "server-only";
 import { getSupabaseAdmin } from "@/shared/supabase/server";
 import { cropIssues } from "./domain/cropAudit";
 /**
@@ -18,7 +18,11 @@ export interface CropMasterRow {
   nameKo: string;
   baseTemp: number | null;
   upperTemp: number | null;
-  variants: { maturityType: string; gddTarget: number | null; stages: number }[];
+  variants: {
+    maturityType: string;
+    gddTarget: number | null;
+    stages: number;
+  }[];
   issues: string[];
 }
 

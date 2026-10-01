@@ -1,12 +1,12 @@
 import type { Metadata } from "next";
 import { AdminPage } from "@/components/admin/AdminPage";
+import { BatchDiagnosePanel } from "@/components/admin/BatchDiagnosePanel";
 import { HourlyBars } from "@/components/admin/HourlyBars";
+import { RerunPanel } from "@/components/admin/RerunPanel";
 import { Badge } from "@/components/shared/Badge";
 import { Card } from "@/components/shared/Card";
-import { requireAdminOrRedirect } from "@/shared/auth/adminSession";
 import { aiService } from "@/shared/aiService/client";
-import { BatchDiagnosePanel } from "@/components/admin/BatchDiagnosePanel";
-import { RerunPanel } from "@/components/admin/RerunPanel";
+import { requireAdminOrRedirect } from "@/shared/auth/adminSession";
 
 /**
  * ---------------------------------------------
@@ -28,7 +28,6 @@ export const metadata: Metadata = { title: "배치 관리" };
 
 export const dynamic = "force-dynamic";
 
-
 const dateFormat = new Intl.DateTimeFormat("ko-KR", {
   timeZone: "Asia/Seoul",
   month: "numeric",
@@ -37,7 +36,8 @@ const dateFormat = new Intl.DateTimeFormat("ko-KR", {
   minute: "2-digit",
 });
 
-const at = (iso: string | null) => (iso ? dateFormat.format(new Date(iso)) : "—");
+const at = (iso: string | null) =>
+  iso ? dateFormat.format(new Date(iso)) : "—";
 
 export default async function AdminBatches() {
   await requireAdminOrRedirect();
@@ -54,7 +54,8 @@ export default async function AdminBatches() {
       {!result.ok ? (
         <Card>
           <p className="text-sm text-unsuitable">
-            ai-service 에서 상태를 못 읽었습니다: {result.detail ?? result.reason}
+            ai-service 에서 상태를 못 읽었습니다:{" "}
+            {result.detail ?? result.reason}
           </p>
         </Card>
       ) : (
@@ -63,9 +64,14 @@ export default async function AdminBatches() {
             <table className="w-full text-sm">
               <tbody>
                 {result.data.feeds.map((f) => (
-                  <tr className="border-border/60 border-b last:border-0" key={f.key}>
+                  <tr
+                    className="border-border/60 border-b last:border-0"
+                    key={f.key}
+                  >
                     <td className="py-2 pr-3">{f.label}</td>
-                    <td className="py-2 pr-3 font-mono text-xs tabular-nums">{at(f.latest)}</td>
+                    <td className="py-2 pr-3 font-mono text-xs tabular-nums">
+                      {at(f.latest)}
+                    </td>
                     <td className="py-2 pr-3">
                       {f.stale === null ? (
                         <Badge size="sm">판정 안 함</Badge>
@@ -94,35 +100,58 @@ export default async function AdminBatches() {
             <table className="w-full text-sm">
               <tbody>
                 {result.data.cron.map((c) => (
-                  <tr className="border-border/60 border-b last:border-0" key={c.jobname}>
+                  <tr
+                    className="border-border/60 border-b last:border-0"
+                    key={c.jobname}
+                  >
                     <td className="py-2 pr-3 font-mono text-xs">{c.jobname}</td>
-                    <td className="py-2 pr-3 font-mono text-fg-muted text-xs">{c.schedule}</td>
-                    <td className="py-2 pr-3 tabular-nums">
-                      {c.runs}회{c.failed > 0 && <span className="text-unsuitable"> · 실패 {c.failed}</span>}
+                    <td className="py-2 pr-3 font-mono text-fg-muted text-xs">
+                      {c.schedule}
                     </td>
-                    <td className="py-2 font-mono text-xs tabular-nums">{at(c.last_run)}</td>
+                    <td className="py-2 pr-3 tabular-nums">
+                      {c.runs}회
+                      {c.failed > 0 && (
+                        <span className="text-unsuitable">
+                          {" "}
+                          · 실패 {c.failed}
+                        </span>
+                      )}
+                    </td>
+                    <td className="py-2 font-mono text-xs tabular-nums">
+                      {at(c.last_run)}
+                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
             <p className="mt-2 text-fg-subtle text-xs">
-              cron 의 실행 횟수는 요청을 보낸 횟수입니다. 실제 성공 여부는 아래 HTTP 결과를 보세요.
+              cron 의 실행 횟수는 요청을 보낸 횟수입니다. 실제 성공 여부는 아래
+              HTTP 결과를 보세요.
             </p>
           </Card>
 
           <Card title="실제 HTTP 결과 (pg_net 보관분)">
             {result.data.http.length === 0 ? (
-              <p className="text-fg-muted text-sm">보관 중인 결과가 없습니다.</p>
+              <p className="text-fg-muted text-sm">
+                보관 중인 결과가 없습니다.
+              </p>
             ) : (
               <ul className="flex flex-col gap-1 text-sm">
                 {result.data.http.map((h) => (
-                  <li className="flex flex-wrap items-center gap-2" key={`${h.at}-${h.job}`}>
-                    <span className="font-mono text-xs tabular-nums">{at(h.at)}</span>
+                  <li
+                    className="flex flex-wrap items-center gap-2"
+                    key={`${h.at}-${h.job}`}
+                  >
+                    <span className="font-mono text-xs tabular-nums">
+                      {at(h.at)}
+                    </span>
                     <span className="font-mono text-xs">{h.job ?? "?"}</span>
                     <Badge size="sm" tone={h.ok ? "good" : "unsuitable"}>
                       {h.status ?? "응답 없음"}
                     </Badge>
-                    {h.detail && <span className="text-fg-muted text-xs">{h.detail}</span>}
+                    {h.detail && (
+                      <span className="text-fg-muted text-xs">{h.detail}</span>
+                    )}
                   </li>
                 ))}
               </ul>
@@ -147,7 +176,11 @@ export default async function AdminBatches() {
                 <p className="mb-1 flex flex-wrap items-baseline gap-2">
                   <span className="font-mono text-xs">{h.host}</span>
                   <span className="tabular-nums">{h.count}건</span>
-                  {h.failed > 0 && <span className="text-unsuitable text-xs">실패 {h.failed}</span>}
+                  {h.failed > 0 && (
+                    <span className="text-unsuitable text-xs">
+                      실패 {h.failed}
+                    </span>
+                  )}
                 </p>
                 <HourlyBars counts={h.hourly} label={h.host} />
               </li>
@@ -155,7 +188,8 @@ export default async function AdminBatches() {
           </ul>
         )}
         <p className="mt-2 text-fg-subtle text-xs">
-          호출 한도는 기관마다 달라 여기서 판정하지 않습니다. ai-service 가 재시작하면 다시 셉니다.
+          호출 한도는 기관마다 달라 여기서 판정하지 않습니다. ai-service 가
+          재시작하면 다시 셉니다.
         </p>
       </Card>
     </AdminPage>

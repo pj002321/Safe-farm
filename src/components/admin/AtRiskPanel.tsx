@@ -2,10 +2,10 @@
 
 import Link from "next/link";
 import { useState, useTransition } from "react";
+import { loadAtRiskReport } from "@/app/(admin)/admin/members/actions";
 import { Badge } from "@/components/shared/Badge";
 import { Button } from "@/components/shared/Button";
 import { Card } from "@/components/shared/Card";
-import { loadAtRiskReport } from "@/app/(admin)/admin/members/actions";
 
 type Report = Extract<
   Awaited<ReturnType<typeof loadAtRiskReport>>,
@@ -36,7 +36,9 @@ export function AtRiskPanel() {
         </Button>
         {error && <p className="text-sm text-unsuitable">{error}</p>}
         {report && report.members.length === 0 && (
-          <p className="text-fg-muted text-sm">지금 챙겨야 할 회원이 없습니다.</p>
+          <p className="text-fg-muted text-sm">
+            지금 챙겨야 할 회원이 없습니다.
+          </p>
         )}
         {report && report.members.length > 0 && (
           <ul className="flex flex-col gap-4">
@@ -52,12 +54,16 @@ export function AtRiskPanel() {
                   >
                     {m.email ?? m.userId}
                   </Link>
-                  <span className="text-fg-subtle text-xs">{m.plots.join(", ")}</span>
+                  <span className="text-fg-subtle text-xs">
+                    {m.plots.join(", ")}
+                  </span>
                 </div>
                 <p className="mt-1 text-fg-muted">{m.reasons.join(" · ")}</p>
                 {m.draft && (
                   <p className="mt-1 rounded-sm bg-surface-2 px-2 py-1">
-                    <span className="text-fg-subtle text-xs">안내문 초안 · </span>
+                    <span className="text-fg-subtle text-xs">
+                      안내문 초안 ·{" "}
+                    </span>
                     {m.draft}
                   </p>
                 )}

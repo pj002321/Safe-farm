@@ -1,8 +1,8 @@
 "use server";
 
+import { aiService } from "@/shared/aiService/client";
 import { listAccounts } from "@/shared/auth/accounts";
 import { requireAdmin } from "@/shared/auth/adminSession";
-import { aiService } from "@/shared/aiService/client";
 
 export async function loadAtRiskReport() {
   await requireAdmin();

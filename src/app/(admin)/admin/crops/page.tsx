@@ -4,10 +4,7 @@ import { Badge } from "@/components/shared/Badge";
 import { Card } from "@/components/shared/Card";
 import { listCropMaster } from "@/features/admin/cropMasterStore";
 import { requireAdminOrRedirect } from "@/shared/auth/adminSession";
-import {
-  MATURITY_LABEL_KO,
-  toMaturityType,
-} from "@/shared/growth/maturity";
+import { MATURITY_LABEL_KO, toMaturityType } from "@/shared/growth/maturity";
 /**
  * ---------------------------------------------
  * [Feature]: 작물 마스터  →  /admin/crops   (V1-108~110)
@@ -43,7 +40,9 @@ export default async function AdminCrops() {
     >
       <div className="grid gap-3 sm:grid-cols-2">
         <Card title="작물">
-          <span className="font-mono text-2xl tabular-nums">{crops.length}</span>
+          <span className="font-mono text-2xl tabular-nums">
+            {crops.length}
+          </span>
         </Card>
         <Card title="결함 있는 작물">
           <span className="font-mono text-2xl text-unsuitable tabular-nums">
@@ -58,15 +57,26 @@ export default async function AdminCrops() {
             <caption className="sr-only">작물 마스터와 결함 목록</caption>
             <thead>
               <tr className="border-border border-b text-fg-muted text-xs">
-                <th className="px-3 py-2 text-left font-medium" scope="col">작물</th>
-                <th className="px-3 py-2 text-right font-medium" scope="col">기준/상한 ℃</th>
-                <th className="px-3 py-2 text-left font-medium" scope="col">품종 (목표 GDD · 단계 수)</th>
-                <th className="px-3 py-2 text-left font-medium" scope="col">결함</th>
+                <th className="px-3 py-2 text-left font-medium" scope="col">
+                  작물
+                </th>
+                <th className="px-3 py-2 text-right font-medium" scope="col">
+                  기준/상한 ℃
+                </th>
+                <th className="px-3 py-2 text-left font-medium" scope="col">
+                  품종 (목표 GDD · 단계 수)
+                </th>
+                <th className="px-3 py-2 text-left font-medium" scope="col">
+                  결함
+                </th>
               </tr>
             </thead>
             <tbody>
               {sorted.map((crop) => (
-                <tr className="border-border/60 border-b last:border-0" key={crop.cropId}>
+                <tr
+                  className="border-border/60 border-b last:border-0"
+                  key={crop.cropId}
+                >
                   <th className="px-3 py-2.5 text-left font-normal" scope="row">
                     {crop.nameKo}
                   </th>

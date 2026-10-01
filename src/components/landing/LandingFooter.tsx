@@ -66,7 +66,8 @@ export function LandingFooter() {
           <div className="flex flex-col gap-4 lg:pr-8">
             <LogoWordmark className="text-fg" />
             <p className="text-pretty text-fg-muted text-sm leading-relaxed">
-              위성 관측과 기상 예보를 이어 붙여, 땅에서 일어나는 변화를 읽어 드립니다.
+              위성 관측과 기상 예보를 이어 붙여, 땅에서 일어나는 변화를 읽어
+              드립니다.
             </p>
           </div>
 

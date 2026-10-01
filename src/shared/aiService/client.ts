@@ -463,12 +463,23 @@ export type SystemStatus = {
     count: number;
     avgMs: number | null;
     errors: number;
-    routes: { route: string; count: number; avgMs: number; p95Ms: number; errors: number }[];
+    routes: {
+      route: string;
+      count: number;
+      avgMs: number;
+      p95Ms: number;
+      errors: number;
+    }[];
     hourly: number[];
   };
   outbound: { host: string; count: number; failed: number; hourly: number[] }[];
   staleFeeds: string[];
-  errors: { at: string; severity: "error" | "warning"; source: string; message: string }[];
+  errors: {
+    at: string;
+    severity: "error" | "warning";
+    source: string;
+    message: string;
+  }[];
 };
 
 export type RerunJob = "tasks" | "alerts" | "weather";
@@ -493,7 +504,13 @@ export type RetrievalArm = {
 export type RetrievalEval = {
   k: number;
   arms: RetrievalArm[];
-  questions: { question: string; expected: string; A: number; B: number; C: number }[];
+  questions: {
+    question: string;
+    expected: string;
+    A: number;
+    B: number;
+    C: number;
+  }[];
 };
 
 export type StageAccuracy = {
@@ -800,19 +817,30 @@ export const aiService = {
    * 작물 사진 한 장을 즉석에서 진단한다. 저장하지 않는 일회성 호출이라
    * `userId` 를 넘기지 않는다 — 이력도, 일일 한도도 없다(ai-service `api/diagnose.py`).
    */
-  diagnoseImage: (userId: string, imageDataUrl: string, question: string | null) =>
+  diagnoseImage: (
+    userId: string,
+    imageDataUrl: string,
+    question: string | null,
+  ) =>
     call<DiagnoseImageResult>("/v1/diagnose/image", {
       method: "POST",
-      body: JSON.stringify({ user_id: userId, image_data_url: imageDataUrl, question }),
+      body: JSON.stringify({
+        user_id: userId,
+        image_data_url: imageDataUrl,
+        question,
+      }),
       timeoutMs: DIAGNOSE_TIMEOUT_MS,
     }),
 
   /** 관리자용 회원 분석. LLM 한 번이라 오래 걸린다. */
   memberInsight: (userId: string) =>
-    call<MemberInsight>(`/v1/admin/members/${encodeURIComponent(userId)}/insight`, {
-      method: "POST",
-      timeoutMs: 60_000,
-    }),
+    call<MemberInsight>(
+      `/v1/admin/members/${encodeURIComponent(userId)}/insight`,
+      {
+        method: "POST",
+        timeoutMs: 60_000,
+      },
+    ),
 
   /** 관리자용 질문 트렌드. 질문 최대 200개를 LLM 한 번에 넘긴다. */
   questionTrends: () =>
@@ -836,10 +864,13 @@ export const aiService = {
 
   /** 임베딩이 빠진 조각만 채운다(한 번에 최대 2,000개). */
   embedMissing: () =>
-    call<{ embedded: number; remaining: number }>("/v1/admin/index/embed-missing", {
-      method: "POST",
-      timeoutMs: 120_000,
-    }),
+    call<{ embedded: number; remaining: number }>(
+      "/v1/admin/index/embed-missing",
+      {
+        method: "POST",
+        timeoutMs: 120_000,
+      },
+    ),
 
   /** 골든셋 검색 지표와 3군 비교. 문항마다 임베딩 1회. */
   retrievalEval: () =>
@@ -849,7 +880,8 @@ export const aiService = {
     }),
 
   /** 사용자 단계 보정 대비 생육단계 예측 오차. */
-  stageAccuracy: () => call<StageAccuracy>("/v1/admin/accuracy", { timeoutMs: 30_000 }),
+  stageAccuracy: () =>
+    call<StageAccuracy>("/v1/admin/accuracy", { timeoutMs: 30_000 }),
 
   /** 관리자 배치 관리: cron 요약 · 실제 HTTP 결과 · 데이터 신선도. */
   batchStatus: () => call<BatchStatus>("/v1/admin/batches"),

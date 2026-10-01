@@ -16,7 +16,11 @@ import { WelcomeBackCard } from "./WelcomeBackCard";
 export async function WelcomeBackSlot({ userId }: { userId: string }) {
   const result = await aiService.welcomeBack(userId);
   if (!result.ok) {
-    console.error("[dashboard] 복귀 인사 조회 실패", result.reason, result.detail);
+    console.error(
+      "[dashboard] 복귀 인사 조회 실패",
+      result.reason,
+      result.detail,
+    );
     return null;
   }
   if (!result.data.show) return null;
