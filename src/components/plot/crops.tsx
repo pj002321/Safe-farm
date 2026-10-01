@@ -6,8 +6,8 @@ import { HarvestIcon, LeafIcon, SproutIcon } from "@/components/icons";
  * [Feature]: 지원 작물 — 단일 출처
  *
  * [Description]
- * - 등록 화면(`CropCards`)·칩(`CropChips`)·지도 마커·홈 카드·상세 화면이 **같은
- *   목록**을 본다. 예전에는 `CropChips` 와 `CropCards` 가 각자 배열을 들고 있었고,
+ * - 등록 화면(`CropCards`)·지도 마커·홈 카드·상세 화면이 **같은
+ *   목록**을 본다. 예전에는 칩과 `CropCards` 가 각자 배열을 들고 있었고,
  *   내용이 우연히 같아서 동작했다. 한쪽에만 작물을 더하는 순간 등록은 되는데
  *   홈 카드에서는 "작물 미지정"으로 뜨는 상태가 된다.
  * - **아이콘이 여기 있는 이유.** 밭 카드의 얼굴을 작물에서 가져오기로 했다.

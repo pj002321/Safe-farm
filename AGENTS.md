@@ -17,34 +17,17 @@ feature/* → development → production
 
 ## 인프라
 
-2. **승격**
-   - 작업이 끝나면 `feature/작업명`을 `development`에 머지한다.
-   - 머지 후 해당 feature 브랜치는 삭제 여부를 확인한다.
-
-3. **배포**
-   - `development` 머지 → 개발 환경 반영.
-   - 개발 환경 검증 완료 후 `development`를 `production`으로 머지 → 운영 배포.
-
-4. **직접 커밋 금지**
-   - `development`와 `production`에 직접 커밋하지 않는다. 항상 feature 브랜치를 거친다.
-
-### 인프라
-
 DB 는 Supabase(서울) 하나, 앱(Next · ai-service)은 Railway 에 둔다.
 Next ↔ ai-service 통신 규약은 `docs/architecture/service-communication.md`.
 
 - **ai-service 에 공개 도메인을 붙이지 않는다.** LLM 을 호출하므로 열면 남이 우리
   OpenAI 요금을 쓴다. 브라우저는 ai-service 를 직접 부르지 않고 항상 Next 서버를 거친다.
+  Next → ai-service 호출은 Railway 내부망(`http://…railway.internal`) + `AI_SERVICE_TOKEN`.
 - `.env` 는 키 **이름**만 공유하는 템플릿이라 git 에 올라간다. **값을 넣지 않는다.**
   실제 값은 로컬 `.env.local`(gitignore), 배포는 Railway 환경변수에만 둔다.
-- service role 키(`DB_SERVICE_ROLE`)는 RLS 를 통째로 우회한다. 이 키 하나가 DB 전체
-  권한이다.
-
-- `SUPABASE_SERVICE_ROLE` 키와 `AI_SERVICE_TOKEN`은 **저장소에 넣지 않는다.** 로컬은
-  `.env.local`, 배포는 Railway 환경변수에만 둔다. 추적되는 `.env`에는 키 이름만 적는다.
-- ai-service에는 공개 도메인을 붙이지 않는다. LLM을 호출하므로 열면 남이 요금을 쓴다.
-  Next → ai-service 호출은 Railway 내부망(`http://…railway.internal`) + `AI_SERVICE_TOKEN`.
-  자세한 규약은 `docs/architecture/service-communication.md`.
+- service role 키(`DB_SERVICE_ROLE`, 예전 이름 `SUPABASE_SERVICE_ROLE` 도 읽힌다)는
+  RLS 를 통째로 우회한다. 이 키 하나가 DB 전체 권한이다. `AI_SERVICE_TOKEN` 과 함께
+  **저장소에 넣지 않는다.**
 
 ## 아키텍처 규칙
 

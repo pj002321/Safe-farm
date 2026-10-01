@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { Button } from "@/components/shared/Button";
 import { Card } from "@/components/shared/Card";
 import type { RetrievalEval } from "@/shared/aiService/client";
-import { runRetrievalEval } from "./actions";
+import { runRetrievalEval } from "@/app/(admin)/admin/quality/actions";
 
 const pct = (v: number) => `${Math.round(v * 100)}%`;
 

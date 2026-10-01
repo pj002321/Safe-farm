@@ -6,7 +6,7 @@ import { Badge } from "@/components/shared/Badge";
 import { Button } from "@/components/shared/Button";
 import { Card } from "@/components/shared/Card";
 import type { RerunState } from "@/shared/aiService/client";
-import { rerunBatch } from "./actions";
+import { rerunBatch } from "@/app/(admin)/admin/batches/actions";
 
 const JOB_LABEL = {
   tasks: "오늘 할 일 생성",

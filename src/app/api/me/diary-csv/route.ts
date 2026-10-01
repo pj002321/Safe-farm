@@ -154,7 +154,7 @@ export async function GET(request: Request): Promise<Response> {
   // ⚠️ BOM 을 여기서 붙인다. 없으면 한국어 Windows 엑셀이 파일을 CP949 로 읽어
   //    한글이 전부 깨진다 — 엑셀은 UTF-8 을 자동 감지하지 않는다.
   //    U+FEFF 를 글자 그대로 적지 않는 이유는 폭이 0이라 편집기·포매터가 조용히
-  //    지우거나 옮기기 때문이다(`CsvDownloadButton` 과 같은 판단).
+  //    지우거나 옮기기 때문이다.
   const body = String.fromCharCode(0xfeff) + toCsv(DIARY_CSV_HEADERS, rows);
 
   return new Response(body, {
