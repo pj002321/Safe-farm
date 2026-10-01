@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import {
   formatFarmDate,
   formatRainfall,
-  formatScore,
   formatTemperature,
   hourMinuteOf,
 } from "./format";
@@ -34,13 +33,6 @@ describe("formatRainfall", () => {
   it("1mm 이상은 반올림한 정수", () => {
     expect(formatRainfall(1)).toBe("1mm");
     expect(formatRainfall(12.6)).toBe("13mm");
-  });
-});
-
-describe("formatScore", () => {
-  it("정수로 반올림해 점을 붙인다", () => {
-    expect(formatScore(87)).toBe("87점");
-    expect(formatScore(87.6)).toBe("88점");
   });
 });
 

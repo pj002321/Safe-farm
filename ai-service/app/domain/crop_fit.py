@@ -89,7 +89,7 @@ class FitResult:
     score: int
     grade: str  # good | caution | unsuitable
     in_sowing_window: bool
-    risks: tuple[str, ...]  # "cold" | "heat" 부분집합 — SuitabilityCard 의 RiskKind 와 다른 어휘라 그대로 못 씀
+    risks: tuple[str, ...]  # "cold" | "heat" 부분집합
     note: str  # 근거 한 줄. LLM 없이도 화면에 바로 쓸 수 있다
 
 
