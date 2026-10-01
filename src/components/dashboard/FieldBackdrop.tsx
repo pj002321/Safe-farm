@@ -27,16 +27,32 @@
  */
 const TILE = 200;
 const P = {
-  a: "0 0", b: "70 0", c: "130 0", d: "200 0",
-  e: "0 60", f: "76 54", g: "124 66", h: "200 60",
-  i: "0 140", j: "64 146", k: "136 134", l: "200 140",
-  m: "0 200", n: "70 200", o: "130 200", q: "200 200",
+  a: "0 0",
+  b: "70 0",
+  c: "130 0",
+  d: "200 0",
+  e: "0 60",
+  f: "76 54",
+  g: "124 66",
+  h: "200 60",
+  i: "0 140",
+  j: "64 146",
+  k: "136 134",
+  l: "200 140",
+  m: "0 200",
+  n: "70 200",
+  o: "130 200",
+  q: "200 200",
 } as const;
 
-const quad = (...pts: (keyof typeof P)[]) => `M${pts.map((k) => P[k]).join(" L")} Z`;
+const quad = (...pts: (keyof typeof P)[]) =>
+  `M${pts.map((k) => P[k]).join(" L")} Z`;
 
 /** 필지 아홉 칸과 각자의 땅 상태. */
-const PARCELS: { d: string; fill: "rows-a" | "rows-b" | "ndvi" | "soil" | null }[] = [
+const PARCELS: {
+  d: string;
+  fill: "rows-a" | "rows-b" | "ndvi" | "soil" | null;
+}[] = [
   { d: quad("a", "b", "f", "e"), fill: "rows-a" },
   { d: quad("b", "c", "g", "f"), fill: null },
   { d: quad("c", "d", "h", "g"), fill: "ndvi" },
@@ -66,15 +82,55 @@ export function FieldBackdrop() {
       }}
     >
       {/* ── 필지 ─────────────────────────────────────── */}
-      <svg aria-hidden="true" className="absolute inset-0 size-full" xmlns="http://www.w3.org/2000/svg">
+      <svg
+        aria-hidden="true"
+        className="absolute inset-0 size-full"
+        xmlns="http://www.w3.org/2000/svg"
+      >
         <defs>
-          <pattern height="10" id="fb-rows-a" patternTransform="rotate(-24)" patternUnits="userSpaceOnUse" width="10">
-            <line className="text-telemetry" stroke="currentColor" strokeOpacity="0.2" strokeWidth="1" x1="0" x2="10" y1="5" y2="5" />
+          <pattern
+            height="10"
+            id="fb-rows-a"
+            patternTransform="rotate(-24)"
+            patternUnits="userSpaceOnUse"
+            width="10"
+          >
+            <line
+              className="text-telemetry"
+              stroke="currentColor"
+              strokeOpacity="0.2"
+              strokeWidth="1"
+              x1="0"
+              x2="10"
+              y1="5"
+              y2="5"
+            />
           </pattern>
-          <pattern height="9" id="fb-rows-b" patternTransform="rotate(62)" patternUnits="userSpaceOnUse" width="9">
-            <line className="text-telemetry" stroke="currentColor" strokeOpacity="0.16" strokeWidth="1" x1="0" x2="9" y1="4.5" y2="4.5" />
+          <pattern
+            height="9"
+            id="fb-rows-b"
+            patternTransform="rotate(62)"
+            patternUnits="userSpaceOnUse"
+            width="9"
+          >
+            <line
+              className="text-telemetry"
+              stroke="currentColor"
+              strokeOpacity="0.16"
+              strokeWidth="1"
+              x1="0"
+              x2="9"
+              y1="4.5"
+              y2="4.5"
+            />
           </pattern>
-          <pattern height={TILE} id="fb-parcels" patternTransform="rotate(-8) scale(2.4)" patternUnits="userSpaceOnUse" width={TILE}>
+          <pattern
+            height={TILE}
+            id="fb-parcels"
+            patternTransform="rotate(-8) scale(2.4)"
+            patternUnits="userSpaceOnUse"
+            width={TILE}
+          >
             {PARCELS.map(({ d, fill }) => (
               <path
                 className={
@@ -92,7 +148,9 @@ export function FieldBackdrop() {
                       ? "currentColor"
                       : "none"
                 }
-                fillOpacity={fill === "ndvi" ? 0.1 : fill === "soil" ? 0.09 : undefined}
+                fillOpacity={
+                  fill === "ndvi" ? 0.1 : fill === "soil" ? 0.09 : undefined
+                }
                 key={d}
                 stroke="var(--color-fg-subtle)"
                 strokeOpacity="0.3"
@@ -112,7 +170,13 @@ export function FieldBackdrop() {
         viewBox="0 0 1600 1000"
         xmlns="http://www.w3.org/2000/svg"
       >
-        <g className="text-fg-subtle" stroke="currentColor" strokeDasharray="2 10" strokeOpacity="0.35" strokeWidth="1">
+        <g
+          className="text-fg-subtle"
+          stroke="currentColor"
+          strokeDasharray="2 10"
+          strokeOpacity="0.35"
+          strokeWidth="1"
+        >
           {[200, 400, 600, 800].map((y) => (
             <line key={`lat-${y}`} x1="0" x2="1600" y1={y} y2={y} />
           ))}
@@ -123,8 +187,19 @@ export function FieldBackdrop() {
 
         <g className="text-accent" fill="none" stroke="currentColor">
           {/* 촬영 폭. 궤적을 따라가는 넓고 옅은 띠 — 이 안의 필지가 이번 패스에 찍힌다. */}
-          <path d={GROUND_TRACK} strokeLinecap="round" strokeOpacity="0.09" strokeWidth="110" />
-          <path d={GROUND_TRACK} strokeDasharray="1 7" strokeLinecap="round" strokeOpacity="0.5" strokeWidth="1.5" />
+          <path
+            d={GROUND_TRACK}
+            strokeLinecap="round"
+            strokeOpacity="0.09"
+            strokeWidth="110"
+          />
+          <path
+            d={GROUND_TRACK}
+            strokeDasharray="1 7"
+            strokeLinecap="round"
+            strokeOpacity="0.5"
+            strokeWidth="1.5"
+          />
         </g>
       </svg>
 

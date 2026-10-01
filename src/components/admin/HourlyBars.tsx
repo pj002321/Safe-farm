@@ -9,7 +9,13 @@
  * ---------------------------------------------
  */
 
-export function HourlyBars({ counts, label }: { counts: number[]; label: string }) {
+export function HourlyBars({
+  counts,
+  label,
+}: {
+  counts: number[];
+  label: string;
+}) {
   const max = Math.max(1, ...counts);
   return (
     <div

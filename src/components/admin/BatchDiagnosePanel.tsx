@@ -1,12 +1,18 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { diagnoseBatches } from "@/app/(admin)/admin/batches/actions";
 import { Button } from "@/components/shared/Button";
 import { Card } from "@/components/shared/Card";
 import type { BatchDiagnosis, InsightFinding } from "@/shared/aiService/client";
-import { diagnoseBatches } from "@/app/(admin)/admin/batches/actions";
 
-function Findings({ title, items }: { title: string; items: InsightFinding[] }) {
+function Findings({
+  title,
+  items,
+}: {
+  title: string;
+  items: InsightFinding[];
+}) {
   if (items.length === 0) return null;
   return (
     <div>
@@ -15,7 +21,9 @@ function Findings({ title, items }: { title: string; items: InsightFinding[] }) 
         {items.map((f) => (
           <li key={f.text}>
             {f.text}{" "}
-            <span className="font-mono text-fg-subtle text-xs">[{f.evidence.join(", ")}]</span>
+            <span className="font-mono text-fg-subtle text-xs">
+              [{f.evidence.join(", ")}]
+            </span>
           </li>
         ))}
       </ul>
@@ -50,7 +58,9 @@ export function BatchDiagnosePanel() {
           <>
             <Findings items={diagnosis.causes} title="원인" />
             <Findings items={diagnosis.actions} title="조치" />
-            <p className="text-fg-muted text-xs">근거 검증 탈락 {diagnosis.dropped}건</p>
+            <p className="text-fg-muted text-xs">
+              근거 검증 탈락 {diagnosis.dropped}건
+            </p>
             <details className="text-sm">
               <summary className="cursor-pointer text-fg-muted">
                 진단에 쓴 사실 {diagnosis.facts.length}건 (검증 기준)

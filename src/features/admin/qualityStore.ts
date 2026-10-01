@@ -1,4 +1,4 @@
-import "server-only"
+import "server-only";
 import { getSupabaseAdmin } from "@/shared/supabase/server";
 import { kstDateString } from "@/shared/utils/kstDate";
 
@@ -21,50 +21,50 @@ const BLOCKED_PREFIX = "농약 희석배수";
 const RECENT_LIMIT = 20;
 
 export interface AskRow {
-    id: string;
-    question: string;
-    answer: string | null;
-    feedbackReason: string | null;
-    createdAt: string;
+  id: string;
+  question: string;
+  answer: string | null;
+  feedbackReason: string | null;
+  createdAt: string;
 }
 
 export interface AskQuality {
-    total: number;
-    up: number;
-    down: number;
-    blocked: number;
-    recentDown: AskRow[];
-    recentBlocked: AskRow[];
+  total: number;
+  up: number;
+  down: number;
+  blocked: number;
+  recentDown: AskRow[];
+  recentBlocked: AskRow[];
 }
 
 function countOf(result: {
-    count: number | null;
-    error: { message: string} | null;
+  count: number | null;
+  error: { message: string } | null;
 }) {
-    if(result.error) throw new Error(result.error.message);
-    return result.count ?? 0;
+  if (result.error) throw new Error(result.error.message);
+  return result.count ?? 0;
 }
 
 function rowsOf(result: {
-    data:
+  data:
     | {
         id: string;
         question: string;
         answer: string | null;
         feedback_reason: string | null;
         created_at: string;
-    }[]
-    |null;
-    error: {message:string} | null;
+      }[]
+    | null;
+  error: { message: string } | null;
 }): AskRow[] {
-    if(result.error) throw new Error(result.error.message);
-    return (result.data ?? []).map((row) => ({
-        id: row.id,
-        question: row.question,
-        answer: row.answer,
-        feedbackReason: row.feedback_reason,
-        createdAt: row.created_at,
-    }));
+  if (result.error) throw new Error(result.error.message);
+  return (result.data ?? []).map((row) => ({
+    id: row.id,
+    question: row.question,
+    answer: row.answer,
+    feedbackReason: row.feedback_reason,
+    createdAt: row.created_at,
+  }));
 }
 
 export async function getAskQuality(now = new Date()): Promise<AskQuality> {

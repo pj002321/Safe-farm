@@ -63,7 +63,7 @@ export async function TodayInSangju() {
   const summary = weather ? summarizeWeather(weather.series) : null;
   const card = cards[0] ?? null;
   const gauge = growth?.growths[0]?.gauge ?? null;
-  
+
   /** 오늘 예보 한 줄. ai-service 가 죽었거나 오늘이 없으면 null. */
   const todayForecast =
     forecast?.ok === true

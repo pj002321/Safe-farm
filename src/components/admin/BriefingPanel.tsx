@@ -1,10 +1,10 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { loadWeeklyBriefing } from "@/app/(admin)/admin/actions";
 import { Button } from "@/components/shared/Button";
 import { Card } from "@/components/shared/Card";
 import type { WeeklyBriefing } from "@/shared/aiService/client";
-import { loadWeeklyBriefing } from "@/app/(admin)/admin/actions";
 
 export function BriefingPanel() {
   const [briefing, setBriefing] = useState<WeeklyBriefing | null>(null);
@@ -55,7 +55,9 @@ export function BriefingPanel() {
                       <td className="pr-3 text-fg-subtle">[{m.id}]</td>
                       <td className="pr-3">{m.label}</td>
                       <td className="pr-3 tabular-nums">이번 주 {m.cur}</td>
-                      <td className="text-fg-muted tabular-nums">지난주 {m.prev}</td>
+                      <td className="text-fg-muted tabular-nums">
+                        지난주 {m.prev}
+                      </td>
                     </tr>
                   ))}
                 </tbody>

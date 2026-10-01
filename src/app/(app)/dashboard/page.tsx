@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
+import { FieldBackdrop } from "@/components/dashboard/FieldBackdrop";
 import {
   ForecastFallback,
   ForecastPanel,
@@ -11,7 +12,6 @@ import {
   PLOT_ONBOARDING_PATH,
   PlotStrip,
 } from "@/components/dashboard/PlotStrip";
-import { FieldBackdrop } from "@/components/dashboard/FieldBackdrop";
 import { DataFreshness } from "@/components/dashboard/StatusBanners";
 import { SAMPLE_FRESHNESS } from "@/components/dashboard/sample";
 import { TaskBoard } from "@/components/dashboard/TaskBoard";

@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { AdminPage } from "@/components/admin/AdminPage";
+import { AtRiskPanel } from "@/components/admin/AtRiskPanel";
 import { Badge } from "@/components/shared/Badge";
 import { Card } from "@/components/shared/Card";
 import { listAccounts } from "@/shared/auth/accounts";
 import { requireAdminOrRedirect } from "@/shared/auth/adminSession";
-import { AtRiskPanel } from "@/components/admin/AtRiskPanel";
 
 /**
  * ---------------------------------------------

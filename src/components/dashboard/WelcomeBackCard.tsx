@@ -37,7 +37,9 @@ export function WelcomeBackCard({
       className="flex flex-col gap-2 rounded-lg border border-accent/30 bg-accent/10 px-4 py-3"
     >
       <div className="flex items-start gap-2">
-        <p className="flex-1 font-semibold text-[0.92rem] text-fg">{greeting}</p>
+        <p className="flex-1 font-semibold text-[0.92rem] text-fg">
+          {greeting}
+        </p>
         <button
           className="-mr-1 shrink-0 rounded-full px-1.5 py-0.5 text-accent/70 text-lg leading-none transition-colors hover:bg-accent/10 hover:text-accent"
           onClick={dismiss}
