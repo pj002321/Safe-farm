@@ -34,11 +34,10 @@ def service_status() -> dict[str, object]:
         # 호출자가 "지금 리포트를 요청해도 되는가"를 이 값 하나로 판단한다.
         "ready": has_db and has_llm,
         "capabilities": {
-            # 아직 구현되지 않은 것을 true 로 두면 Next 가 호출했다가
-            # NotImplementedError 를 500 으로 받는다. 정직하게 false 로 둔다.
-            "embedding": False,
-            "retrieval": False,
-            "reportGeneration": False,
+            # 셋 다 구현돼 있다. DB(벡터·관측)와 LLM 키가 둘 다 있어야 돈다.
+            "embedding": has_db and has_llm,
+            "retrieval": has_db and has_llm,
+            "reportGeneration": has_db and has_llm,
         },
         "config": {
             "database": has_db,

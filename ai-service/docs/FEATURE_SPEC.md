@@ -19,18 +19,21 @@
 
 | # | 기능 | 트리거 | 주 데이터 출처 | 담당 모듈 | 상태 |
 |---|---|---|---|---|---|
-| F1 | 텃밭 등록 | 사용자 조작 (1회) | 카카오맵 역지오코딩 + `stations.csv`/`warn_regions.csv` + `nph-dfs_xy_lonlat` | (신설 필요) | 미착수 |
-| F2 | 오늘의 생육 리포트 | 매일 새벽 배치 | Open-Meteo daily·hourly, 기상청 일통계 | `features/growth/domain` | 구현(로직) / 설계(입력 배선) |
-| F3 | 작물 적합도 추천 | 등록 시 / 요청 시 | Open-Meteo daily (평균기온·강수·일조) | `features/recommendation/domain`, `graph` | 구현(로직) / 설계(입력 배선) |
-| F4 | 재해 경보 | 매일 배치 + 특보 발표 시 | 기상청 특보현황, 절기별 작물재해(`TG_MIN`) | `features/growth/domain/growthAlerts.ts`, `features/monitoring/domain/hazards.ts` | 구현(임계값 일부) / 설계(특보 연동) |
-| F5 | 위성 생육 확인(반대심문) | 5일 주기 (관측 있는 날만) | Sentinel-2 NDVI·NDWI·NDMI | `features/monitoring/domain/observation.ts` | 구현(타입) / 설계(실데이터 연동) — 현재 값은 데모 상수 |
-| F6 | 평년 대비 판정 | 연 1회 갱신, 조회 시 비교 | 기상청 평년값(`arcltr_sfc_norm`) + Open-Meteo archive 30년 | (신설 필요) | 설계 |
-| F7 | LLM 조언 문장화 | F2/F3 결과 생성 직후 | F2·F3·F4 의 계산 결과(payload) | `recommendation/graph/nodes.ts` (`makeExplainNode`) | 구현(추천 설명) / 미착수(생육 리포트용 문장화 — 현재는 규칙 기반 템플릿으로 대체) |
-| F8 | 드론 방제 판정 | 조회 시 (3일 예보) | Open-Meteo hourly(풍속·강수확률) + sunrise/sunset | (신설 필요, `today_field.py` 언급만 있음) | 설계 |
-| F9 | 지식 기반 Q&A (RAG) | 사용자 질문 | 농진청 문서 등 텍스트 자료 (임베딩 대상) | `ai-service/app/{knowledge,graph,api/ask.py}` | 미착수 (전부 TODO 스텁) |
+| F1 | 텃밭 등록 | 사용자 조작 (1회) | 카카오맵 + `toKmaGrid`(nx, ny) | `app/(app)/plots/new`, `pipeline/farm/sync_plot_grids.py` | 구현 |
+| F2 | 오늘의 생육 리포트 | 조회 시 (LLM 은 하루 한 번 캐시) | Open-Meteo · 기상청 관측, 실제 GDD | `ai-service/app/service/{report,plot_growth}.py`, `domain/gdd.py` | 구현 |
+| F3 | 작물 적합도 추천 | 등록 시 / 요청 시 | 평년값 · 관측소 | `ai-service/app/api/recommend.py`, `domain/{crop_fit,suitability}.py` | 구현 |
+| F4 | 재해 경보 | 매일 배치 + 특보 발표 시 | 기상청 특보, `crop_disaster_rules` | `ai-service/app/service/{warn_region,crop_hazard}.py`, `api/alerts.py` | 구현 |
+| F5 | 위성 생육 확인(반대심문) | 조회 시 (캐시 없으면 Sentinel 1회) | Sentinel-2 NDVI·NDMI | `ai-service/app/service/satellite_cache.py`, `pipeline/sentinelhub_client.py` | 구현 |
+| F6 | 평년 대비 판정 | 조회 시 비교 | 기상청 평년값 + 폴백 | `ai-service/app/service/climate_normals.py` | 구현 |
+| F7 | LLM 조언 문장화 | F2 리포트 생성 시 | F2·F4 의 계산 결과(payload) | `ai-service/app/service/report.py` | 구현 (숫자는 규칙이 만들고 LLM 은 요약만) |
+| F8 | 드론 방제 판정 | 조회 시 (3일 예보) | Open-Meteo hourly(풍속·강수확률) | `features/report/domain/drone.ts` | 구현(로직) / 데모 화면(`/report`)에서만 씀 |
+| F9 | 지식 기반 Q&A (RAG) | 사용자 질문 | 농진청 문서 등 텍스트 자료 (임베딩 대상) | `ai-service/app/{knowledge,graph,api/ask.py}` | 구현 |
 
 DOMAIN_REF 의 4종 조회 키(§2), 결측 규칙(§5 `-999`/`null`), 시각대 2종(KST/UTC)은 F2~F6
 전체가 공유하는 전제 조건이다. 기능별로 반복 서술하지 않는다.
+
+> ⚠ 아래 F1~F9 본문은 착수 전에 쓴 설계 메모다. "미착수"·"배선 안 됨" 같은 서술은
+> 지금 코드와 다를 수 있다 — **상태는 위 표가 정본이다.**
 
 ---
 
