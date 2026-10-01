@@ -129,8 +129,8 @@ DB 까지 실제로 왕복한다. 실패해도 500 을 내지 않고 `ok: false`
 }
 ```
 
-`capabilities` 를 정직하게 `false` 로 둔다. 아직 없는 기능을 `true` 로 두면
-Next 가 호출했다가 `NotImplementedError` 를 500 으로 받는다.
+위 예시는 DB·LLM 설정이 없을 때다. `capabilities` 셋은 이미 구현돼 있어서
+DB 와 LLM 키가 둘 다 있으면 `true` 가 된다.
 
 ---
 
@@ -239,8 +239,6 @@ Railway 가 새 서비스에 기본 브랜치를 잡는데, `main` 에 소스가
 
 | | 상태 |
 |---|---|
-| 리포트 생성 엔드포인트 | ai-service 의 RAG(`embed_texts`·`vector_store.search`·`nodes.generate`)가 미구현 |
-| 스트리밍 응답 | LLM 응답이 길어지면 필요. `/v1/status` 가 먼저 `ready: true` 가 돼야 한다 |
 | 재시도 | 콜드 스타트 대비. 지금은 `unavailable` 을 그대로 화면에 올린다 |
 
-`capabilities.reportGeneration` 이 `true` 가 되는 시점에 위 셋을 같이 본다.
+리포트 생성(`/v1/reports/{plot_id}`)과 질의응답 스트리밍(`/v1/ask`, SSE)은 구현됐다.

@@ -5,7 +5,7 @@ import { Badge } from "@/components/shared/Badge";
 import { Card } from "@/components/shared/Card";
 import { listAccounts } from "@/shared/auth/accounts";
 import { requireAdminOrRedirect } from "@/shared/auth/adminSession";
-import { AtRiskPanel } from "./AtRiskPanel";
+import { AtRiskPanel } from "@/components/admin/AtRiskPanel";
 
 /**
  * ---------------------------------------------
