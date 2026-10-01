@@ -5,7 +5,7 @@ import { Badge } from "@/components/shared/Badge";
 import { Button } from "@/components/shared/Button";
 import { Card } from "@/components/shared/Card";
 import type { InsightFinding, MemberInsight } from "@/shared/aiService/client";
-import { analyzeMember } from "./actions";
+import { analyzeMember } from "@/app/(admin)/admin/members/[id]/actions";
 
 const SEGMENT_TONE = {
   활발: "good",

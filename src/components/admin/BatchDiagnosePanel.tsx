@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { Button } from "@/components/shared/Button";
 import { Card } from "@/components/shared/Card";
 import type { BatchDiagnosis, InsightFinding } from "@/shared/aiService/client";
-import { diagnoseBatches } from "./actions";
+import { diagnoseBatches } from "@/app/(admin)/admin/batches/actions";
 
 function Findings({ title, items }: { title: string; items: InsightFinding[] }) {
   if (items.length === 0) return null;

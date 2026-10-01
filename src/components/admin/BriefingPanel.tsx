@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { Button } from "@/components/shared/Button";
 import { Card } from "@/components/shared/Card";
 import type { WeeklyBriefing } from "@/shared/aiService/client";
-import { loadWeeklyBriefing } from "./actions";
+import { loadWeeklyBriefing } from "@/app/(admin)/admin/actions";
 
 export function BriefingPanel() {
   const [briefing, setBriefing] = useState<WeeklyBriefing | null>(null);

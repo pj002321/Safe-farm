@@ -4,9 +4,9 @@ import { Card } from "@/components/shared/Card";
 import { type AskRow, getAskQuality} from "@/features/admin/qualityStore"
 import { requireAdminOrRedirect } from "@/shared/auth/adminSession";
 import { aiService } from "@/shared/aiService/client";
-import { EmbedMissingButton } from "./EmbedMissingButton";
-import { QuestionTrendPanel } from "./QuestionTrendPanel";
-import { RetrievalEvalPanel } from "./RetrievalEvalPanel";
+import { EmbedMissingButton } from "@/components/admin/EmbedMissingButton";
+import { QuestionTrendPanel } from "@/components/admin/QuestionTrendPanel";
+import { RetrievalEvalPanel } from "@/components/admin/RetrievalEvalPanel";
 
 /**
  * ---------------------------------------------
