@@ -5,7 +5,7 @@ import { Badge } from "@/components/shared/Badge";
 import { Card } from "@/components/shared/Card";
 import { getAccount } from "@/shared/auth/accounts";
 import { requireAdminOrRedirect } from "@/shared/auth/adminSession";
-import { MemberInsightPanel } from "./MemberInsightPanel";
+import { MemberInsightPanel } from "@/components/admin/MemberInsightPanel";
 
 /**
  * ---------------------------------------------

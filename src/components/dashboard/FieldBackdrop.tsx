@@ -66,7 +66,7 @@ export function FieldBackdrop() {
       }}
     >
       {/* ── 필지 ─────────────────────────────────────── */}
-      <svg className="absolute inset-0 size-full" xmlns="http://www.w3.org/2000/svg">
+      <svg aria-hidden="true" className="absolute inset-0 size-full" xmlns="http://www.w3.org/2000/svg">
         <defs>
           <pattern height="10" id="fb-rows-a" patternTransform="rotate(-24)" patternUnits="userSpaceOnUse" width="10">
             <line className="text-telemetry" stroke="currentColor" strokeOpacity="0.2" strokeWidth="1" x1="0" x2="10" y1="5" y2="5" />
@@ -106,6 +106,7 @@ export function FieldBackdrop() {
 
       {/* ── 지도 격자 · 지상 궤적 · 촬영 폭 ──────────────────────── */}
       <svg
+        aria-hidden="true"
         className="absolute inset-0 size-full"
         preserveAspectRatio="xMidYMid slice"
         viewBox="0 0 1600 1000"

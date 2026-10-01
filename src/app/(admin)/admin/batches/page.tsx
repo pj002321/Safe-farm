@@ -5,8 +5,8 @@ import { Badge } from "@/components/shared/Badge";
 import { Card } from "@/components/shared/Card";
 import { requireAdminOrRedirect } from "@/shared/auth/adminSession";
 import { aiService } from "@/shared/aiService/client";
-import { BatchDiagnosePanel } from "./BatchDiagnosePanel";
-import { RerunPanel } from "./RerunPanel";
+import { BatchDiagnosePanel } from "@/components/admin/BatchDiagnosePanel";
+import { RerunPanel } from "@/components/admin/RerunPanel";
 
 /**
  * ---------------------------------------------

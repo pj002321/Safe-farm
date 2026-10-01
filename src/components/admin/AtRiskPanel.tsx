@@ -5,7 +5,7 @@ import { useState, useTransition } from "react";
 import { Badge } from "@/components/shared/Badge";
 import { Button } from "@/components/shared/Button";
 import { Card } from "@/components/shared/Card";
-import { loadAtRiskReport } from "./actions";
+import { loadAtRiskReport } from "@/app/(admin)/admin/members/actions";
 
 type Report = Extract<
   Awaited<ReturnType<typeof loadAtRiskReport>>,

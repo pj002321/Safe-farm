@@ -1,4 +1,4 @@
-import { SwaggerViewer } from "./SwaggerViewer";
+import { SwaggerViewer } from "@/components/admin/SwaggerViewer";
 
 /**
  * ---------------------------------------------

@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { Button } from "@/components/shared/Button";
-import { embedMissingChunks } from "./actions";
+import { embedMissingChunks } from "@/app/(admin)/admin/quality/actions";
 
 /** 임베딩이 빠진 조각만 채운다. 전량 재임베딩은 화면에 두지 않는다(ops_status.embed_missing 주석). */
 export function EmbedMissingButton({ missing }: { missing: number }) {
