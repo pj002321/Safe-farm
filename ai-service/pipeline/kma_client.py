@@ -10,6 +10,7 @@
 - 격자변환(nph-dfs_xy_lonlat) → JSON 아님, 고정폭 텍스트(실측 확인)
 """
 import math
+import time
 from datetime import date, datetime, timedelta, timezone
 
 import requests
@@ -18,6 +19,11 @@ TYP01_URL = "https://apihub.kma.go.kr/api/typ01/url"
 CGI_URL = "https://apihub.kma.go.kr/api/typ01/cgi-bin/url"
 
 LST_MAX_ITEMS = 24  # "위성영상 최대 출력 개수 제한 : 24개" (실측 확인)
+
+# 재시도 사이에 쉬는 초. **길이가 곧 재시도 횟수다** — 2개면 3번 부르고 두 번 쉰다.
+# 늘리기 전에 생각할 것: 관측소 121개를 도는 적재에서 전부 실패하면
+# (30초 타임아웃 + 대기) × 횟수 × 121 이 통째로 늘어난다.
+_RETRY_WAITS = (2, 5)
 
 
 def clean(v, missing_below=-900):
@@ -34,9 +40,29 @@ def clean(v, missing_below=-900):
 
 
 def _get(url, params, timeout=30):
-    r = requests.get(url, params=params, timeout=timeout)
-    r.raise_for_status()
-    return r.json()
+    """허브 GET. 타임아웃·연결 끊김·5xx 만 다시 묻는다. 횟수는 _RETRY_WAITS 길이 + 1.
+
+    ⚠ 4xx 는 재시도하지 않는다 — 우리가 잘못 부른 것(인증키 · 관측소 번호)이라 몇 번을
+      불러도 같은 답이고, 재시도하면 그 사실이 세 배 늦게 드러나기만 한다.
+    재시도가 없던 동안 관측소 121개 적재가 두 번째 관측소의 타임아웃 한 번으로 통째로
+    멈췄다(2026-10-03). 허브가 가끔 느린 것은 고장이 아니라 평소 성질이다.
+    """
+    last = None
+    for attempt in range(len(_RETRY_WAITS) + 1):
+        try:
+            r = requests.get(url, params=params, timeout=timeout)
+            r.raise_for_status()
+            return r.json()
+        except (requests.Timeout, requests.ConnectionError) as exc:
+            last = exc
+        except requests.HTTPError as exc:
+            status = exc.response.status_code if exc.response is not None else None
+            if status is not None and status < 500:
+                raise
+            last = exc
+        if attempt < len(_RETRY_WAITS):
+            time.sleep(_RETRY_WAITS[attempt])
+    raise last
 
 
 def fetch_weather_daily(api_key, stn, tm1, tm2):

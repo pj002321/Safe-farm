@@ -69,14 +69,27 @@ def main() -> None:
     print(f"{tm1} ~ {tm2} · 관측소 {len(asos)}개\n")
 
     빈곳 = []
+    실패 = []
     db = new_session()
     try:
         # ⚠ [i/n] 은 순번이지 관측소 번호가 아니다. station= 뒤를 본다
         for i, s in enumerate(asos, 1):
-            n = load_weather_daily(
-                db, station_plot_id(s["stn"]), KMA_API_KEY, s["stn"], 0, 0, tm1, tm2,
-                with_lst=False,
-            )
+            # 한 관측소의 실패로 나머지를 버리지 않는다. 적재가 upsert 라(load_data.py)
+            # 실패한 곳은 **다음 실행에서 그대로 다시 받힌다** — 여기서 멈출 이유가 없다.
+            try:
+                n = load_weather_daily(
+                    db, station_plot_id(s["stn"]), KMA_API_KEY, s["stn"], 0, 0, tm1, tm2,
+                    with_lst=False,
+                )
+            except Exception as exc:  # noqa: BLE001 — 무엇이 터지든 다음 관측소로 간다
+                # ⚠ 이 줄을 빼지 말 것. load_weather_daily 는 행마다 execute 하고 맨 끝에
+                #   한 번 commit 한다. 중간에 터지면 커밋 안 된 실행이 세션에 남아, 다음
+                #   관측소의 commit 에 끌려 들어가거나 PendingRollbackError 로 그 뒤 전부를
+                #   또 죽인다.
+                db.rollback()
+                실패.append((s, exc))
+                print(f"[{i}/{len(asos)}] station={s['stn']} {s.get('name', '')}: 실패 — {exc}")
+                continue
             print(f"[{i}/{len(asos)}] station={s['stn']} {s.get('name', '')}: {n}일치")
             if not n:
                 빈곳.append(s)
@@ -95,14 +108,22 @@ def main() -> None:
     finally:
         db.close()
 
-    print(f"\n실측 있음 {len(asos) - len(빈곳)}/{len(asos)}개")
+    print(f"\n실측 있음 {len(asos) - len(빈곳) - len(실패)}/{len(asos)}개")
+    if 실패:
+        목록 = ", ".join(s["stn"] + " " + s.get("name", "") for s, _ in 실패)
+        print(f"실패 {len(실패)}개: {목록}")
+        print("→ 그대로 다시 돌리면 됩니다(upsert 라 이미 받은 것은 덮어씁니다)")
     if 빈곳:
         목록 = ", ".join(s["stn"] + " " + s.get("name", "") for s in 빈곳)
         print(f"0일치 {len(빈곳)}개: {목록}")
     if 비없음:
         목록 = ", ".join(s + " " + 번호.get(s, {}).get("name", "") for s in sorted(비없음, key=int))
         print(f"강수 관측 없음 {len(비없음)}개 → data/ref/no_rain_stations.csv: {목록}")
-
+    if 실패:
+        # 종료 코드로도 알린다. 사람이 읽을 땐 위 출력으로 충분하지만, 셸의 && 체인이나
+        # 크론에 걸리면 0 으로 끝나는 실패는 성공으로 집계된다. 인증키가 틀려 121개가
+        # 전부 401 로 떨어진 날이 "정상 종료" 가 되면 안 된다.
+        raise SystemExit(1)
 
 if __name__ == "__main__":
     main()
