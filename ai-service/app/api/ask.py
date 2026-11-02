@@ -15,6 +15,7 @@ from collections.abc import Iterator
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
+from langfuse.langchain import CallbackHandler
 
 from app.core import measure
 from app.core.config import DAILY_ASK_LIMIT
@@ -91,7 +92,7 @@ def _sse(
 
     parts: list[str] = []
     try:
-        for mode, chunk in ask_graph.stream(graph_state, stream_mode=["updates", "custom"]):
+        for mode, chunk in ask_graph.stream(graph_state, stream_mode=["updates", "custom"], config={"callbacks":[CallbackHandler()]}):
             if mode == "custom":
                 measure.mark_first_token()  # 첫 번째만 기록한다(core/measure)
                 parts.append(chunk["piece"])

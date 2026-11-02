@@ -38,6 +38,7 @@ dependencies = [
     # Windows 는 IANA 시간대 DB 를 안 들고 있어 zoneinfo.ZoneInfo("Asia/Seoul")(app/domain/kst.py)
     # 가 ZoneInfoNotFoundError 로 죽는다. macOS/Linux 는 시스템에 이미 있어 안 깐다.
     "tzdata>=2025.1; sys_platform == 'win32'",
+    "langfuse>=3",
 ]
 
 [project.optional-dependencies]

@@ -3,7 +3,8 @@
 두 벌로 두면 한쪽만 모델이 바뀌어 벡터 공간이 갈린다.
 """
 
-from openai import OpenAI
+# from openai import OpenAI
+from langfuse.openai import OpenAI
 
 from app.core.config import DIMENSION, EMBED_BATCH_SIZE, EMBED_MODEL, OPENAI_API_KEY
 
