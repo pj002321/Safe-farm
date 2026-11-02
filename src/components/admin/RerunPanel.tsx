@@ -2,7 +2,6 @@
 
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
-import { rerunBatch } from "@/app/(admin)/admin/batches/actions";
 import { Badge } from "@/components/shared/Badge";
 import { Button } from "@/components/shared/Button";
 import { Card } from "@/components/shared/Card";
@@ -17,7 +16,17 @@ const JOB_LABEL = {
 const field =
   "rounded-md border border-border bg-surface px-2 py-1 text-sm text-fg";
 
-export function RerunPanel({ state }: { state: RerunState }) {
+export function RerunPanel({
+  state,
+  action,
+}: {
+  state: RerunState;
+  action: (
+    job: string,
+    dateFrom: string,
+    dateTo: string,
+  ) => Promise<{ started: true } | { started: false; error: string }>;
+}) {
   const router = useRouter();
   const [job, setJob] = useState<keyof typeof JOB_LABEL>("weather");
   const [message, setMessage] = useState<string | null>(null);
@@ -25,7 +34,7 @@ export function RerunPanel({ state }: { state: RerunState }) {
 
   const submit = (formData: FormData) =>
     startTransition(async () => {
-      const result = await rerunBatch(
+      const result = await action(
         job,
         String(formData.get("from") ?? ""),
         String(formData.get("to") ?? ""),

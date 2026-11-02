@@ -80,6 +80,7 @@ def diagnose_image(
     client = get_client()
     observed = client.chat.completions.create(
         model=OPENAI_MODEL,
+        name="observe-symptoms",  # Langfuse 트레이스 이름
         max_tokens=OBSERVE_MAX_TOKENS,
         messages=[_image_message(OBSERVE_PROMPT, request.image_data_url)],
     ).choices[0].message.content or ""
@@ -92,6 +93,7 @@ def diagnose_image(
 
     diagnosis = client.chat.completions.create(
         model=OPENAI_MODEL,
+        name="diagnose-disease",  # Langfuse 트레이스 이름
         messages=[
             {"role": "system", "content": SYSTEM_PROMPT},
             _image_message(

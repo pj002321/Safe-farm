@@ -1,19 +1,22 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { loadWeeklyBriefing } from "@/app/(admin)/admin/actions";
 import { Button } from "@/components/shared/Button";
 import { Card } from "@/components/shared/Card";
-import type { WeeklyBriefing } from "@/shared/aiService/client";
+import type { AiResult, WeeklyBriefing } from "@/shared/aiService/client";
 
-export function BriefingPanel() {
+export function BriefingPanel({
+  action,
+}: {
+  action: () => Promise<AiResult<WeeklyBriefing>>;
+}) {
   const [briefing, setBriefing] = useState<WeeklyBriefing | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
   const run = () =>
     startTransition(async () => {
-      const result = await loadWeeklyBriefing();
+      const result = await action();
       if (result.ok) {
         setBriefing(result.data);
         setError(null);

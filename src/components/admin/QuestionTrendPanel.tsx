@@ -1,20 +1,23 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { analyzeQuestionTrends } from "@/app/(admin)/admin/quality/actions";
 import { Badge } from "@/components/shared/Badge";
 import { Button } from "@/components/shared/Button";
 import { Card } from "@/components/shared/Card";
-import type { QuestionTrends } from "@/shared/aiService/client";
+import type { AiResult, QuestionTrends } from "@/shared/aiService/client";
 
-export function QuestionTrendPanel() {
+export function QuestionTrendPanel({
+  action,
+}: {
+  action: () => Promise<AiResult<QuestionTrends>>;
+}) {
   const [trends, setTrends] = useState<QuestionTrends | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
   const run = () =>
     startTransition(async () => {
-      const result = await analyzeQuestionTrends();
+      const result = await action();
       if (result.ok) {
         setTrends(result.data);
         setError(null);

@@ -55,6 +55,7 @@ def weekly_briefing(db: Session) -> dict:
     metrics = collect_metrics(db)
     response = get_client().chat.completions.create(
         model=OPENAI_MODEL,
+        name="write-weekly-briefing",  # Langfuse 트레이스 이름
         messages=[
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": f"[지표]\n{metrics_block(metrics)}"},

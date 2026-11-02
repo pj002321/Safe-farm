@@ -14,6 +14,8 @@ from collections.abc import Iterator
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
+from langfuse import Langfuse, get_client
+from langfuse.langchain import CallbackHandler
 from sqlalchemy.orm import Session
 
 from app.core import measure
@@ -60,6 +62,12 @@ def _quota(db: Session, user_id: uuid.UUID) -> AskQuota:
     return AskQuota(limit=DAILY_ASK_LIMIT, used=used, remaining=max(0, DAILY_ASK_LIMIT - used))
 
 
+def _trace_id(history_id: uuid.UUID) -> str:
+    """ask_history 한 행 = Langfuse 트레이스 하나. id 를 시드로 만들어 따로 저장하지 않고도
+    피드백(ask_feedback)이 같은 트레이스에 점수를 단다."""
+    return Langfuse.create_trace_id(seed=str(history_id))
+
+
 def _event(name: str, payload: object) -> str:
     """SSE 한 덩어리. data 는 항상 JSON 이라 프런트가 한 가지 방법으로만 파싱한다."""
     return f"event: {name}\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n"
@@ -90,8 +98,29 @@ def _sse(
     yield _event("meta", {"historyId": str(history.id), "quota": quota.model_dump()})
 
     parts: list[str] = []
+    # 트레이스 루트. 입력은 질문만 넣는다 — graph_state 엔 DB 세션·이력 맥락까지 들어 있다.
+    # `with start_as_current_observation` 을 쓰지 않는 이유: StreamingResponse 가 yield 마다
+    # 다른 스레드·컨텍스트에서 이어 돌려서 OTel 컨텍스트가 끊긴다. 부모를 trace_context 로
+    # 직접 넘기면 컨텍스트에 기대지 않는다.
+    trace_id = _trace_id(history.id)
+    root = get_client().start_observation(
+        as_type="agent",
+        name="ask-question",
+        trace_context={"trace_id": trace_id},
+        input={"question": graph_state["question"]},
+    )
+    handler = CallbackHandler(trace_context={"trace_id": trace_id, "parent_span_id": root.id})
+    config = {
+        "callbacks": [handler],
+        "metadata": {
+            "langfuse_user_id": str(graph_state["user_id"]),
+            "langfuse_tags": ["ask"],
+        },
+    }
     try:
-        for mode, chunk in ask_graph.stream(graph_state, stream_mode=["updates", "custom"]):
+        for mode, chunk in ask_graph.stream(
+            graph_state, stream_mode=["updates", "custom"], config=config
+        ):
             if mode == "custom":
                 measure.mark_first_token()  # 첫 번째만 기록한다(core/measure)
                 parts.append(chunk["piece"])
@@ -106,12 +135,14 @@ def _sse(
                     for c, dist in output["matches"]
                 ]
                 yield _event("matches", [m.model_dump() for m in matches])
-    except Exception:  # noqa: BLE001 — 원인별 분기가 없다. 어느 쪽이든 화면이 할 일은 같다
+    except Exception as e:  # noqa: BLE001 — 원인별 분기가 없다. 어느 쪽이든 화면이 할 일은 같다
+        root.update(level="ERROR", status_message=str(e), output="".join(parts)).end()
         complete_answer(db, history, "".join(parts))
         measure.finish()
         yield _event("error", STREAM_FAILED_MESSAGE)
         return
 
+    root.update(output="".join(parts)).end()
     complete_answer(db, history, "".join(parts))
     # 스트림이 끝나야 출력 토큰·전체 시간이 확정된다. 미들웨어는 이보다 먼저 돌아간다.
     measure.finish()
@@ -218,4 +249,11 @@ def ask_feedback(
     """
     if not submit_feedback(db, history_id, body.user_id, body.rating, body.reason):
         raise HTTPException(status_code=404, detail="해당 이력을 찾을 수 없습니다.")
+    # 사유(reason)는 보내지 않는다 — 위 docstring 과 같은 이유로 개인정보가 섞일 수 있다.
+    get_client().create_score(
+        trace_id=_trace_id(history_id),
+        name="user-feedback",
+        value=1 if body.rating == "up" else 0,
+        data_type="BOOLEAN",
+    )
     return {"ok": True}

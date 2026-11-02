@@ -1,10 +1,13 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { diagnoseBatches } from "@/app/(admin)/admin/batches/actions";
 import { Button } from "@/components/shared/Button";
 import { Card } from "@/components/shared/Card";
-import type { BatchDiagnosis, InsightFinding } from "@/shared/aiService/client";
+import type {
+  AiResult,
+  BatchDiagnosis,
+  InsightFinding,
+} from "@/shared/aiService/client";
 
 function Findings({
   title,
@@ -31,14 +34,18 @@ function Findings({
   );
 }
 
-export function BatchDiagnosePanel() {
+export function BatchDiagnosePanel({
+  action,
+}: {
+  action: () => Promise<AiResult<BatchDiagnosis>>;
+}) {
   const [diagnosis, setDiagnosis] = useState<BatchDiagnosis | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
   const run = () =>
     startTransition(async () => {
-      const result = await diagnoseBatches();
+      const result = await action();
       if (result.ok) {
         setDiagnosis(result.data);
         setError(null);

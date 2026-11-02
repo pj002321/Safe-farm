@@ -49,6 +49,7 @@ def analyze_questions(db: Session) -> dict:
 
     response = get_client().chat.completions.create(
         model=OPENAI_MODEL,
+        name="analyze-question-trend",  # Langfuse 트레이스 이름
         messages=[
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": f"[질문]\n{facts_block(facts)}"},

@@ -133,6 +133,7 @@ def diagnose_batches(db: Session) -> dict:
 
     response = get_client().chat.completions.create(
         model=OPENAI_MODEL,
+        name="diagnose-batches",  # Langfuse 트레이스 이름
         messages=[
             {"role": "system", "content": DIAGNOSE_PROMPT},
             {"role": "user", "content": f"[사실]\n{facts_block(facts)}"},

@@ -82,6 +82,7 @@ def at_risk_report(db: Session) -> dict:
         )
         response = get_client().chat.completions.create(
             model=OPENAI_MODEL,
+            name="summarize-at-risk",  # Langfuse 트레이스 이름
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": f"[회원]\n{block}"},

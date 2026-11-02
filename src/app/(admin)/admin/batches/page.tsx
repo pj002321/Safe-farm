@@ -7,6 +7,7 @@ import { Badge } from "@/components/shared/Badge";
 import { Card } from "@/components/shared/Card";
 import { aiService } from "@/shared/aiService/client";
 import { requireAdminOrRedirect } from "@/shared/auth/adminSession";
+import { diagnoseBatches, rerunBatch } from "./actions";
 
 /**
  * ---------------------------------------------
@@ -92,9 +93,9 @@ export default async function AdminBatches() {
             </table>
           </Card>
 
-          <BatchDiagnosePanel />
+          <BatchDiagnosePanel action={diagnoseBatches} />
 
-          <RerunPanel state={result.data.rerun} />
+          <RerunPanel action={rerunBatch} state={result.data.rerun} />
 
           <Card title="스케줄 (최근 7일)">
             <table className="w-full text-sm">

@@ -124,6 +124,7 @@ async def explain_with_llm(messages: list[dict]) -> str:
     response = await asyncio.to_thread(
         get_client().chat.completions.create,
         model=OPENAI_MODEL,
+        name="explain-crop-recommendation",  # Langfuse 트레이스 이름
         messages=messages,
     )
     return response.choices[0].message.content or ""
