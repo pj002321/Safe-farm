@@ -11,7 +11,7 @@ import { WizardNav } from "@/components/plot/WizardNav";
 import { SectionHeading } from "@/components/shared/SectionHeading";
 import { listCropOptions } from "@/features/crops/cropStore";
 import { kstDateString } from "@/shared/utils/kstDate";
-import { registerPlot } from "./actions";
+import { recommendCrops, registerPlot } from "./actions";
 
 /**
  * ---------------------------------------------
@@ -215,7 +215,7 @@ export default async function PlotRegisterPage() {
                 {step.no === 3 && (
                   <fieldset>
                     <legend className="sr-only">재배할 작물</legend>
-                    <AiCropRecommend />
+                    <AiCropRecommend action={recommendCrops} />
                     <div className="mt-5">
                       <CropCards crops={crops} maxSowingDate={today} />
                     </div>

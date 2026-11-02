@@ -1,11 +1,14 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { analyzeMember } from "@/app/(admin)/admin/members/[id]/actions";
 import { Badge } from "@/components/shared/Badge";
 import { Button } from "@/components/shared/Button";
 import { Card } from "@/components/shared/Card";
-import type { InsightFinding, MemberInsight } from "@/shared/aiService/client";
+import type {
+  AiResult,
+  InsightFinding,
+  MemberInsight,
+} from "@/shared/aiService/client";
 
 const SEGMENT_TONE = {
   활발: "good",
@@ -39,14 +42,20 @@ function Findings({
   );
 }
 
-export function MemberInsightPanel({ userId }: { userId: string }) {
+export function MemberInsightPanel({
+  userId,
+  action,
+}: {
+  userId: string;
+  action: (userId: string) => Promise<AiResult<MemberInsight>>;
+}) {
   const [insight, setInsight] = useState<MemberInsight | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
   const run = () =>
     startTransition(async () => {
-      const result = await analyzeMember(userId);
+      const result = await action(userId);
       if (result.ok) {
         setInsight(result.data);
         setError(null);

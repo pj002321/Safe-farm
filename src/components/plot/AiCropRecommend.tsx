@@ -1,7 +1,6 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { recommendCrops } from "@/app/(app)/plots/new/actions";
 import { Badge } from "@/components/shared/Badge";
 import { Card } from "@/components/shared/Card";
 import type {
@@ -26,7 +25,7 @@ import type {
  *
  * [Usage]
  * ```tsx
- * <AiCropRecommend />
+ * <AiCropRecommend action={recommendCrops} />
  * ```
  * ---------------------------------------------
  */
@@ -42,7 +41,11 @@ const RISK_LABEL: Record<string, string> = {
   heat: "고온 피해",
 };
 
-export function AiCropRecommend() {
+export function AiCropRecommend({
+  action,
+}: {
+  action: (lat: number, lon: number) => Promise<RecommendResult | null>;
+}) {
   const buttonRef = useRef<HTMLButtonElement>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [needsLocation, setNeedsLocation] = useState(false);
@@ -60,7 +63,7 @@ export function AiCropRecommend() {
 
     setNeedsLocation(false);
     setIsLoading(true);
-    const data = await recommendCrops(lat, lon);
+    const data = await action(lat, lon);
     setResult(data ?? { ranked: [], explanation: null });
     setIsLoading(false);
   }
