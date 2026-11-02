@@ -368,6 +368,7 @@ def generate_report(report_input: ReportInput) -> ReportPayload | None:
 
     response = get_client().chat.completions.create(
         model=OPENAI_MODEL,
+        name="generate-plot-report",  # Langfuse 트레이스 이름
         messages=[
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": _build_prompt(report_input)},
@@ -491,6 +492,7 @@ def generate_farm_summary(inputs: list[ReportInput]) -> str | None:
 
     response = get_client().chat.completions.create(
         model=OPENAI_MODEL,
+        name="summarize-farm",  # Langfuse 트레이스 이름
         messages=[
             {"role": "system", "content": FARM_SUMMARY_SYSTEM_PROMPT},
             {"role": "user", "content": _build_farm_prompt(inputs)},

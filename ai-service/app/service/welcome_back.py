@@ -79,6 +79,7 @@ def welcome_back(db: Session, user_id: uuid.UUID) -> dict:
 
     response = get_client().chat.completions.create(
         model=OPENAI_MODEL,
+        name="write-welcome-back",  # Langfuse 트레이스 이름
         messages=[
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": f"며칠 만에 왔나: {idle_days}일\n[사실]\n{facts_block(facts)}"},

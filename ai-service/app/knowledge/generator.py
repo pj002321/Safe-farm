@@ -221,6 +221,7 @@ def stream_answer(
 
     stream = get_client().chat.completions.create(
         model=OPENAI_MODEL,
+        name="generate-answer",  # Langfuse 트레이스 이름
         messages=_build_messages(question, matches, plot_context, history_context),
         stream=True,
         max_tokens=ANSWER_MAX_TOKENS,

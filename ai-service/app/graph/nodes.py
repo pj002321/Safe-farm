@@ -249,6 +249,7 @@ def plan(state: GraphState) -> GraphState:
 
     response = get_client().chat.completions.create(
         model=OPENAI_MODEL,
+        name="plan-route",  # Langfuse 트레이스 이름
         messages=messages,
         tools=TOOL_SPECS,
         tool_choice="auto",

@@ -76,6 +76,7 @@ def analyze_member(db: Session, user_id: uuid.UUID) -> dict:
 
     response = get_client().chat.completions.create(
         model=OPENAI_MODEL,
+        name="analyze-member",  # Langfuse 트레이스 이름
         messages=[
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": f"[기록]\n{facts_block(facts)}"},
